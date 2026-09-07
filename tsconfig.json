@@ -6,6 +6,9 @@
     },
     {
       "path": "./packages/shared-types/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/config/tsconfig.build.json"
     }
   ]
 }
