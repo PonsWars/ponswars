@@ -6,6 +6,7 @@ export * from './feed.js';
 export * from './genesis.js';
 export * from './ids.js';
 export * from './money.js';
+export * from './player.js';
 export * from './rewards.js';
 export * from './roster.js';
 export * from './round.js';
