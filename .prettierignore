@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+pnpm-lock.yaml
+03_Visual_Pack
+01_Masterplan
+02_Claude_Guides
+_archive
