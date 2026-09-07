@@ -29,4 +29,7 @@ npx vitest run --reporter=dot
 step 'env contract in sync'
 node scripts/generate-env-example.mjs --check
 
+step 'migrations parse'
+node scripts/check-migrations.mjs
+
 printf '\n\033[32m✓ all gates passed\033[0m\n'

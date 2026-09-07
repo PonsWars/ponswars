@@ -20,13 +20,18 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "bash scripts/verify.sh",
-    "clean": "tsc --build --clean"
+    "clean": "tsc --build --clean",
+    "db:up": "docker compose -f infra/containers/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/containers/docker-compose.yml down",
+    "db:migrate": "bash scripts/db-migrate.sh",
+    "db:check": "node scripts/check-migrations.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.1",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
+    "pgsql-parser": "^18.2.6",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",

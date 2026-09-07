@@ -1,0 +1,53 @@
+# Local development dependencies.
+#
+# Masterplan §21.3: PostgreSQL for authoritative game state, Redis for hot
+# state, pub/sub and distributed locks. Managed providers for both are OPEN
+# production decisions (§59.3) — this file is for development and for applying
+# migrations against a real server, nothing more.
+#
+#   docker compose -f infra/containers/docker-compose.yml up -d
+#   pnpm run db:migrate
+
+name: ponswars-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: ponswars-postgres
+    environment:
+      POSTGRES_USER: ponswars
+      POSTGRES_PASSWORD: ponswars_dev_only
+      POSTGRES_DB: ponswars
+      # Deterministic collation, so an ORDER BY behaves the same here as in
+      # production regardless of the host locale.
+      POSTGRES_INITDB_ARGS: '--locale-provider=icu --icu-locale=und-x-icu'
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ponswars -d ponswars']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: ponswars-redis
+    # appendonly keeps round state across a restart. Redis holds the live round
+    # and the distributed locks finalization depends on (§25); losing it
+    # mid-round would force a recovery from the Postgres checkpoints.
+    command: redis-server --appendonly yes
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
