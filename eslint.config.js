@@ -62,5 +62,25 @@ export default tseslint.config(
     files: ['**/*.js'],
     ...tseslint.configs.disableTypeChecked,
   },
+  {
+    // Build scripts are plain ESM run directly by node. They import compiled
+    // output through a dynamic specifier, so type-aware linting would only
+    // report `any` on values TypeScript was never given a chance to see.
+    files: ['scripts/**/*.mjs'],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      // Overriding languageOptions replaces the block above wholesale, so the
+      // project service has to be switched off here too — otherwise the parser
+      // still looks for a tsconfig that will never contain this file.
+      parserOptions: { projectService: false, project: false },
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        URL: 'readonly',
+      },
+    },
+  },
   prettier,
 );

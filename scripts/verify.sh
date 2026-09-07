@@ -26,4 +26,7 @@ npx tsc -p tsconfig.tests.json
 step 'test'
 npx vitest run --reporter=dot
 
+step 'env contract in sync'
+node scripts/generate-env-example.mjs --check
+
 printf '\n\033[32m✓ all gates passed\033[0m\n'

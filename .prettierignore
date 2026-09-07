@@ -7,3 +7,6 @@ pnpm-lock.yaml
 02_Claude_Guides
 _archive
 START_HERE.md
+
+# Generated scripts and env example are checked, not formatted
+.env.example
