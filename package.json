@@ -19,7 +19,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test",
+    "verify": "bash scripts/verify.sh",
     "clean": "tsc --build --clean"
   },
   "devDependencies": {

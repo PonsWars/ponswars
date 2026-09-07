@@ -49,6 +49,17 @@ export type ReserveTicker = (typeof RESERVE_TICKERS)[number];
 
 export type Ticker = ActiveTicker | ReserveTicker;
 
+/**
+ * The five unit slots every faction fields, in hierarchy order (§36.8).
+ *
+ * Exported as a tuple rather than left implicit so callers can enumerate slots
+ * with full type information. `Object.values` on an interface degrades to
+ * `any[]`, which standard §66.1 does not allow at a boundary.
+ */
+export const UNIT_SLOTS = ['infantry', 'elite', 'heavy', 'air', 'base'] as const;
+
+export type UnitSlot = (typeof UNIT_SLOTS)[number];
+
 /** The five unit slots every faction fields (§36.8). */
 export interface FactionUnits {
   readonly infantry: string;

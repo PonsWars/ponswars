@@ -6,6 +6,7 @@ import {
   isReserveTicker,
   isTicker,
   RESERVE_TICKERS,
+  UNIT_SLOTS,
   type ActiveTicker,
 } from './roster.js';
 
@@ -64,7 +65,7 @@ describe('faction definitions', () => {
     // §36.8: infantry, elite, heavy, air and a temporary forward base.
     for (const ticker of ACTIVE_TICKERS) {
       const { units } = FACTIONS[ticker];
-      for (const slot of ['infantry', 'elite', 'heavy', 'air', 'base'] as const) {
+      for (const slot of UNIT_SLOTS) {
         expect(units[slot].length).toBeGreaterThan(0);
       }
     }
@@ -73,7 +74,9 @@ describe('faction definitions', () => {
   it('gives all fifty units a distinct name', () => {
     // Guide §25: factions must not be the same model in a different colour.
     // Distinct naming is the cheapest enforceable part of that rule.
-    const names = ACTIVE_TICKERS.flatMap((ticker) => Object.values(FACTIONS[ticker].units));
+    const names = ACTIVE_TICKERS.flatMap((ticker) =>
+      UNIT_SLOTS.map((slot) => FACTIONS[ticker].units[slot]),
+    );
     expect(names).toHaveLength(50);
     expect(new Set(names).size).toBe(50);
   });
@@ -110,7 +113,9 @@ describe('faction definitions', () => {
       'Market Drones',
       'Market Core',
     ];
-    const names = new Set(ACTIVE_TICKERS.flatMap((t) => Object.values(FACTIONS[t].units)));
+    const names = new Set(
+      ACTIVE_TICKERS.flatMap((ticker) => UNIT_SLOTS.map((slot) => FACTIONS[ticker].units[slot])),
+    );
     for (const alternate of rejected) {
       expect(names.has(alternate)).toBe(false);
     }
