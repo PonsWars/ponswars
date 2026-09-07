@@ -5,6 +5,7 @@ import {
   baseUnits,
   basisPoints,
   formatBaseUnits,
+  integerSqrt,
   minAmount,
   mulDivFloor,
   parseDecimalToBaseUnits,
@@ -160,5 +161,59 @@ describe('aggregation', () => {
     expect(minAmount(baseUnits(5n), baseUnits(3n))).toBe(3n);
     expect(minAmount(baseUnits(3n), baseUnits(5n))).toBe(3n);
     expect(minAmount(baseUnits(4n), baseUnits(4n))).toBe(4n);
+  });
+});
+
+describe('integerSqrt', () => {
+  it('returns exact roots of perfect squares', () => {
+    for (const root of [0n, 1n, 2n, 3n, 10n, 12_345n, 1_000_000n]) {
+      expect(integerSqrt(root * root)).toBe(root);
+    }
+  });
+
+  it('floors non-perfect squares', () => {
+    expect(integerSqrt(2n)).toBe(1n);
+    expect(integerSqrt(3n)).toBe(1n);
+    expect(integerSqrt(8n)).toBe(2n);
+    expect(integerSqrt(15n)).toBe(3n);
+    expect(integerSqrt(99n)).toBe(9n);
+  });
+
+  it('never overshoots: root^2 <= n < (root+1)^2', () => {
+    // The defining property of a floor square root, checked across scales that
+    // include values a double cannot represent exactly.
+    const samples = [
+      0n,
+      1n,
+      2n,
+      50n,
+      999n,
+      1_000_000n,
+      9_007_199_254_740_993n,
+      123_456_789_012_345_678_901_234_567_890n,
+      10n ** 40n + 7n,
+    ];
+    for (const value of samples) {
+      const root = integerSqrt(value);
+      expect(root * root).toBeLessThanOrEqual(value);
+      expect((root + 1n) * (root + 1n)).toBeGreaterThan(value);
+    }
+  });
+
+  it('is exact where Math.sqrt is not', () => {
+    // 2^106 is a perfect square whose root is 2^53 - beyond the contiguous
+    // integer range of a double, so a float round-trip is not trustworthy here.
+    const root = 2n ** 53n;
+    expect(integerSqrt(root * root)).toBe(root);
+  });
+
+  it('agrees with Math.sqrt across the range where doubles are exact', () => {
+    for (let n = 0; n < 5_000; n += 1) {
+      expect(integerSqrt(BigInt(n))).toBe(BigInt(Math.floor(Math.sqrt(n))));
+    }
+  });
+
+  it('rejects negative input', () => {
+    expect(() => integerSqrt(-1n)).toThrow(RangeError);
   });
 });

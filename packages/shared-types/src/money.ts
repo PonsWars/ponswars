@@ -135,6 +135,37 @@ export function applyBasisPoints(amount: BaseUnits, bps: BasisPoints): BaseUnits
   return mulDivFloor(amount, BigInt(bps), BASIS_POINTS_DENOMINATOR);
 }
 
+/**
+ * Floor of the integer square root, computed entirely in `bigint`.
+ *
+ * `Math.sqrt` returns a double, and a double cannot represent every integer
+ * this system handles — nor is its last bit guaranteed identical across
+ * engines. Standard §66.4 requires one deterministic numerical strategy shared
+ * by production, replay and tests, and reward weighting is `sqrt(WP)` (§16.5),
+ * so the square root has to be exact and reproducible rather than merely close.
+ *
+ * Newton's method on integers: it converges downward to the floor and stops,
+ * with no floating point anywhere in the loop.
+ *
+ * @throws RangeError for a negative input.
+ */
+export function integerSqrt(value: bigint): bigint {
+  if (value < 0n) {
+    throw new RangeError(`integerSqrt is undefined for negative input ${value.toString()}`);
+  }
+  if (value < 2n) {
+    return value;
+  }
+
+  let previous = value;
+  let current = (value + 1n) / 2n;
+  while (current < previous) {
+    previous = current;
+    current = (current + value / current) / 2n;
+  }
+  return previous;
+}
+
 /** Returns the smaller of two amounts. */
 export function minAmount(left: BaseUnits, right: BaseUnits): BaseUnits {
   return left <= right ? left : right;
