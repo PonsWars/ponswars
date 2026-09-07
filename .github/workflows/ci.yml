@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch supersedes the first: no value in finishing
+# a run against code nobody will merge.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # --frozen-lockfile fails when the lockfile does not match package.json,
+      # rather than silently resolving something the author never tested.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # The same gate contributors run locally. Keeping it one script means CI
+      # and local cannot drift apart.
+      - name: Verify
+        run: pnpm run verify
