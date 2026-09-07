@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+.vitest/
+
+# Environment — never commit real credentials
+.env
+.env.*
+!.env.example
+
+# Contracts (Foundry)
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local scratch
+tmp/
+.scratch/
