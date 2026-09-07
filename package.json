@@ -11,8 +11,8 @@
   },
   "packageManager": "pnpm@10.33.4",
   "scripts": {
-    "build": "pnpm -r --filter \"./packages/**\" run build",
-    "typecheck": "tsc --build --verbose",
+    "build": "tsc --build",
+    "typecheck": "tsc --build --verbose && tsc -p tsconfig.tests.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
