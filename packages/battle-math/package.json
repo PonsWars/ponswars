@@ -1,0 +1,25 @@
+{
+  "name": "@ponswars/battle-math",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic matchmaking, scoring and confidence math. Same inputs always produce the same result.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/shared-types": "workspace:*"
+  }
+}

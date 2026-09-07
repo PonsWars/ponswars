@@ -43,3 +43,6 @@ tmp/
 
 # Byte-identical duplicate of the masterplan, kept locally only
 _archive/
+
+# Local scratch used while deriving golden values
+.scratch/

@@ -9,6 +9,9 @@
     },
     {
       "path": "./packages/config/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/battle-math/tsconfig.build.json"
     }
   ]
 }
