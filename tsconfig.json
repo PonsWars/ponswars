@@ -36,6 +36,9 @@
     },
     {
       "path": "./packages/world-runtime/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/ui-tokens/tsconfig.build.json"
     }
   ]
 }

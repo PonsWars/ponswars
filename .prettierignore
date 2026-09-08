@@ -16,3 +16,6 @@ lib
 
 # Solidity is formatted by `forge fmt`, which understands it; Prettier does not.
 contracts
+
+# Token stylesheet is transcribed verbatim from the design guide
+packages/ui-tokens/src/tokens.css

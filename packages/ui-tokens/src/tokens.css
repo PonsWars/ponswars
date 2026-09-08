@@ -1,0 +1,135 @@
+/*
+ * PonsWars design tokens.
+ *
+ * Transcribed from 02_Claude_Guides/PONSWARS_DESIGN_TOKENS.md §2, §3 and §5.
+ * That document is source-of-truth rank 4; this file is its executable form,
+ * and the two must not drift — a test asserts every value here matches the
+ * constants in tokens.ts.
+ *
+ * §1 of that guide: "Do not scatter one-off hardcoded colors, radii, animation
+ * timings, or z-indexes through components." Every such value in the app comes
+ * from here.
+ */
+
+:root {
+  /* Neutral world/UI foundation */
+  --pw-bg-0: #05080b;
+  --pw-bg-1: #091016;
+  --pw-bg-2: #0d151d;
+  --pw-surface-1: rgba(8, 15, 21, 0.72);
+  --pw-surface-2: rgba(11, 20, 28, 0.84);
+  --pw-surface-3: rgba(15, 26, 35, 0.94);
+
+  --pw-text-1: #f3f6f8;
+  --pw-text-2: #bac4cd;
+  --pw-text-3: #7f8b95;
+  --pw-border-1: rgba(210, 225, 235, 0.16);
+  --pw-border-2: rgba(210, 225, 235, 0.28);
+
+  /* Global interaction accent — not a default decorative fill */
+  --pw-accent: #9cff38;
+  --pw-accent-strong: #b5ff5a;
+  --pw-accent-muted: rgba(156, 255, 56, 0.14);
+
+  /* Semantic status */
+  --pw-positive: #64eaa1;
+  --pw-warning: #f0b84f;
+  --pw-danger: #ff5c63;
+  --pw-info: #69b7ff;
+
+  /* Rarity */
+  --pw-rarity-common: #8c949b;
+  --pw-rarity-uncommon: #aeb8bf;
+  --pw-rarity-rare: #72a9ff;
+  --pw-rarity-epic: #9c6cff;
+  --pw-rarity-legendary: #d4ad63;
+  --pw-rarity-secret: #d8d7e9;
+
+  /* Faction accents — identity cues only, never a full-UI fill (§3) */
+  --pw-faction-nvda: #76f04d;
+  --pw-faction-aapl: #9ed4ff;
+  --pw-faction-msft: #43cfff;
+  --pw-faction-tsla: #ff3f4a;
+  --pw-faction-gme: #e74d86;
+  --pw-faction-meta: #a45cff;
+  --pw-faction-amzn: #e69a32;
+  --pw-faction-googl: #66b7ff;
+  --pw-faction-amd: #e63a35;
+  --pw-faction-spy: #c7a55a;
+
+  /* Spacing */
+  --pw-space-1: 4px;
+  --pw-space-2: 8px;
+  --pw-space-3: 12px;
+  --pw-space-4: 16px;
+  --pw-space-5: 24px;
+  --pw-space-6: 32px;
+  --pw-space-7: 48px;
+  --pw-space-8: 64px;
+
+  /* Corner geometry — restrained, not bubbly */
+  --pw-radius-sm: 4px;
+  --pw-radius-md: 8px;
+  --pw-radius-lg: 12px;
+  --pw-radius-panel: 10px;
+
+  /* Border */
+  --pw-line-hair: 1px;
+  --pw-line-strong: 2px;
+
+  /* Motion */
+  --pw-dur-instant: 90ms;
+  --pw-dur-fast: 160ms;
+  --pw-dur-ui: 240ms;
+  --pw-dur-panel: 360ms;
+  --pw-dur-spatial-short: 650ms;
+  --pw-dur-spatial: 1050ms;
+  --pw-dur-cinematic: 1600ms;
+
+  --pw-ease-ui: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --pw-ease-spatial: cubic-bezier(0.16, 1, 0.3, 1);
+  --pw-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* Layers */
+  --pw-z-world: 0;
+  --pw-z-world-label: 10;
+  --pw-z-hud: 100;
+  --pw-z-panel: 200;
+  --pw-z-card: 300;
+  --pw-z-toast: 500;
+  --pw-z-critical: 700;
+  --pw-z-cinematic: 900;
+
+  /* Typography roles (§5) */
+  --pw-font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --pw-font-ui: Inter, Geist, system-ui, sans-serif;
+  --pw-font-data: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/*
+ * Reduced Motion (§15, masterplan §83.3).
+ *
+ * Durations collapse but are not zeroed: "Never remove functional feedback."
+ * A state change still registers, it just stops travelling. The camera runtime
+ * makes the same distinction — it arrives instantly and still arrives.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --pw-dur-panel: var(--pw-dur-fast);
+    --pw-dur-spatial-short: var(--pw-dur-fast);
+    --pw-dur-spatial: var(--pw-dur-ui);
+    --pw-dur-cinematic: var(--pw-dur-ui);
+  }
+}
+
+/*
+ * Tabular numerals for anything a player reads under time pressure (§5).
+ *
+ * Proportional digits shift width as they change, so a countdown jitters and a
+ * price column fails to align. Both matter here: §3.1 gives one minute to
+ * decide, and §36.12 asks for monospaced/tabular numerals on data and timers.
+ */
+.pw-tabular {
+  font-family: var(--pw-font-data);
+  font-variant-numeric: tabular-nums;
+}
