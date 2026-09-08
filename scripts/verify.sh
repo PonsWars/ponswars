@@ -11,6 +11,18 @@ cd "$(dirname "$0")/.."
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 
+# Foundry installs to ~/.foundry/bin and is not always on PATH. Resolve it here
+# rather than skipping the contract gate when it is missing: silently not
+# testing the contracts that settle real value is worse than a failed run.
+if ! command -v forge >/dev/null 2>&1; then
+  if [ -x "$HOME/.foundry/bin/forge" ]; then
+    export PATH="$HOME/.foundry/bin:$PATH"
+  else
+    echo "forge not found. Install Foundry from https://getfoundry.sh" >&2
+    exit 1
+  fi
+fi
+
 step 'format'
 npx prettier --check .
 
@@ -31,5 +43,11 @@ node scripts/generate-env-example.mjs --check
 
 step 'migrations parse'
 node scripts/check-migrations.mjs
+
+step 'contracts build'
+forge build
+
+step 'contracts test'
+forge test
 
 printf '\n\033[32m✓ all gates passed\033[0m\n'

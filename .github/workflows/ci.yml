@@ -22,6 +22,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # forge-std is a submodule and the contract tests cannot compile
+          # without it.
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
 
       - uses: pnpm/action-setup@v4
 
