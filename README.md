@@ -144,5 +144,36 @@ a market-data vendor. Every one of those choices is still `OPEN` in
 one and shipping it as policy. The cores are shaped to be wired in when the
 decisions land.
 
-Milestone 3 is the spatial frontend prototype. It needs the design tokens noted
-in [`02_Claude_Guides/_MISSING.md`](02_Claude_Guides/_MISSING.md).
+**Milestone 3 — spatial frontend: complete.** One persistent world scene, a
+camera that reaches every level of §37.2 by pan, zoom, pinch, tap and `ESC`, and
+a HUD whose contents are decided by the zoom budget rather than by each panel.
+The three presentations — Commander Profile, Rewards and Genesis — layer over
+that world at `/profile`, `/rewards` and `/genesis` without ever unmounting it,
+which is what §80.4 requires; the canvas is mounted once in the shell, outside
+every route branch, so no route has the power to tear it down.
+
+Four rules the frontend enforces structurally rather than by care:
+
+- **No live score.** `ClientBattle` has no score field and
+  `PublicBattleStateUpdate` has a type test pinning its key set, so the number
+  §12.5 hides is not reachable from a component at all. Three of the delivered
+  mockups show one.
+- **No estimated SPY during an open window.** `RewardView`'s active variant has
+  no allocation field, so §35.2's hard rule is a fact about the data rather than
+  a condition someone can delete.
+- **Reserve before reveal.** A Secret is never named until the vault reservation
+  is confirmed (§8.4) — an unreserved reveal script simply has no revealing step
+  to reach.
+- **A failed claim never touches the entitlement.** §35.6's `FAILED` returns to
+  `READY_TO_CLAIM` and nowhere else.
+
+What the client still lacks is a server to talk to. Round state, picks, wallet
+and allocations are seeded locally, because the API host, the WebSocket
+endpoint, the RPC provider and the market-data vendor are all still `OPEN` in
+[`docs/OPEN_PARAMETERS.md`](docs/OPEN_PARAMETERS.md), and §102 forbids picking
+one and shipping it as policy. Every seeded value passes through the same types
+and the same reducers the real feed will.
+
+Design tokens are transcribed in `@ponswars/ui-tokens` from the visual guide;
+the gaps noted in [`02_Claude_Guides/_MISSING.md`](02_Claude_Guides/_MISSING.md)
+are still open.
