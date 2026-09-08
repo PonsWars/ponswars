@@ -50,9 +50,29 @@ packages/     shared-types, config, and the shared libraries services build on
 contracts/    RewardsDistributor, SecretStockVault
 database/     migrations, seeds, fixtures
 simulations/  deterministic replay, historical scenarios, load
-tools/        replay, merkle, rng-audit, asset-pipeline, treasury-audit
+tools/        replay-round, verify-distribution, audit-genesis
 docs/         ADRs, open-parameter registry, operations
 ```
+
+## Operator tools
+
+Three commands, each one a step an incident runbook tells someone to take. A
+runbook step nobody can follow is worse than an absent one, because it reads as
+covered.
+
+| Command                                | Answers                                                    |
+| -------------------------------------- | ---------------------------------------------------------- |
+| `pnpm run replay <recording.json>`     | Does this round reproduce, hash for hash? (§26)            |
+| `pnpm run audit:distribution <snap>`   | Is this allocation safe to publish? (§16, §17)             |
+| `pnpm run audit:genesis <record.json>` | Does this wallet's Genesis outcome recompute? (§45.4, §76) |
+
+Each takes only the inputs its answer is derived from, and each refuses a file
+that carries the answer with it — a snapshot holding allocations, or a recording
+holding results, could "verify" them by handing them back. Each exits non-zero
+on a problem, so all three can be run from a script and believed.
+
+Two more are named in the build plan and are not here: an asset pipeline, which
+needs assets, and a treasury audit, which needs chain access.
 
 ## Packages
 
@@ -224,6 +244,23 @@ by what the engine consumes and by the schema in `database/migrations`.
 In-memory adapters make the loop runnable and are deliberately not a default. A
 service that stored rounds in a `Map` unless told otherwise would be exactly the
 silent `OPEN` value §102 rules out.
+
+**Milestone 6 — auditability in practice: complete.** The three operator tools
+above, and the two corrections that building them surfaced.
+
+Writing a tool that reads a real recording found a bug the test suite had agreed
+with: `formatScore` on the result screen assumed tenths, and would have rendered
+a 48.4-point half as `4840954.0`. The fixture had been written to match the
+formatter rather than the engine, so the test passed throughout. The scale now
+lives beside the type that carries it — `BattleScoreBreakdown` declared four
+`number` fields and said nothing about their units, which is what invited the
+mistake.
+
+The second was in the recording itself. `replayRound` took the engine tuning as
+a parameter, so two people replaying the same file under different calibration
+would disagree while both believed they had verified it. The tuning is part of
+the record now, and there is no parameter through which the wrong one could be
+supplied.
 
 There is no `as never`, `as any`, `@ts-ignore`, `@ts-expect-error` or ESLint
 suppression anywhere in the repository, and no skipped test.
