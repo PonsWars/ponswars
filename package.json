@@ -27,7 +27,8 @@
     "db:check": "node scripts/check-migrations.mjs",
     "contracts:build": "forge build",
     "contracts:test": "forge test",
-    "contracts:fmt": "forge fmt"
+    "contracts:fmt": "forge fmt",
+    "merkle:fixture": "node scripts/generate-merkle-fixture.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

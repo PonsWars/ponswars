@@ -44,6 +44,9 @@ node scripts/generate-env-example.mjs --check
 step 'migrations parse'
 node scripts/check-migrations.mjs
 
+step 'merkle fixture in sync'
+node scripts/generate-merkle-fixture.mjs --check
+
 step 'contracts build'
 forge build
 
