@@ -39,6 +39,15 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1))
 
+  packages/battle-engine:
+    dependencies:
+      '@ponswars/battle-math':
+        specifier: workspace:*
+        version: link:../battle-math
+      '@ponswars/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+
   packages/battle-math:
     dependencies:
       '@ponswars/shared-types':

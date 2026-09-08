@@ -14,6 +14,9 @@
       "path": "./packages/battle-math/tsconfig.build.json"
     },
     {
+      "path": "./packages/battle-engine/tsconfig.build.json"
+    },
+    {
       "path": "./packages/rewards-math/tsconfig.build.json"
     }
   ]
