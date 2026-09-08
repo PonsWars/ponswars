@@ -1,10 +1,8 @@
 import {
   createRound,
-  CURRENT_ENGINE_VERSIONS,
   finalizeRound,
   lockRound,
   tickBattle,
-  type EngineConfig,
   type LockedPick,
   type WpAward,
 } from '@ponswars/battle-engine';
@@ -12,7 +10,6 @@ import {
   clockForRound,
   DeterministicPrng,
   matchupKey,
-  RATIO_SCALE,
   roundIdFor,
   type Pairing,
 } from '@ponswars/battle-math';
@@ -25,15 +22,24 @@ import {
   MIN_QUALIFYING_WP,
   parseDecimalToBaseUnits,
   sumAmounts,
-  tokenDecimals,
   WP_AWARDS,
   type ActiveTicker,
-  type ConfidenceLabel,
   type RoundId,
   type UtcTimestamp,
   type WalletAddress,
 } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
+import {
+  BLOCK,
+  CONFIDENCE_LABELS_BY_TICKER,
+  CONFIG,
+  EPOCH,
+  SEED,
+  SPY,
+  TICKS_PER_BATTLE,
+  wallet,
+  WALLET_COUNT,
+} from './harness.js';
 import { observe } from './market.js';
 
 /**
@@ -46,47 +52,6 @@ import { observe } from './market.js';
  * Everything is seeded. A failure here is reproducible from its seed alone,
  * which is the only kind of simulation failure worth having.
  */
-
-const EPOCH = 1_800_000_000_000 as UtcTimestamp;
-const SEED = `0x${'5c'.repeat(32)}`;
-const BLOCK = `0x${'e1'.repeat(32)}`;
-const SPY = tokenDecimals(6);
-
-const CONFIG: EngineConfig = {
-  scoring: {
-    priceEdgeDivisor: 2n * RATIO_SCALE,
-    volumeEdgeDivisor: 1n * RATIO_SCALE,
-    ponsEdgeDivisor: 20n * RATIO_SCALE,
-    cardEdgeDivisor: 10n * RATIO_SCALE,
-  },
-  momentum: { push: 100_000n, surge: 200_000n, dominance: 400_000n, comeback: 300_000n },
-  victory: { narrowMargin: 4_000_000n, decisiveMargin: 30_000_000n },
-  finalization: { maxWait: 5_000 as never },
-  versions: CURRENT_ENGINE_VERSIONS,
-  cardSupportTiers: { medium: 100n, high: 1_000n, max: 10_000n },
-};
-
-/** A spread of confidence labels, so the upset paths are exercised too. */
-const LABEL_CYCLE: readonly ConfidenceLabel[] = [
-  'EVEN',
-  'FAVORED',
-  'UNDERDOG',
-  'STRONG_FAVORITE',
-  'HEAVY_UNDERDOG',
-];
-
-const CONFIDENCE_LABELS_BY_TICKER: Readonly<Record<string, ConfidenceLabel>> = Object.fromEntries(
-  ACTIVE_TICKERS.map((ticker, index) => [
-    ticker,
-    LABEL_CYCLE[index % LABEL_CYCLE.length] ?? 'EVEN',
-  ]),
-);
-
-const wallet = (n: number): WalletAddress =>
-  `0x${n.toString(16).padStart(40, '0')}` as WalletAddress;
-
-const WALLET_COUNT = 120;
-const TICKS_PER_BATTLE = 9;
 
 interface RoundOutcome {
   readonly index: number;
