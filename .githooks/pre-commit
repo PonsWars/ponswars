@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#
+# Runs the full verification gate before every commit.
+#
+# This exists because the mistake it prevents was made twice: running
+# scripts/verify.sh and then committing without checking its exit code, which
+# let lint errors reach the history. A human remembering to look at the output
+# is not a control; a hook that refuses the commit is.
+#
+# Skip deliberately with `git commit --no-verify` when you know why.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+exec bash scripts/verify.sh

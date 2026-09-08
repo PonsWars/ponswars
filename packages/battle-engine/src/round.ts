@@ -279,7 +279,7 @@ function awardsFor(
   const awards: WpAward[] = [];
   for (const pick of state.picks) {
     const result = byBattle.get(pick.battleId);
-    if (result === undefined || result.winner !== pick.backedTicker) {
+    if (result?.winner !== pick.backedTicker) {
       // A loss earns nothing, and a VOID earns nothing while recording no loss
       // (§11). Both are the absence of an award.
       continue;

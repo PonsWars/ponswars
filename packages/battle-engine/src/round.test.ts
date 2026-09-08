@@ -4,7 +4,6 @@ import {
   BATTLES_PER_ROUND,
   buildCanonicalClock,
   WP_AWARDS,
-  type ActiveTicker,
   type BattleId,
   type ConfidenceLabel,
   type RoundId,
@@ -43,7 +42,7 @@ const CONFIG: EngineConfig = {
 };
 
 const evenConfidence = (): Record<string, ConfidenceLabel> =>
-  Object.fromEntries(ACTIVE_TICKERS.map((ticker) => [ticker, 'EVEN' as ConfidenceLabel]));
+  Object.fromEntries(ACTIVE_TICKERS.map((ticker) => [ticker, 'EVEN']));
 
 const side = (overrides: Partial<SideInputs> = {}): SideInputs => ({
   windowReturn: 0n,

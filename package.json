@@ -28,7 +28,8 @@
     "contracts:build": "forge build",
     "contracts:test": "forge test",
     "contracts:fmt": "forge fmt",
-    "merkle:fixture": "node scripts/generate-merkle-fixture.mjs"
+    "merkle:fixture": "node scripts/generate-merkle-fixture.mjs",
+    "hooks:install": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
