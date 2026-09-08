@@ -96,6 +96,19 @@ describe('replaying a recording', () => {
     expect(replayRound(decoded, CONFIG).results).toEqual(recorded.outcome.results);
   });
 
+  it('refuses a recording that lost a field on the way in', () => {
+    // §66.2 makes no exception for a file this repo also wrote: a truncated
+    // download would otherwise reach the engine as a plausible-looking round.
+    const recorded = record();
+    const withoutSeed = { ...recorded.recording } as Record<string, unknown>;
+    delete withoutSeed['baseSeedHex'];
+    expect(() => decodeRecording(JSON.stringify(withoutSeed))).toThrow(TypeError);
+    expect(() => decodeRecording('null')).toThrow(TypeError);
+    expect(() =>
+      decodeRecording(JSON.stringify({ ...recorded.recording, roundIndex: 1.5 })),
+    ).toThrow(TypeError);
+  });
+
   it('carries no results of its own to hand back', () => {
     // A recording that held the outcome could "reproduce" it trivially. The
     // keys are pinned so a later field cannot smuggle one in.

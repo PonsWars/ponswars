@@ -180,17 +180,62 @@ export function encodeRecording(recording: RoundRecording): string {
   );
 }
 
-/** Reads back what {@link encodeRecording} wrote. */
+/**
+ * Reads back what {@link encodeRecording} wrote.
+ *
+ * A recording arriving as a file is external input, and §66.2 does not make an
+ * exception for a file this repo also writes — a truncated download or an
+ * edited field would otherwise reach the engine as a plausible-looking round.
+ * The shape check below is deliberately shallow: it establishes that the
+ * required fields exist and have the right kind, and the engine's own
+ * validation covers the values.
+ */
 export function decodeRecording(json: string): RoundRecording {
-  return JSON.parse(json, (_key, value: unknown) => {
-    if (
-      typeof value === 'object' &&
-      value !== null &&
-      '$bigint' in value &&
-      typeof (value as { $bigint: unknown }).$bigint === 'string'
-    ) {
-      return BigInt((value as { $bigint: string }).$bigint);
+  const parsed: unknown = JSON.parse(json, (_key, value: unknown) => {
+    if (typeof value === 'object' && value !== null && '$bigint' in value) {
+      const encoded = value.$bigint;
+      if (typeof encoded === 'string') {
+        return BigInt(encoded);
+      }
     }
     return value;
-  }) as RoundRecording;
+  });
+
+  assertRecordingShape(parsed);
+  return parsed;
+}
+
+/** Fields a recording cannot replay without. */
+const REQUIRED_RECORDING_FIELDS = [
+  'roundId',
+  'roundIndex',
+  'clock',
+  'baseSeedHex',
+  'recentRounds',
+  'confidence',
+  'picks',
+  'tickLogs',
+  'finalizationBlockHash',
+] as const;
+
+function assertRecordingShape(value: unknown): asserts value is RoundRecording {
+  if (typeof value !== 'object' || value === null) {
+    throw new TypeError('A recording must be an object');
+  }
+  const record = value as Record<string, unknown>;
+
+  for (const field of REQUIRED_RECORDING_FIELDS) {
+    if (!(field in record)) {
+      throw new TypeError(`A recording is missing ${field}`);
+    }
+  }
+  if (typeof record['baseSeedHex'] !== 'string') {
+    throw new TypeError('A recording needs a base seed');
+  }
+  if (typeof record['roundIndex'] !== 'number' || !Number.isInteger(record['roundIndex'])) {
+    throw new TypeError('A round index is a whole number');
+  }
+  if (!Array.isArray(record['tickLogs']) || !Array.isArray(record['picks'])) {
+    throw new TypeError('A recording carries tick logs and picks as arrays');
+  }
 }
