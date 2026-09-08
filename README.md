@@ -43,16 +43,30 @@ Battle Engine does, from recorded evidence, exactly once.
 
 ## Repository layout
 
+What is here:
+
 ```
-apps/         web, api, battle-engine, market-data-service,
-              pons-indexer, realtime-gateway, rewards-worker, admin-console
-packages/     shared-types, config, and the shared libraries services build on
+apps/web/     the spatial client
+packages/     shared-types, config, and the deterministic cores services build on
 contracts/    RewardsDistributor, SecretStockVault
-database/     migrations, seeds, fixtures
-simulations/  deterministic replay, historical scenarios, load
+database/     migrations
+simulations/  full-cycle runs, replay fidelity, delivery chaos
 tools/        replay-round, verify-distribution, audit-genesis
-docs/         ADRs, open-parameter registry, operations
+docs/         ADRs, open-parameter registry, operator runbooks
 ```
+
+What the build plan (§65) also names, and why it is not here yet:
+
+```
+apps/api, apps/realtime-gateway, apps/market-data-service,
+apps/pons-indexer, apps/rewards-worker, apps/admin-console
+```
+
+Each is an adapter behind a port `@ponswars/round-service` already defines, or a
+transport for payloads `@ponswars/schemas` already validates. What is missing
+from every one of them is the same thing: a decision. The web framework, the
+socket server, the database, the RPC provider and the market-data vendor are all
+`OPEN` (§102), and inventing one to fill a directory would ship it as policy.
 
 ## Operator tools
 
