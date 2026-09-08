@@ -33,6 +33,9 @@
     },
     {
       "path": "./packages/realtime/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/world-runtime/tsconfig.build.json"
     }
   ]
 }

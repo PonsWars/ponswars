@@ -1,0 +1,25 @@
+{
+  "name": "@ponswars/world-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Camera state machine, spatial zoom levels and LOD selection for the persistent world.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/shared-types": "workspace:*"
+  }
+}
