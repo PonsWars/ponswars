@@ -20,6 +20,7 @@
     "clean": "tsc --build --clean"
   },
   "dependencies": {
-    "@ponswars/shared-types": "workspace:*"
+    "@ponswars/shared-types": "workspace:*",
+    "viem": "^2.56.3"
   }
 }
