@@ -1,3 +1,4 @@
+export * from './confidence.js';
 export * from './genesis-rng.js';
 export * from './matchmaking.js';
 export * from './momentum.js';
