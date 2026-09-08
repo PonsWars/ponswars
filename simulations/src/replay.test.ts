@@ -1,14 +1,7 @@
 import { clockForRound, roundIdFor } from '@ponswars/battle-math';
 import { type ActiveTicker, type RoundId } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
-import {
-  BLOCK,
-  CONFIDENCE_LABELS_BY_TICKER,
-  CONFIG,
-  EPOCH,
-  SEED,
-  TICKS_PER_BATTLE,
-} from './harness.js';
+import { BLOCK, CONFIDENCE_BY_TICKER, CONFIG, EPOCH, SEED, TICKS_PER_BATTLE } from './harness.js';
 import { observe } from './market.js';
 import {
   decodeRecording,
@@ -39,7 +32,7 @@ function record(marketSeed = SEED): RecordedRound {
     clock: CLOCK,
     baseSeedHex: SEED,
     recentRounds: [],
-    confidence: CONFIDENCE_LABELS_BY_TICKER,
+    confidence: CONFIDENCE_BY_TICKER,
     // Picks reference real battle ids only once the round exists; an id that
     // matches nothing is simply not counted, which keeps this focused on tick
     // fidelity rather than on pick routing.

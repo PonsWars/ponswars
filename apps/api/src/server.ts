@@ -108,8 +108,8 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         sectorId: sectors[slot] ?? sectors[0],
         left: battle.setup.left,
         right: battle.setup.right,
-        leftConfidence: battle.setup.leftConfidence,
-        rightConfidence: battle.setup.rightConfidence,
+        leftIntel: battle.setup.leftIntel,
+        rightIntel: battle.setup.rightIntel,
         state: battle.state,
       })),
     });

@@ -6,7 +6,7 @@ import {
   canonicalClockSchema,
   cardDecisionSchema,
   clientRequestIdSchema,
-  confidenceLabelSchema,
+  confidenceSnapshotSchema,
   distributionIdSchema,
   hash32Schema,
   roundIdSchema,
@@ -95,8 +95,8 @@ export const liveBattleSchema = z
     sectorId: sectorIdSchema,
     left: activeTickerSchema,
     right: activeTickerSchema,
-    leftConfidence: confidenceLabelSchema,
-    rightConfidence: confidenceLabelSchema,
+    leftIntel: confidenceSnapshotSchema,
+    rightIntel: confidenceSnapshotSchema,
     state: z.enum(['SCHEDULED', 'LIVE', 'FINALIZED', 'VOID']),
   })
   .strict();

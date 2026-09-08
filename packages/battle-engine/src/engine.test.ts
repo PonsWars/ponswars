@@ -2,6 +2,8 @@ import { NO_CARD_SUPPORT, RATIO_SCALE, type SideInputs } from '@ponswars/battle-
 import {
   buildCanonicalClock,
   type BattleId,
+  type ConfidenceLabel,
+  type ConfidenceSnapshot,
   type RoundId,
   type UtcTimestamp,
   milliseconds,
@@ -44,14 +46,31 @@ const CONFIG: EngineConfig = {
   cardSupportTiers: { medium: 100n, high: 1_000n, max: 10_000n },
 };
 
+/**
+ * A snapshot carrying the label a test is about, with neutral sub-signals.
+ *
+ * Only in a test. Production computes the label *from* the sub-signals (§10.2)
+ * and could not build one this way round; here the label is the input under
+ * test and the four words beside it are scenery.
+ */
+function intel(label: ConfidenceLabel): ConfidenceSnapshot {
+  return {
+    label,
+    priceTrend: 'MIXED',
+    volumePulse: 'NORMAL',
+    ponsActivity: 'MEDIUM',
+    momentumStability: 'MIXED',
+  };
+}
+
 const SETUP: BattleSetup = {
   battleId: 'round-0000000001-b0' as BattleId,
   roundId: 'round-0000000001' as RoundId,
   left: 'NVDA',
   right: 'AAPL',
   clock: buildCanonicalClock(T0, T0),
-  leftConfidence: 'EVEN',
-  rightConfidence: 'EVEN',
+  leftIntel: intel('EVEN'),
+  rightIntel: intel('EVEN'),
 };
 
 const side = (overrides: Partial<SideInputs> = {}): SideInputs => ({
@@ -310,7 +329,7 @@ describe('finalization', () => {
   it('labels an upset from the winner’s pre-battle confidence', () => {
     // §11: the label comes from the snapshot taken at round open, not from the
     // margin.
-    const underdogSetup: BattleSetup = { ...SETUP, leftConfidence: 'HEAVY_UNDERDOG' };
+    const underdogSetup: BattleSetup = { ...SETUP, leftIntel: intel('HEAVY_UNDERDOG') };
     let state = openBattle(beginBattle(underdogSetup), at(60_000));
     state = applyTick(
       state,

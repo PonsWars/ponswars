@@ -4,7 +4,7 @@ import {
   battleIdSchema,
   canonicalClockSchema,
   cardSupportTierSchema,
-  confidenceLabelSchema,
+  confidenceSnapshotSchema,
   distributionIdSchema,
   durationMsSchema,
   eventIdSchema,
@@ -52,11 +52,12 @@ export const roundOpenedSchema = z.object({
         sectorId: sectorIdSchema,
         left: activeTickerSchema,
         right: activeTickerSchema,
-        // §10: qualitative labels only. There is deliberately no numeric
+        // §10: qualitative words only. There is deliberately no numeric
         // confidence field here — Guide §7.1 flags an exact percentage as a
         // mockup error, and a number on the wire is a number a UI will render.
-        leftConfidence: confidenceLabelSchema,
-        rightConfidence: confidenceLabelSchema,
+        // `confidenceSnapshotSchema` is strict, so one cannot be added quietly.
+        leftIntel: confidenceSnapshotSchema,
+        rightIntel: confidenceSnapshotSchema,
       }),
     )
     // §4.3: exactly five simultaneous battles.

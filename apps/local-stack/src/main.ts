@@ -7,9 +7,19 @@ import {
   type EngineConfig,
   type RoundEngineState,
 } from '@ponswars/battle-engine';
-import { clockForRound, RATIO_SCALE, roundIdFor } from '@ponswars/battle-math';
+import {
+  clockForRound,
+  RATIO_SCALE,
+  roundIdFor,
+  type ConfidenceCalibration,
+} from '@ponswars/battle-math';
 import { startSocketServer } from '@ponswars/gateway';
-import { MemoryRoundStore, stepRound, type RoundPorts } from '@ponswars/round-service';
+import {
+  MemoryRoundStore,
+  stepRound,
+  type MarketDataPort,
+  type RoundPorts,
+} from '@ponswars/round-service';
 import {
   ACTIVE_TICKERS,
   milliseconds,
@@ -17,7 +27,6 @@ import {
   utcTimestamp,
   walletAddress,
   type CanonicalClock,
-  type ConfidenceLabel,
   type UtcTimestamp,
   type WalletAddress,
 } from '@ponswars/shared-types';
@@ -79,29 +88,76 @@ const CONFIG: EngineConfig = {
 };
 
 /**
- * Confidence for every ticker (§10.1).
+ * Where each confidence band begins for this stack (§10.1, §102).
  *
- * Snapshotted at round open in production, from market and Pons signals. Fixed
- * at EVEN here rather than randomised, so nothing in a local session looks like
- * a real assessment of a real stock.
+ * `OPEN`, like the scoring calibration above, and chosen the same way: by
+ * measuring what the synthetic market actually produces so that all six labels
+ * in §10.2 are reachable. Bands copied from a real venue would be worse than
+ * useless here, because this market is not that venue.
+ *
+ * The matchup gaps were measured the same way the market's step size was —
+ * two thousand sides across two hundred rounds of this market:
+ *
+ * |        gaps | EVEN | FAVORED | UNDERDOG | STRONG_FAV | DOMINANT |
+ * | ----------: | ---: | ------: | -------: | ---------: | -------: |
+ * | *20/60/120* | *24%* |  *24%* |    *37%* |       *13%* |     *1%* |
+ * |   40/80/140 |  51% |     17% |      24% |         7% |       0% |
+ * |   45/85/145 |  59% |     15% |      20% |         5% |       0% |
+ *
+ * 20/60/120 keeps all six labels in play and keeps `DOMINANT` rare. Widening
+ * the first gap looks more cautious and is worse: at 40 more than half of all
+ * matchups open `EVEN`, which is a screen that tells a player nothing. That
+ * `UNDERDOG` outnumbers `FAVORED` is not an imbalance — §10.2's two favourite
+ * tiers both face one underdog tier, by design.
+ *
+ * One honest limitation. The walk's increments are independent, so its
+ * direction reverses on about half of all steps whatever the trend — momentum
+ * stability therefore varies around that average rather than telling a trending
+ * stretch from a choppy one. The bands below split what the walk does produce,
+ * so the signal is present and moves; it just carries less meaning here than it
+ * would against a real series. That is a property of the stand-in market, not
+ * of §10.1.
  */
-const CONFIDENCE: Readonly<Record<string, ConfidenceLabel>> = Object.fromEntries(
-  ACTIVE_TICKERS.map((ticker) => [ticker, 'EVEN']),
-);
+const CONFIDENCE_CALIBRATION: ConfidenceCalibration = {
+  priceTrend: { strong: RATIO_SCALE / 2n, weak: -RATIO_SCALE / 2n },
+  volumePulse: { rising: 1_167_000n, weak: 1_033_000n },
+  ponsActivity: { high: 40n, medium: 20n },
+  momentumStability: { stable: 26, mixed: 32 },
+  matchup: { favored: 20, strongFavorite: 60, dominant: 120 },
+};
 
 const now = (): UtcTimestamp => utcTimestamp(Date.now());
 
 /** A demo wallet for any authenticated request. Real auth is §45.2. */
 const DEMO_WALLET: WalletAddress = walletAddress(`0x${'d'.repeat(40)}`);
 
-function openRound(index: number, clock: CanonicalClock): RoundEngineState {
+/**
+ * Opens a round, snapshotting confidence from the fifteen minutes behind it.
+ *
+ * Async because §10.1 makes confidence an observation rather than a setting.
+ * Reading it here, once, is what makes the snapshot belong to the round: a
+ * later read would be a different fifteen minutes, and §10.3 freezes it at
+ * open.
+ */
+async function openRound(
+  index: number,
+  clock: CanonicalClock,
+  market: MarketDataPort,
+  at: UtcTimestamp,
+): Promise<RoundEngineState> {
+  const lookback = Object.fromEntries(
+    await Promise.all(
+      ACTIVE_TICKERS.map(async (ticker) => [ticker, await market.lookback(ticker, at)] as const),
+    ),
+  );
+
   const round = createRound({
     roundId: toRoundId(roundIdFor(index)),
     roundIndex: index,
     clock,
     baseSeedHex: `0x${'5c'.repeat(32)}`,
     recentRounds: [],
-    confidence: CONFIDENCE,
+    confidence: { lookback, calibration: CONFIDENCE_CALIBRATION },
   });
   // §22 makes opening the phase an explicit transition rather than something
   // the clock implies, which is why the driver refuses to infer it.
@@ -140,7 +196,7 @@ async function main(): Promise<void> {
   // schedule never drifts even if a finalization runs late.
   let index = 0;
   let clock = clockForRound(now(), 0, now());
-  let round = openRound(index, clock);
+  let round = await openRound(index, clock, market, now());
 
   const api = buildServer({
     currentRound: () => round,
@@ -196,7 +252,7 @@ async function main(): Promise<void> {
       // §3.1: the next round opens where this one ended.
       index += 1;
       clock = clockForRound(nextRoundOpensAt(clock), 0, now());
-      round = openRound(index, clock);
+      round = await openRound(index, clock, market, now());
       previousState = round.state;
       process.stdout.write(`\n${round.roundId}  opened\n`);
       continue;

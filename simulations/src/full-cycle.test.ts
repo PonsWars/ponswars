@@ -24,6 +24,7 @@ import {
   sumAmounts,
   WP_AWARDS,
   type ActiveTicker,
+  type ConfidenceLabel,
   type RoundId,
   type UtcTimestamp,
   type WalletAddress,
@@ -31,7 +32,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   BLOCK,
-  CONFIDENCE_LABELS_BY_TICKER,
+  CONFIDENCE_BY_TICKER,
   CONFIG,
   EPOCH,
   SEED,
@@ -57,6 +58,8 @@ interface RoundOutcome {
   readonly index: number;
   readonly pairings: readonly Pairing[];
   readonly awards: readonly WpAward[];
+  /** Both sides' labels for every battle, as the round opened them (§10.1). */
+  readonly intelLabels: readonly ConfidenceLabel[];
   readonly finalizedCount: number;
   readonly voidedCount: number;
 }
@@ -81,7 +84,7 @@ function runRound(
     clock,
     baseSeedHex: SEED,
     recentRounds: history,
-    confidence: CONFIDENCE_LABELS_BY_TICKER,
+    confidence: CONFIDENCE_BY_TICKER,
   });
 
   const pairings: Pairing[] = round.battles.map((battle) => ({
@@ -152,6 +155,10 @@ function runRound(
     index,
     pairings,
     awards: outcome.awards,
+    intelLabels: round.battles.flatMap((battle) => [
+      battle.setup.leftIntel.label,
+      battle.setup.rightIntel.label,
+    ]),
     finalizedCount: outcome.results.length,
     voidedCount: outcome.voided.length,
   };
@@ -242,10 +249,25 @@ describe('a fifty-round simulation', () => {
 
   it('exercises upsets and ordinary wins alike', () => {
     // A simulation where every winner is a favourite would not test the upset
-    // path at all.
+    // path at all. Both tiers are named rather than counted, because §11 prices
+    // them differently and a run that reached only one would leave the other
+    // award untested while still looking varied.
     const reasons = new Set(outcomes.flatMap((o) => o.awards.map((a) => a.reason)));
     expect(reasons.has('WIN')).toBe(true);
-    expect(reasons.size).toBeGreaterThan(1);
+    expect(reasons.has('UNDERDOG_WIN')).toBe(true);
+    expect(reasons.has('HEAVY_UNDERDOG_WIN')).toBe(true);
+  });
+
+  it('opens matchups across the confidence vocabulary', () => {
+    // The fixture supplies market strengths, not labels (§10.2), so what the
+    // rounds actually open at has to be checked rather than assumed — a spread
+    // of lookbacks that happened to pair like with like would quietly stop
+    // exercising the upset paths above.
+    const labels = new Set(outcomes.flatMap((outcome) => outcome.intelLabels));
+    expect(labels.has('EVEN')).toBe(true);
+    expect(labels.has('UNDERDOG')).toBe(true);
+    expect(labels.has('HEAVY_UNDERDOG')).toBe(true);
+    expect(labels.has('DOMINANT')).toBe(true);
   });
 
   it('is reproducible from the seed', () => {

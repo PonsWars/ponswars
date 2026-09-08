@@ -23,7 +23,7 @@ import {
   type BattleState,
   type CanonicalClock,
   type CardSupportTier,
-  type ConfidenceLabel,
+  type ConfidenceSnapshot,
   type FeedHealth,
   type FinalizedBattleResult,
   type PublicBattleStateUpdate,
@@ -79,9 +79,16 @@ export interface BattleSetup {
   readonly left: ActiveTicker;
   readonly right: ActiveTicker;
   readonly clock: CanonicalClock;
-  /** Snapshotted at round open and frozen at lock (§10.3). */
-  readonly leftConfidence: ConfidenceLabel;
-  readonly rightConfidence: ConfidenceLabel;
+  /**
+   * Pre-battle intel for each side, snapshotted at round open (§10.1, §10.3).
+   *
+   * The whole snapshot rather than its label: §11 needs the label to price an
+   * upset, and §27.5 needs the four sub-signals to draw the panel. Carrying
+   * both together is what stops the panel and the award disagreeing about who
+   * the underdog was.
+   */
+  readonly leftIntel: ConfidenceSnapshot;
+  readonly rightIntel: ConfidenceSnapshot;
 }
 
 /**
@@ -353,7 +360,7 @@ export function finalizeBattle(
 
   const finalAdvantage = advantageFromBattleScore(score.leftTotal);
   const winnerConfidence =
-    resolution.winningSide === 'LEFT' ? state.setup.leftConfidence : state.setup.rightConfidence;
+    resolution.winningSide === 'LEFT' ? state.setup.leftIntel.label : state.setup.rightIntel.label;
 
   const victoryLabel = classifyVictory({
     margin: resolution.margin,

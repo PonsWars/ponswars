@@ -6,16 +6,11 @@ import {
   type EngineConfig,
   type LockedPick,
   type RoundFinalization,
+  type RoundSetup,
   type TickInput,
 } from '@ponswars/battle-engine';
 import type { Pairing } from '@ponswars/battle-math';
-import type {
-  BattleId,
-  CanonicalClock,
-  ConfidenceLabel,
-  RoundId,
-  UtcTimestamp,
-} from '@ponswars/shared-types';
+import type { BattleId, CanonicalClock, RoundId, UtcTimestamp } from '@ponswars/shared-types';
 
 /**
  * Recording and replaying a round (§26, §54).
@@ -48,7 +43,15 @@ export interface RoundRecording {
   readonly clock: CanonicalClock;
   readonly baseSeedHex: string;
   readonly recentRounds: readonly (readonly Pairing[])[];
-  readonly confidence: Readonly<Record<string, ConfidenceLabel>>;
+  /**
+   * The confidence lookbacks and calibration the round was opened from (§10.1).
+   *
+   * The inputs, not the resulting labels. §26 promises a result is reproducible
+   * from published evidence, and a label is already a conclusion — recording it
+   * would let a replay agree with a snapshot the recorded market never
+   * supported.
+   */
+  readonly confidence: RoundSetup['confidence'];
   readonly picks: readonly LockedPick[];
   /** Ticks in the order they were applied. Order is part of the record (§26). */
   readonly tickLogs: readonly BattleTickLog[];
@@ -128,7 +131,15 @@ export function recordRound(input: {
   readonly clock: CanonicalClock;
   readonly baseSeedHex: string;
   readonly recentRounds: readonly (readonly Pairing[])[];
-  readonly confidence: Readonly<Record<string, ConfidenceLabel>>;
+  /**
+   * The confidence lookbacks and calibration the round was opened from (§10.1).
+   *
+   * The inputs, not the resulting labels. §26 promises a result is reproducible
+   * from published evidence, and a label is already a conclusion — recording it
+   * would let a replay agree with a snapshot the recorded market never
+   * supported.
+   */
+  readonly confidence: RoundSetup['confidence'];
   readonly picks: readonly LockedPick[];
   readonly finalizationBlockHash: string;
   readonly tickCount: number;

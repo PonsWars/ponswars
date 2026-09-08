@@ -1,5 +1,6 @@
 import type { LockedPick, RoundEngineState, RoundFinalization } from '@ponswars/battle-engine';
 import { emit, EMPTY_SEQUENCER, type Channel, type Envelope } from '@ponswars/realtime';
+import type { ConfidenceLookback } from '@ponswars/battle-math';
 import type { ActiveTicker, RoundId, UtcTimestamp } from '@ponswars/shared-types';
 import type {
   ChainPort,
@@ -97,10 +98,31 @@ export class MemoryChain implements ChainPort {
 export class MemoryMarketData implements MarketDataPort {
   constructor(
     private readonly source: (ticker: ActiveTicker, at: UtcTimestamp) => MarketObservation,
+    /**
+     * The confidence lookback, when a test needs one.
+     *
+     * Required to be passed explicitly rather than defaulted to something
+     * neutral: a lookback silently returning a flat market would label every
+     * matchup `EVEN`, and a test about upsets would pass while proving nothing.
+     * A test that never opens a round never calls this.
+     */
+    private readonly lookbackSource?: (
+      ticker: ActiveTicker,
+      at: UtcTimestamp,
+    ) => ConfidenceLookback,
   ) {}
 
   observe(ticker: ActiveTicker, at: UtcTimestamp): Promise<MarketObservation> {
     return Promise.resolve(this.source(ticker, at));
+  }
+
+  lookback(ticker: ActiveTicker, at: UtcTimestamp): Promise<ConfidenceLookback> {
+    if (this.lookbackSource === undefined) {
+      throw new Error(
+        'MemoryMarketData was asked for a confidence lookback but was built without one',
+      );
+    }
+    return Promise.resolve(this.lookbackSource(ticker, at));
   }
 }
 
@@ -115,11 +137,12 @@ export interface MemoryPorts extends RoundPorts {
 
 export function memoryPorts(input: {
   readonly market: (ticker: ActiveTicker, at: UtcTimestamp) => MarketObservation;
+  readonly lookback?: (ticker: ActiveTicker, at: UtcTimestamp) => ConfidenceLookback;
   readonly picks?: readonly LockedPick[];
   readonly blockHash: string;
 }): MemoryPorts {
   return {
-    marketData: new MemoryMarketData(input.market),
+    marketData: new MemoryMarketData(input.market, input.lookback),
     picks: new MemoryPickSource(input.picks ?? []),
     chain: new MemoryChain(input.blockHash),
     publisher: new MemoryPublisher(),

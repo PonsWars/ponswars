@@ -1,6 +1,6 @@
-import { DeterministicPrng, NO_CARD_SUPPORT } from '@ponswars/battle-math';
+import { DeterministicPrng, NO_CARD_SUPPORT, type ConfidenceLookback } from '@ponswars/battle-math';
 import type { MarketDataPort, MarketObservation } from '@ponswars/round-service';
-import type { ActiveTicker, UtcTimestamp } from '@ponswars/shared-types';
+import { CONFIDENCE_LOOKBACK, type ActiveTicker, type UtcTimestamp } from '@ponswars/shared-types';
 
 /**
  * A market that is not a market.
@@ -78,10 +78,11 @@ export interface SyntheticMarketOptions {
  * comeback that common is not a comeback. 1200 keeps all four labels and keeps
  * the rare ones rare.
  *
- * `UPSET_VICTORY` and `MAJOR_UPSET` appear in none of them, and should not:
- * §11 derives them from the winner's pre-battle confidence, which `main.ts`
- * fixes at `EVEN` so that nothing local reads as an assessment of a real stock.
- * They are unreachable here by design, not missing.
+ * `UPSET_VICTORY` and `MAJOR_UPSET` appear in none of them, because they were
+ * measured while every ticker opened `EVEN`. §11 takes those two from the
+ * winner's pre-battle confidence, which is now computed from this market's own
+ * fifteen-minute lookback (§10.1) rather than pinned — so they are reachable,
+ * and the four labels above are the ones the *battle* decides.
  */
 export const DEFAULT_SYNTHETIC_MARKET: SyntheticMarketOptions = {
   seedHex: `0x${'5c'.repeat(32)}`,
@@ -126,13 +127,47 @@ export class SyntheticMarket implements MarketDataPort {
     });
   }
 
+  /**
+   * The fifteen minutes before the round opened (§10.1).
+   *
+   * The same walk, read backwards from `at` over a longer window than a battle
+   * uses. The sub-interval returns are the walk's own increments, so momentum
+   * stability describes the path this market actually took rather than a
+   * summary of it.
+   */
+  lookback(ticker: ActiveTicker, at: UtcTimestamp): Promise<ConfidenceLookback> {
+    const step = Math.floor(at / this.options.stepMs);
+    const steps = Math.max(1, Math.floor(CONFIDENCE_LOOKBACK / this.options.stepMs));
+    const increments: bigint[] = [];
+    for (let index = step - steps + 1; index <= step; index += 1) {
+      increments.push(this.incrementAt(index, ticker));
+    }
+
+    const prng = new DeterministicPrng(this.options.seedHex, `LOOKBACK|${String(step)}|${ticker}`);
+    return Promise.resolve({
+      windowReturn: increments.reduce((total, value) => total + value, 0n),
+      // The same volatility `observe` reports. A different one here would make
+      // confidence and the battle score disagree about what is normal for this
+      // asset, and §10.1 and §12.1 screen the same input.
+      volatility: 10_000n,
+      relativeVolume: BigInt(900_000 + prng.nextBelow(400_001)),
+      qualifiedPonsActivity: BigInt(prng.nextBelow(60)),
+      subWindowReturns: increments,
+    });
+  }
+
+  /** One step's increment of the walk. */
+  private incrementAt(step: number, ticker: ActiveTicker): bigint {
+    const prng = new DeterministicPrng(this.options.seedHex, `WALK|${String(step)}|${ticker}`);
+    return BigInt(prng.nextBelow(this.options.stepRange * 2 + 1) - this.options.stepRange);
+  }
+
   /** The accumulated walk at a step, summed over the bounded window. */
   private driftAt(step: number, ticker: ActiveTicker): bigint {
     let drift = 0n;
     const first = step - this.options.windowSteps + 1;
     for (let index = first; index <= step; index += 1) {
-      const prng = new DeterministicPrng(this.options.seedHex, `WALK|${String(index)}|${ticker}`);
-      drift += BigInt(prng.nextBelow(this.options.stepRange * 2 + 1) - this.options.stepRange);
+      drift += this.incrementAt(index, ticker);
     }
     return drift;
   }

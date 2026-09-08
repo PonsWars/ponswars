@@ -4,7 +4,13 @@ import {
   type EngineConfig,
   type RoundEngineState,
 } from '@ponswars/battle-engine';
-import { clockForRound, RATIO_SCALE, roundIdFor } from '@ponswars/battle-math';
+import {
+  RATIO_SCALE,
+  clockForRound,
+  roundIdFor,
+  type ConfidenceCalibration,
+  type ConfidenceLookback,
+} from '@ponswars/battle-math';
 import { apiErrorSchema, currentRoundSchema } from '@ponswars/schemas';
 import {
   ACTIVE_TICKERS,
@@ -12,7 +18,6 @@ import {
   roundId as toRoundId,
   utcTimestamp,
   walletAddress,
-  type ConfidenceLabel,
   type UtcTimestamp,
 } from '@ponswars/shared-types';
 import type { FastifyInstance } from 'fastify';
@@ -47,9 +52,30 @@ const CONFIG: EngineConfig = {
   cardSupportTiers: { medium: 100n, high: 1_000n, max: 10_000n },
 };
 
-const CONFIDENCE: Readonly<Record<string, ConfidenceLabel>> = Object.fromEntries(
-  ACTIVE_TICKERS.map((ticker) => [ticker, 'EVEN']),
-);
+const CONFIDENCE_CALIBRATION: ConfidenceCalibration = {
+  priceTrend: { strong: RATIO_SCALE / 2n, weak: -RATIO_SCALE / 2n },
+  volumePulse: { rising: (RATIO_SCALE * 13n) / 10n, weak: (RATIO_SCALE * 7n) / 10n },
+  ponsActivity: { high: 40n, medium: 15n },
+  momentumStability: { stable: 2, mixed: 5 },
+  matchup: { favored: 20, strongFavorite: 60, dominant: 120 },
+};
+
+/** Every ticker looking identical, so every matchup opens EVEN. */
+const CONFIDENCE = {
+  lookback: Object.fromEntries(
+    ACTIVE_TICKERS.map((ticker) => [
+      ticker,
+      {
+        windowReturn: 0n,
+        volatility: RATIO_SCALE,
+        relativeVolume: RATIO_SCALE,
+        qualifiedPonsActivity: 20n,
+        subWindowReturns: [10n, 10n, 10n],
+      } satisfies ConfidenceLookback,
+    ]),
+  ),
+  calibration: CONFIDENCE_CALIBRATION,
+};
 
 function openRound(): RoundEngineState {
   const round = createRound({

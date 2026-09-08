@@ -1,5 +1,5 @@
 import type { LockedPick, RoundEngineState, RoundFinalization } from '@ponswars/battle-engine';
-import type { SideInputs } from '@ponswars/battle-math';
+import type { ConfidenceLookback, SideInputs } from '@ponswars/battle-math';
 import type { Channel } from '@ponswars/realtime';
 import type { ActiveTicker, FeedHealth, RoundId, UtcTimestamp } from '@ponswars/shared-types';
 
@@ -37,6 +37,21 @@ export interface MarketObservation {
  */
 export interface MarketDataPort {
   observe(ticker: ActiveTicker, at: UtcTimestamp): Promise<MarketObservation>;
+  /**
+   * What a ticker did over the fifteen minutes before Pick Phase (§10.1).
+   *
+   * A separate method rather than a field on `MarketObservation`, because it is
+   * a different window read at a different moment: this one once, when the
+   * round opens, and `observe` once a second for the nine minutes after lock.
+   * A vendor will almost certainly serve them from different endpoints for the
+   * same reason, and folding them together here would make one call fetch data
+   * the caller does not need six hundred times a round.
+   *
+   * It returns no health. §23.6 lets a degraded feed still score a battle, but
+   * confidence is screening shown before anything is at stake — if the numbers
+   * are late, the labels are simply drawn from what arrived.
+   */
+  lookback(ticker: ActiveTicker, at: UtcTimestamp): Promise<ConfidenceLookback>;
 }
 
 /**

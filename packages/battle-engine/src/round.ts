@@ -1,4 +1,12 @@
-import { battleIdFor, scheduleRound, sectorIdFor, type Pairing } from '@ponswars/battle-math';
+import {
+  battleIdFor,
+  matchupConfidence,
+  scheduleRound,
+  sectorIdFor,
+  type ConfidenceCalibration,
+  type ConfidenceLookback,
+  type Pairing,
+} from '@ponswars/battle-math';
 import {
   BATTLES_PER_ROUND,
   canTransitionRound,
@@ -6,7 +14,6 @@ import {
   type ActiveTicker,
   type BattleId,
   type CanonicalClock,
-  type ConfidenceLabel,
   type FinalizedBattleResult,
   type RoundId,
   type RoundState,
@@ -75,13 +82,18 @@ export interface RoundSetup {
   readonly roster?: readonly ActiveTicker[];
   readonly recentRounds?: readonly (readonly Pairing[])[];
   /**
-   * Battle Confidence per ticker, snapshotted when the round opened (§10.1).
+   * What each ticker did over the fifteen minutes before Pick Phase (§10.1).
    *
-   * Required for every participating ticker: §11 derives the upset award from
-   * the winner's label, and a missing entry would silently downgrade an upset
-   * to an ordinary win.
+   * Lookbacks rather than labels, because §10.2 makes a label *relative* and
+   * the matchups are drawn inside this function — nobody outside it knows yet
+   * who is standing opposite whom. Required for every participating ticker:
+   * §11 prices an upset from the winner's label, and a missing entry would
+   * silently downgrade an upset to an ordinary win.
    */
-  readonly confidence: Readonly<Record<string, ConfidenceLabel>>;
+  readonly confidence: {
+    readonly lookback: Readonly<Record<string, ConfidenceLookback>>;
+    readonly calibration: ConfidenceCalibration;
+  };
 }
 
 /**
@@ -100,22 +112,25 @@ export function createRound(setup: RoundSetup): RoundEngineState {
   });
 
   const battles = pairings.map((pairing, slot) => {
-    const leftConfidence = setup.confidence[pairing.left];
-    const rightConfidence = setup.confidence[pairing.right];
-    if (leftConfidence === undefined || rightConfidence === undefined) {
+    const leftLookback = setup.confidence.lookback[pairing.left];
+    const rightLookback = setup.confidence.lookback[pairing.right];
+    if (leftLookback === undefined || rightLookback === undefined) {
       throw new RangeError(
-        `Missing Battle Confidence for ${pairing.left} or ${pairing.right}; ` +
+        `Missing Battle Confidence lookback for ${pairing.left} or ${pairing.right}; ` +
           'an absent label would silently downgrade an upset to an ordinary win (§11)',
       );
     }
+    // Computed here and not by the caller: the label is relative to the
+    // opponent (§10.2), and the opponent is decided one line above.
+    const intel = matchupConfidence(leftLookback, rightLookback, setup.confidence.calibration);
     return beginBattle({
       battleId: battleIdFor(setup.roundIndex, slot) as BattleId,
       roundId: setup.roundId,
       left: pairing.left,
       right: pairing.right,
       clock: setup.clock,
-      leftConfidence,
-      rightConfidence,
+      leftIntel: intel.left,
+      rightIntel: intel.right,
     });
   });
 
@@ -292,8 +307,8 @@ function awardsFor(
     }
     const winnerConfidence =
       result.winner === battle.setup.left
-        ? battle.setup.leftConfidence
-        : battle.setup.rightConfidence;
+        ? battle.setup.leftIntel.label
+        : battle.setup.rightIntel.label;
 
     const base = winningPickWp(winnerConfidence, false);
     const reason: WpAwardReason =

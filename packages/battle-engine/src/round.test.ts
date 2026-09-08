@@ -1,11 +1,16 @@
-import { NO_CARD_SUPPORT, RATIO_SCALE, type SideInputs } from '@ponswars/battle-math';
+import {
+  NO_CARD_SUPPORT,
+  RATIO_SCALE,
+  type ConfidenceCalibration,
+  type ConfidenceLookback,
+  type SideInputs,
+} from '@ponswars/battle-math';
 import {
   ACTIVE_TICKERS,
   BATTLES_PER_ROUND,
   buildCanonicalClock,
   WP_AWARDS,
   type BattleId,
-  type ConfidenceLabel,
   type RoundId,
   type UtcTimestamp,
   type WalletAddress,
@@ -42,8 +47,44 @@ const CONFIG: EngineConfig = {
   cardSupportTiers: { medium: 100n, high: 1_000n, max: 10_000n },
 };
 
-const evenConfidence = (): Record<string, ConfidenceLabel> =>
-  Object.fromEntries(ACTIVE_TICKERS.map((ticker) => [ticker, 'EVEN']));
+const CONFIDENCE_CALIBRATION: ConfidenceCalibration = {
+  priceTrend: { strong: RATIO_SCALE / 2n, weak: -RATIO_SCALE / 2n },
+  volumePulse: { rising: (RATIO_SCALE * 13n) / 10n, weak: (RATIO_SCALE * 7n) / 10n },
+  ponsActivity: { high: 40n, medium: 15n },
+  momentumStability: { stable: 2, mixed: 5 },
+  matchup: { favored: 20, strongFavorite: 60, dominant: 120 },
+};
+
+/** A ticker with every confidence band in the middle. */
+const NEUTRAL_LOOKBACK: ConfidenceLookback = {
+  windowReturn: 0n,
+  volatility: RATIO_SCALE,
+  relativeVolume: RATIO_SCALE,
+  qualifiedPonsActivity: 20n,
+  subWindowReturns: [10n, 10n, 10n],
+};
+
+/** A ticker with every band at its bottom, so its opponent is the favourite. */
+const WEAKEST_LOOKBACK: ConfidenceLookback = {
+  windowReturn: -RATIO_SCALE,
+  volatility: RATIO_SCALE,
+  relativeVolume: RATIO_SCALE / 2n,
+  qualifiedPonsActivity: 1n,
+  subWindowReturns: [10n, -10n, 10n, -10n, 10n, -10n, 10n],
+};
+
+/** A ticker with every band at its top. */
+const STRONGEST_LOOKBACK: ConfidenceLookback = {
+  windowReturn: RATIO_SCALE,
+  volatility: RATIO_SCALE,
+  relativeVolume: RATIO_SCALE * 2n,
+  qualifiedPonsActivity: 100n,
+  subWindowReturns: [10n, 20n, 30n],
+};
+
+/** Every ticker looking identical, so every matchup opens EVEN. */
+const flatMarket = (): Record<string, ConfidenceLookback> =>
+  Object.fromEntries(ACTIVE_TICKERS.map((ticker) => [ticker, NEUTRAL_LOOKBACK]));
 
 const side = (overrides: Partial<SideInputs> = {}): SideInputs => ({
   windowReturn: 0n,
@@ -67,13 +108,13 @@ const tick = (offset: number, overrides: Partial<TickInput> = {}): TickInput => 
 const wallet = (n: number): WalletAddress =>
   `0x${n.toString(16).padStart(40, '0')}` as WalletAddress;
 
-const makeRound = (confidence = evenConfidence()): RoundEngineState =>
+const makeRound = (lookback = flatMarket()): RoundEngineState =>
   createRound({
     roundId: 'round-0000000001' as RoundId,
     roundIndex: 1,
     clock: buildCanonicalClock(T0, T0),
     baseSeedHex: SEED,
-    confidence,
+    confidence: { lookback, calibration: CONFIDENCE_CALIBRATION },
   });
 
 /** Drives every battle with one tick that makes the left side win. */
@@ -111,7 +152,7 @@ describe('createRound', () => {
   it('refuses to start without confidence for every ticker', () => {
     // §11 derives the upset award from the winner's label; a missing entry
     // would silently downgrade an upset to an ordinary win.
-    const partial = evenConfidence();
+    const partial = flatMarket();
     delete partial['NVDA'];
     expect(() => makeRound(partial)).toThrow(RangeError);
   });
@@ -182,8 +223,8 @@ describe('lockRound', () => {
 });
 
 describe('finalizeRound', () => {
-  const runRound = (picks: readonly LockedPick[], confidence = evenConfidence()) => {
-    const round = makeRound(confidence);
+  const runRound = (picks: readonly LockedPick[], lookback = flatMarket()) => {
+    const round = makeRound(lookback);
     const locked = lockRound(round, at(60_000), picks);
     const driven = driveLeftWins(locked);
     return finalizeRound(driven, at(600_000), BLOCK, CONFIG);
@@ -258,12 +299,22 @@ describe('finalizeRound', () => {
   it('pays the upset award from the winner’s confidence', () => {
     // §11: 14 WP for a heavy-underdog win, from the label snapshotted at round
     // open rather than anything computed during the battle.
-    const round = makeRound();
-    const first = round.battles[0];
-    expect(first).toBeDefined();
+    // The pairings are deterministic (§4.3), so a flat round names who meets
+    // whom before the market is shaped around them.
+    const pairing = makeRound().battles[0];
+    expect(pairing).toBeDefined();
 
-    const confidence = evenConfidence();
-    confidence[first!.setup.left] = 'HEAVY_UNDERDOG';
+    // Built from the market rather than by naming a label: §10.2 makes the
+    // label relative, so making one side a heavy underdog means giving the
+    // other side a better fifteen minutes.
+    const lookback = flatMarket();
+    lookback[pairing!.setup.left] = WEAKEST_LOOKBACK;
+    lookback[pairing!.setup.right] = STRONGEST_LOOKBACK;
+
+    // The round that is actually finalized, so the assertion below reads the
+    // snapshot that priced the award rather than a different round's.
+    const first = makeRound(lookback).battles[0];
+    expect(first?.setup.leftIntel.label).toBe('HEAVY_UNDERDOG');
 
     const outcome = runRound(
       [
@@ -274,7 +325,7 @@ describe('finalizeRound', () => {
           cardDeployed: false,
         },
       ],
-      confidence,
+      lookback,
     );
 
     const award = outcome.awards.find((a) => a.wallet === wallet(4));

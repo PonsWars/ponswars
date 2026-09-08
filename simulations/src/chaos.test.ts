@@ -14,14 +14,7 @@ import {
 } from '@ponswars/realtime';
 import { utcTimestamp, type ActiveTicker, type RoundId } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
-import {
-  BLOCK,
-  CONFIG,
-  CONFIDENCE_LABELS_BY_TICKER,
-  EPOCH,
-  SEED,
-  TICKS_PER_BATTLE,
-} from './harness.js';
+import { BLOCK, CONFIG, CONFIDENCE_BY_TICKER, EPOCH, SEED, TICKS_PER_BATTLE } from './harness.js';
 import { observe } from './market.js';
 import { recordRound, replayRound, type RecordedRound } from '@ponswars/replay';
 
@@ -177,7 +170,7 @@ function record(): RecordedRound {
     clock: CLOCK,
     baseSeedHex: SEED,
     recentRounds: [],
-    confidence: CONFIDENCE_LABELS_BY_TICKER,
+    confidence: CONFIDENCE_BY_TICKER,
     picks: [],
     finalizationBlockHash: BLOCK,
     tickCount: TICKS_PER_BATTLE,
@@ -231,7 +224,7 @@ describe('failure over fabrication', () => {
       clock,
       baseSeedHex: SEED,
       recentRounds: [],
-      confidence: CONFIDENCE_LABELS_BY_TICKER,
+      confidence: CONFIDENCE_BY_TICKER,
       picks: [],
       finalizationBlockHash: BLOCK,
       // No ticks at all: the feed never delivered anything scorable.

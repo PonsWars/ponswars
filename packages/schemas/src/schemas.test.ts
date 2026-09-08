@@ -1,4 +1,10 @@
-import { ACTIVE_TICKERS, MOMENTUM_STATES, VICTORY_LABELS } from '@ponswars/shared-types';
+import {
+  ACTIVE_TICKERS,
+  MOMENTUM_STATES,
+  VICTORY_LABELS,
+  type ConfidenceLabel,
+  type ConfidenceSnapshot,
+} from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
 import {
   apiErrorSchema,
@@ -14,6 +20,22 @@ import {
   publicEventSchema,
   roundOpenedSchema,
 } from './websocket.js';
+
+/**
+ * A snapshot carrying one label, with neutral sub-signals beside it.
+ *
+ * Only a fixture. §10.2 computes the label *from* the sub-signals; here the
+ * label is what a schema test is about and the four words are scenery.
+ */
+function intel(label: ConfidenceLabel): ConfidenceSnapshot {
+  return {
+    label,
+    priceTrend: 'MIXED',
+    volumePulse: 'NORMAL',
+    ponsActivity: 'MEDIUM',
+    momentumStability: 'MIXED',
+  };
+}
 
 const T0 = 1_800_000_000_000;
 const WALLET = '0x1234567890abcdef1234567890abcdef12345678';
@@ -124,8 +146,8 @@ describe('ROUND_OPENED', () => {
     sectorId: `sector-0${String(index + 1)}`,
     left: ACTIVE_TICKERS[index * 2] ?? 'NVDA',
     right: ACTIVE_TICKERS[index * 2 + 1] ?? 'AAPL',
-    leftConfidence: 'EVEN' as const,
-    rightConfidence: 'FAVORED' as const,
+    leftIntel: intel('EVEN'),
+    rightIntel: intel('FAVORED'),
   });
 
   const opened = {
@@ -149,14 +171,25 @@ describe('ROUND_OPENED', () => {
     ).toBe(false);
   });
 
-  it('carries confidence as a label, never a number', () => {
+  it('carries confidence as words, never a number', () => {
     // §10 and Guide §7.1: no exact win probability. A numeric field would be a
     // number a UI eventually renders.
     const numeric = {
       ...opened,
-      matchups: [{ ...matchup(0), leftConfidence: 67 }, ...opened.matchups.slice(1)],
+      matchups: [{ ...matchup(0), leftIntel: 67 }, ...opened.matchups.slice(1)],
     };
     expect(roundOpenedSchema.safeParse(numeric).success).toBe(false);
+
+    // And not smuggled inside the snapshot either: the schema is strict, so an
+    // extra field is a parse failure rather than something a client ignores.
+    const smuggled = {
+      ...opened,
+      matchups: [
+        { ...matchup(0), leftIntel: { ...intel('EVEN'), winProbability: 67 } },
+        ...opened.matchups.slice(1),
+      ],
+    };
+    expect(roundOpenedSchema.safeParse(smuggled).success).toBe(false);
   });
 });
 
@@ -298,8 +331,8 @@ describe('API responses', () => {
       sectorId: 'sector-01',
       left: 'NVDA' as const,
       right: 'AAPL' as const,
-      leftConfidence: 'EVEN' as const,
-      rightConfidence: 'EVEN' as const,
+      leftIntel: intel('EVEN'),
+      rightIntel: intel('EVEN'),
       state: 'LIVE' as const,
     };
     expect(liveBattleSchema.safeParse(battle).success).toBe(true);

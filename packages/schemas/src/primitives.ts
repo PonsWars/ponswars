@@ -3,13 +3,17 @@ import {
   CARD_DECISIONS,
   CARD_SUPPORT_TIERS,
   CONFIDENCE_LABELS,
+  MOMENTUM_STABILITY_SIGNALS,
   MOMENTUM_STATES,
+  PONS_ACTIVITY_SIGNALS,
+  PRICE_TREND_SIGNALS,
   PUBLIC_FEED_HEALTH,
   RESERVE_TICKERS,
   ROUND_STATES,
   VICTORY_LABELS,
   VISUAL_EVENT_CUES,
   VOID_REASON_CATEGORIES,
+  VOLUME_PULSE_SIGNALS,
 } from '@ponswars/shared-types';
 import { z } from 'zod';
 
@@ -36,6 +40,29 @@ export const activeTickerSchema = enumOf(ACTIVE_TICKERS);
 export const tickerSchema = enumOf([...ACTIVE_TICKERS, ...RESERVE_TICKERS]);
 export const roundStateSchema = enumOf(ROUND_STATES);
 export const confidenceLabelSchema = enumOf(CONFIDENCE_LABELS);
+export const priceTrendSignalSchema = enumOf(PRICE_TREND_SIGNALS);
+export const volumePulseSignalSchema = enumOf(VOLUME_PULSE_SIGNALS);
+export const ponsActivitySignalSchema = enumOf(PONS_ACTIVITY_SIGNALS);
+export const momentumStabilitySignalSchema = enumOf(MOMENTUM_STABILITY_SIGNALS);
+
+/**
+ * One side's pre-battle intel (§10.2, §27.5).
+ *
+ * `.strict()`, so the only things that can cross the wire are the label and the
+ * four qualitative words. §10 forbids an exact percentage and Guide §7.1 lists
+ * one as a mockup error to correct; a numeric field added here in some later
+ * refactor would fail this parse rather than reach a client that could render
+ * it.
+ */
+export const confidenceSnapshotSchema = z
+  .object({
+    label: confidenceLabelSchema,
+    priceTrend: priceTrendSignalSchema,
+    volumePulse: volumePulseSignalSchema,
+    ponsActivity: ponsActivitySignalSchema,
+    momentumStability: momentumStabilitySignalSchema,
+  })
+  .strict();
 export const momentumStateSchema = enumOf(MOMENTUM_STATES);
 export const victoryLabelSchema = enumOf(VICTORY_LABELS);
 export const cardDecisionSchema = enumOf(CARD_DECISIONS);

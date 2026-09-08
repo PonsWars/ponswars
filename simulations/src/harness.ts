@@ -1,10 +1,13 @@
 import { CURRENT_ENGINE_VERSIONS, type EngineConfig } from '@ponswars/battle-engine';
-import { RATIO_SCALE } from '@ponswars/battle-math';
+import {
+  RATIO_SCALE,
+  type ConfidenceCalibration,
+  type ConfidenceLookback,
+} from '@ponswars/battle-math';
 import {
   ACTIVE_TICKERS,
   milliseconds,
   tokenDecimals,
-  type ConfidenceLabel,
   type TokenDecimals,
   type UtcTimestamp,
   type WalletAddress,
@@ -43,22 +46,74 @@ export const CONFIG: EngineConfig = {
   cardSupportTiers: { medium: 100n, high: 1_000n, max: 10_000n },
 };
 
-/** A spread of confidence labels, so the upset paths are exercised too. */
-const LABEL_CYCLE: readonly ConfidenceLabel[] = [
-  'EVEN',
-  'FAVORED',
-  'UNDERDOG',
-  'STRONG_FAVORITE',
-  'HEAVY_UNDERDOG',
+/**
+ * Where each confidence band begins for the simulations (§10.1, §102).
+ *
+ * `OPEN`, like every other calibration here: these are the simulation's values,
+ * chosen so that all six labels in §10.2 are reachable across five matchups.
+ */
+export const CONFIDENCE_CALIBRATION: ConfidenceCalibration = {
+  priceTrend: { strong: RATIO_SCALE / 2n, weak: -RATIO_SCALE / 2n },
+  volumePulse: { rising: (RATIO_SCALE * 13n) / 10n, weak: (RATIO_SCALE * 7n) / 10n },
+  ponsActivity: { high: 40n, medium: 15n },
+  momentumStability: { stable: 2, mixed: 5 },
+  matchup: { favored: 20, strongFavorite: 60, dominant: 120 },
+};
+
+/** Return, volume, activity and path for each band rank, weakest first. */
+const TREND = [-RATIO_SCALE, 0n, RATIO_SCALE] as const;
+const VOLUME = [RATIO_SCALE / 2n, RATIO_SCALE, RATIO_SCALE * 2n] as const;
+const PONS = [1n, 20n, 100n] as const;
+const PATH = [
+  [10n, -10n, 10n, -10n, 10n, -10n, 10n],
+  [10n, -10n, 10n, -10n],
+  [10n, 20n, 30n],
+] as const;
+
+/** A lookback whose four bands sit at the given ranks (§10.1 order). */
+function lookbackAt(
+  price: number,
+  volume: number,
+  pons: number,
+  stability: number,
+): ConfidenceLookback {
+  return {
+    windowReturn: TREND[price] ?? 0n,
+    volatility: RATIO_SCALE,
+    relativeVolume: VOLUME[volume] ?? RATIO_SCALE,
+    qualifiedPonsActivity: PONS[pons] ?? 20n,
+    subWindowReturns: PATH[stability] ?? [],
+  };
+}
+
+/**
+ * Five strengths, so the matchups between them cover the label vocabulary.
+ *
+ * Strengths rather than labels, because §10.2 makes a label relative: a
+ * simulation cannot assign `HEAVY_UNDERDOG` to a ticker, only give it a bad
+ * fifteen minutes and let the pairing decide what that makes it. Standings of
+ * 0, 60, 100, 140 and 200 against the gaps above reach every label including
+ * both upset tiers, which is what the upset award paths need.
+ */
+const NEUTRAL_LOOKBACK = lookbackAt(1, 1, 1, 1);
+
+const STRENGTH_CYCLE: readonly ConfidenceLookback[] = [
+  NEUTRAL_LOOKBACK,
+  lookbackAt(2, 1, 1, 1),
+  lookbackAt(0, 1, 1, 1),
+  lookbackAt(2, 2, 2, 2),
+  lookbackAt(0, 0, 0, 0),
 ];
 
-export const CONFIDENCE_LABELS_BY_TICKER: Readonly<Record<string, ConfidenceLabel>> =
-  Object.fromEntries(
+export const CONFIDENCE_BY_TICKER = {
+  lookback: Object.fromEntries(
     ACTIVE_TICKERS.map((ticker, index) => [
       ticker,
-      LABEL_CYCLE[index % LABEL_CYCLE.length] ?? 'EVEN',
+      STRENGTH_CYCLE[index % STRENGTH_CYCLE.length] ?? NEUTRAL_LOOKBACK,
     ]),
-  );
+  ),
+  calibration: CONFIDENCE_CALIBRATION,
+};
 
 export const wallet = (n: number): WalletAddress =>
   `0x${n.toString(16).padStart(40, '0')}` as WalletAddress;
