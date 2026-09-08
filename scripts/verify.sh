@@ -35,6 +35,14 @@ npx tsc --build
 step 'typecheck (test projects)'
 npx tsc -p tsconfig.tests.json
 
+# The web app is not part of `tsc --build`: it is a bundler-resolved,
+# non-composite project, so it needs its own pass. Running the package's own
+# build script rather than `tsc` alone means the gate checks the same command
+# that produces a deployable bundle — a project that typechecks but fails to
+# bundle is still broken.
+step 'web app build'
+pnpm --filter @ponswars/web build
+
 step 'test'
 npx vitest run --reporter=dot
 
