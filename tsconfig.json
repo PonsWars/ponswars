@@ -44,6 +44,9 @@
       "path": "./apps/api/tsconfig.build.json"
     },
     {
+      "path": "./apps/gateway/tsconfig.build.json"
+    },
+    {
       "path": "./packages/world-runtime/tsconfig.build.json"
     },
     {

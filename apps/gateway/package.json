@@ -1,0 +1,31 @@
+{
+  "name": "@ponswars/gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The WebSocket surface. A binding over the realtime hub, which owns every decision.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/realtime": "workspace:*",
+    "@ponswars/round-service": "workspace:*",
+    "@ponswars/shared-types": "workspace:*",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  }
+}
