@@ -60,6 +60,15 @@ importers:
         specifier: workspace:*
         version: link:../shared-types
 
+  packages/genesis-service:
+    dependencies:
+      '@ponswars/battle-math':
+        specifier: workspace:*
+        version: link:../battle-math
+      '@ponswars/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+
   packages/market-data:
     dependencies:
       '@ponswars/battle-math':

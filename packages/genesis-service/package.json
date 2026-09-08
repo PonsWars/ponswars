@@ -1,0 +1,26 @@
+{
+  "name": "@ponswars/genesis-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Genesis claim lifecycle. Coverage is secured before any Secret is revealed.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/battle-math": "workspace:*",
+    "@ponswars/shared-types": "workspace:*"
+  }
+}

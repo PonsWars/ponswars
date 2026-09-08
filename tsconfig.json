@@ -27,6 +27,9 @@
     },
     {
       "path": "./packages/pons-indexer/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/genesis-service/tsconfig.build.json"
     }
   ]
 }
