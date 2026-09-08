@@ -51,6 +51,31 @@ export function lerp(a: Vec3, b: Vec3, t: number): Vec3 {
   };
 }
 
+export function dot(a: Vec3, b: Vec3): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+export function cross(a: Vec3, b: Vec3): Vec3 {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  };
+}
+
+/**
+ * Unit vector in the same direction.
+ *
+ * Returns {@link ORIGIN} for a zero-length input rather than a vector of `NaN`.
+ * A degenerate camera basis — position exactly on its own target — is a state
+ * the caller has to handle either way, and silently poisoning every later
+ * coordinate with `NaN` makes it far harder to see where it began.
+ */
+export function normalize(v: Vec3): Vec3 {
+  const magnitude = length(v);
+  return magnitude === 0 ? ORIGIN : scale(v, 1 / magnitude);
+}
+
 export function equals(a: Vec3, b: Vec3, epsilon = 1e-9): boolean {
   return (
     Math.abs(a.x - b.x) < epsilon && Math.abs(a.y - b.y) < epsilon && Math.abs(a.z - b.z) < epsilon
