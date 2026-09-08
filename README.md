@@ -177,3 +177,45 @@ and the same reducers the real feed will.
 Design tokens are transcribed in `@ponswars/ui-tokens` from the visual guide;
 the gaps noted in [`02_Claude_Guides/_MISSING.md`](02_Claude_Guides/_MISSING.md)
 are still open.
+
+**Milestone 4 — flows, replay and runbooks: complete.** The full
+Pick → Card → Live Battle → Result sequence of execution-order step 15 and the
+Profile / Rewards / Secret claim flows of step 16, plus the two parts of steps 17
+and 18 that do not need a running transport, plus the runbooks of step 20.
+
+- **Replay** (§26). A round records every input the engine consumed and nothing
+  it produced, and replays to an identical evidence hash. The recorder is a thin
+  wrapper over the replayer rather than a second implementation, and the tests
+  that matter are the ones expecting divergence: altering one tick's window
+  return changes that battle's hash, and a different base seed produces
+  different pairings. Without those, the happy-path assertions would pass
+  against an engine that ignored its inputs.
+- **Chaos** (§49, §70.7, §66.6). Redelivery, reordering, gaps, snapshot
+  recovery, five minutes of clock skew, a second finalization attempt, and a
+  round whose feed never delivered a scorable tick. The assertion is never that
+  the system survives — it is that it does not fabricate.
+- **Runbooks** ([`docs/operations/`](docs/operations/)). What to do when the
+  feed degrades, a round will not finalize, the Secret vault runs dry, a
+  distribution needs publishing, or a result is disputed — and, more often the
+  point, what never to do.
+
+There is no `as never`, `as any`, `@ts-ignore`, `@ts-expect-error` or ESLint
+suppression anywhere in the repository, and no skipped test.
+
+## What is blocked, and on what
+
+Everything remaining in §60's execution order waits on a decision rather than on
+implementation. Listed so the blocking decision is visible rather than buried:
+
+| Step                                     | Blocked on                                                                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Runnable `apps/*` service shells         | The HTTP framework, WebSocket server, database, RPC provider and market-data vendor — all `OPEN` (§102)                   |
+| 17 · historical calibration              | The market-data vendor. The replay harness is built and takes recorded ticks from any source                              |
+| 18 · load testing                        | A running transport to put load on                                                                                        |
+| 19 · contract security review            | An independent auditor. Not something this repository can do to itself                                                    |
+| 20 · infrastructure, backups, monitoring | Hosting. The runbooks that do not depend on it are written                                                                |
+| 21–23 · freeze, deploy, activation       | Steps 1 and 2 of §60: the `$WAR` launch and treasury parameters, and the legal review of the Genesis and Secret structure |
+
+Each of those is a product or business decision, and §102 is explicit that an
+`OPEN` value must not be invented and shipped as policy. The cores every one of
+them would wire into are built, tested and replayable.
