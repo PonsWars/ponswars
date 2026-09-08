@@ -26,11 +26,20 @@ fi
 step 'format'
 npx prettier --check .
 
-step 'lint'
-npx eslint .
-
+# Build before lint, and do not "tidy" this back.
+#
+# The lint config is type-aware (§66.1), and type-aware rules resolve workspace
+# packages through their emitted declarations. On a fresh checkout `dist/` does
+# not exist yet, every `@ponswars/*` import resolves to an error type, and the
+# unsafe-* rules fire on almost every line — 1896 of them the first time CI ran
+# this. Locally it passed only because a previous build had left the output
+# behind, which is the worst kind of green: a gate that agrees with you because
+# of a file nobody remembers creating.
 step 'typecheck (build projects)'
 npx tsc --build
+
+step 'lint'
+npx eslint .
 
 step 'typecheck (test projects)'
 npx tsc -p tsconfig.tests.json
