@@ -63,10 +63,11 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
-    // Build scripts are plain ESM run directly by node. They import compiled
-    // output through a dynamic specifier, so type-aware linting would only
-    // report `any` on values TypeScript was never given a chance to see.
-    files: ['scripts/**/*.mjs'],
+    // Build scripts and operator tools are plain ESM run directly by node. They
+    // import compiled output through a dynamic specifier, so type-aware linting
+    // would only report `any` on values TypeScript was never given a chance to
+    // see.
+    files: ['scripts/**/*.mjs', 'tools/**/*.mjs'],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
       ecmaVersion: 'latest',

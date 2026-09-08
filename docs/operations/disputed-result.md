@@ -15,15 +15,30 @@ not is an incident far larger than the complaint that surfaced it.
 ## Reproducing a battle
 
 1. **Fetch the recording** for the round. It holds every input the engine
-   consumed and nothing it produced — seed, clock, confidence snapshot, picks
-   and the ordered tick log (`simulations/src/replay.ts`).
-2. **Replay it.** `replayRound(recording, config)` runs the same code path
-   production ran; the recorder is a thin wrapper over the replayer rather than a
-   second implementation, so a passing replay means something.
-3. **Compare the evidence hash**, not just the winner. §26's promise is the
-   hash: identical inputs produce an identical chained hash, and a matching
-   winner with a differing hash means the inputs diverged somewhere the outcome
-   happened not to notice.
+   consumed and nothing it produced — seed, clock, confidence snapshot, picks,
+   the ordered tick log, and the engine tuning that was in force
+   (`@ponswars/replay`).
+2. **Replay it.**
+
+   ```bash
+   pnpm run build && node tools/replay-round.mjs round.json
+   ```
+
+   This prints each battle's score, winner, victory label and evidence hash. It
+   runs the same code path production ran, under the tuning the recording
+   carries — the tuning is part of the record precisely so a replay cannot be
+   run under calibration the round never saw.
+
+3. **Compare the evidence hash**, not just the winner:
+
+   ```bash
+   node tools/replay-round.mjs round.json --expect <battleId>=<hash>
+   ```
+
+   Exits non-zero on any mismatch, so it can be run from a script and believed.
+   §26's promise is the hash: identical inputs produce an identical chained
+   hash, and a matching winner with a differing hash means the inputs diverged
+   somewhere the outcome happened not to notice.
 
 If it reproduces, the dispute is about the rules, not the execution — go to
 "explaining a result" below.
