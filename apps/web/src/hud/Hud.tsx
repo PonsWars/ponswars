@@ -3,6 +3,7 @@ import type { JSX, ReactNode } from 'react';
 import { currentHudBudget, currentZoom, useSession, type ClientBattle } from '../state/session.js';
 import { BattleIntel } from './BattleIntel.js';
 import { BattleSwitcher } from './BattleSwitcher.js';
+import { ConnectionBanner } from './ConnectionBanner.js';
 import { LiveBattle } from './LiveBattle.js';
 import { NavigationControls } from './NavigationControls.js';
 import { PickControls } from './PickControls.js';
@@ -65,7 +66,7 @@ export function Hud(): JSX.Element {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--pw-space-3)' }}>
         <Live>
           {budget.roundState ? <RoundStatus /> : null}
-          {budget.countdown ? <Countdown label="00:37" /> : null}
+          {budget.countdown ? <Countdown /> : null}
         </Live>
         <Live>
           {budget.walletSummary ? <WalletSummary /> : null}
@@ -74,6 +75,8 @@ export function Hud(): JSX.Element {
           ) : null}
         </Live>
       </div>
+
+      <ConnectionBanner />
 
       {narrow ? null : <FlankingIntel budget={budget} battle={focused} />}
 

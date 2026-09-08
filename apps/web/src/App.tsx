@@ -1,6 +1,7 @@
+import { buildCanonicalClock, utcTimestamp } from '@ponswars/shared-types';
 import { lazy, Suspense, useEffect, type JSX } from 'react';
 import { Hud } from './hud/Hud.js';
-import { useSession, type ClientBattle } from './state/session.js';
+import { useSession, type ClientBattle, type ClientRound } from './state/session.js';
 
 /**
  * §82.3 stages the load: shell and UI first, then the global world.
@@ -166,17 +167,38 @@ const PLACEHOLDER_WALLET = {
   warPoints: 1_180,
 };
 
+/**
+ * A placeholder round.
+ *
+ * Built with `buildCanonicalClock` rather than written out, so the prototype's
+ * phase boundaries obey §3's timing instead of a set of numbers that happen to
+ * look plausible. The real source is `GET /v1/rounds/current` and the
+ * `ROUND_OPENED` event — both already schema'd, both waiting on an API host that
+ * is still `OPEN` (§102).
+ */
+function placeholderRound(): ClientRound {
+  const now = utcTimestamp(Date.now());
+  return {
+    roundId: 'preview-round',
+    state: 'PICK_OPEN',
+    clock: buildCanonicalClock(now, now),
+    feedHealth: 'HEALTHY',
+  };
+}
+
 export function App(): JSX.Element {
   const setBattles = useSession((state) => state.setBattles);
   const setMyBattle = useSession((state) => state.setMyBattle);
   const setWallet = useSession((state) => state.setWallet);
+  const setRound = useSession((state) => state.setRound);
   const setReducedMotion = useSession((state) => state.setReducedMotion);
 
   useEffect(() => {
     setBattles(PLACEHOLDER_BATTLES);
     setMyBattle('preview-b2');
     setWallet(PLACEHOLDER_WALLET);
-  }, [setBattles, setMyBattle, setWallet]);
+    setRound(placeholderRound());
+  }, [setBattles, setMyBattle, setWallet, setRound]);
 
   useEffect(() => {
     // §83.3: honour the operating-system preference, and keep honouring it if

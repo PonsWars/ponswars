@@ -1,4 +1,12 @@
-import type { ActiveTicker, ConfidenceSnapshot, MomentumState } from '@ponswars/shared-types';
+import type {
+  ActiveTicker,
+  CanonicalClock,
+  ConfidenceSnapshot,
+  MomentumState,
+  PublicFeedHealth,
+  RoundState,
+} from '@ponswars/shared-types';
+import type { ConnectionState } from '../hud/round-phase.js';
 import {
   advance,
   applyDrift,
@@ -127,6 +135,27 @@ export interface PendingPick {
   readonly ticker: ActiveTicker;
 }
 
+/**
+ * The authoritative round, as the client last heard it (§22, §23.5).
+ *
+ * State and clock arrive together because they are only meaningful together: a
+ * countdown without the phase it belongs to is a number, and a phase without the
+ * clock cannot say how long it lasts.
+ */
+export interface ClientRound {
+  readonly roundId: string;
+  readonly state: RoundState;
+  readonly clock: CanonicalClock;
+  /**
+   * Public feed health (§23.6).
+   *
+   * `HEALTHY` or `DEGRADED` only — the client is told when data is late, but
+   * `STALE` and `UNAVAILABLE` are engine-side conditions that void a battle
+   * rather than states a player watches.
+   */
+  readonly feedHealth: PublicFeedHealth;
+}
+
 interface SessionState {
   readonly camera: CameraState;
   readonly cameraConfig: CameraConfig;
@@ -149,12 +178,26 @@ interface SessionState {
   readonly reducedMotion: boolean;
   readonly wallet: WalletSummary | null;
   readonly pendingPick: PendingPick | null;
+  /** `null` before the first round payload arrives (§42.14 sync state). */
+  readonly round: ClientRound | null;
+  readonly connection: ConnectionState;
+  /**
+   * Server time minus local time, in milliseconds (§23.5).
+   *
+   * Every countdown is projected through this. The device clock is never
+   * authority — a player whose laptop is four minutes fast must still see the
+   * same lock time as everyone else.
+   */
+  readonly clockOffsetMs: number;
 
   setBattles: (battles: readonly ClientBattle[]) => void;
   setMyBattle: (battleId: string | null) => void;
   setQuality: (tier: QualityTier) => void;
   setReducedMotion: (reduced: boolean) => void;
   setWallet: (wallet: WalletSummary | null) => void;
+  setRound: (round: ClientRound | null) => void;
+  setConnection: (connection: ConnectionState) => void;
+  setClockOffset: (offsetMs: number) => void;
   /** Composes a pick for the focused battle (§42.5 step 3). */
   proposePick: (pick: PendingPick | null) => void;
 
@@ -222,6 +265,9 @@ export const useSession = create<SessionState>((set, get) => ({
   reducedMotion: false,
   wallet: null,
   pendingPick: null,
+  round: null,
+  connection: 'CONNECTED',
+  clockOffsetMs: 0,
 
   setBattles: (battles) => {
     // A pick aimed at a battle that no longer exists — a reshuffle, a
@@ -242,6 +288,18 @@ export const useSession = create<SessionState>((set, get) => ({
 
   setWallet: (wallet) => {
     set({ wallet });
+  },
+
+  setRound: (round) => {
+    set({ round });
+  },
+
+  setConnection: (connection) => {
+    set({ connection });
+  },
+
+  setClockOffset: (clockOffsetMs) => {
+    set({ clockOffsetMs });
   },
 
   proposePick: (pendingPick) => {
@@ -408,6 +466,17 @@ if (import.meta.env.DEV) {
  */
 export function nowUtc(): UtcTimestamp {
   return utcTimestamp(Date.now());
+}
+
+/**
+ * The current instant on the *server's* clock (§23.5).
+ *
+ * Local time shifted by the observed offset. Every countdown reads from here
+ * rather than from `Date.now()` directly, so a skewed device clock changes
+ * nothing about when a round locks.
+ */
+export function serverNowMs(state: Pick<SessionState, 'clockOffsetMs'>): number {
+  return Date.now() + state.clockOffsetMs;
 }
 
 /** The current spatial level (§37.2). */
