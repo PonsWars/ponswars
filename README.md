@@ -12,18 +12,27 @@ activity. Real SPY rewards settle on chain every 24 hours.
 
 When documents disagree, this order decides:
 
-1. [`01_Masterplan/PonsWars_Masterplan_v1.4.md`](01_Masterplan/PonsWars_Masterplan_v1.4.md) — mechanics and product rules
+1. **The PonsWars Masterplan v1.4** — mechanics and product rules
 2. [`02_Claude_Guides/CLAUDE_KICKOFF_BRIEF.md`](02_Claude_Guides/CLAUDE_KICKOFF_BRIEF.md) — sequencing and non-negotiables
 3. [`02_Claude_Guides/PONSWARS_VISUAL_IMPLEMENTATION_GUIDE.md`](02_Claude_Guides/PONSWARS_VISUAL_IMPLEMENTATION_GUIDE.md) — visual hierarchy and mockup corrections
 4. Design tokens — _not yet delivered, see [`02_Claude_Guides/_MISSING.md`](02_Claude_Guides/_MISSING.md)_
-5. [`03_Visual_Pack/`](03_Visual_Pack/) — art direction only
+5. The visual pack — art direction only
 6. Text, numbers and logos rendered _inside_ the generated PNGs — **non-canonical**
+
+The masterplan and the visual pack are **not in this repository**. The masterplan
+carries the treasury wallet topology (§44.4) and the complete security threat
+model (§45), and the visual pack is unreleased art direction — neither belongs in
+a public repository before an independent contract review and launch.
+
+That is a deliberate split rather than a gap. Every rule those documents fix is
+implemented here and cited by section number at the point it is enforced, so the
+code is readable on its own; what is missing is the record of how each rule was
+decided, not the rule.
 
 The PNGs are art direction, never production UI exports and never a source of
 gameplay truth. Several contain attractive but non-canonical mechanics — a live
 exact battle score, staggered battle scheduling, an active-window reward
-estimate. [`03_Visual_Pack/MANIFEST.md`](03_Visual_Pack/MANIFEST.md) lists
-exactly which image carries which.
+estimate — and each is called out where the code refuses to implement it.
 
 ## Architecture in one line
 

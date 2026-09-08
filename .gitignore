@@ -50,3 +50,13 @@ _archive/
 
 # Vite build output
 apps/web/dist/
+
+# The private planning bundle. Kept on disk, never published.
+#
+# The masterplan carries the treasury wallet topology (§44.4) and the full
+# security threat model (§45), and the visual pack is unreleased art direction.
+# Neither belongs in a public repository before an independent contract review
+# and launch. The code documents the rules it implements; these documents are
+# where those rules were decided.
+01_Masterplan/
+03_Visual_Pack/
