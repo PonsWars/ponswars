@@ -1,5 +1,7 @@
 import {
+  BATTLE_POINT_SCALE,
   CONFIDENCE_LABELS,
+  FULL_BATTLE_SCORE_SCALED,
   totalScore,
   WP_AWARDS,
   type BattleScoreBreakdown,
@@ -8,18 +10,30 @@ import {
 import { describe, expect, it } from 'vitest';
 import { formatScore, playerResultView, resultView } from './result-view.js';
 
+/**
+ * Engine-scale components, not display-scale.
+ *
+ * One point is `BATTLE_POINT_SCALE`, and the two sides together sum to
+ * `FULL_BATTLE_SCORE_SCALED`.
+ * An earlier version of this fixture used tenths because that is what the
+ * formatter assumed — so the test agreed with the formatter and both were
+ * wrong. It is derived from the engine's own constants now, which is why the
+ * arithmetic below is written out rather than pasted in.
+ */
+const POINT = Number(BATTLE_POINT_SCALE);
+
 const LEFT: BattleScoreBreakdown = {
-  priceMomentum: 240,
-  relativeVolume: 150,
-  ponsPower: 110,
-  holderCardSupport: 63,
+  priceMomentum: 24 * POINT,
+  relativeVolume: 15 * POINT,
+  ponsPower: 11 * POINT,
+  holderCardSupport: 6.3 * POINT,
 };
 
 const RIGHT: BattleScoreBreakdown = {
-  priceMomentum: 160,
-  relativeVolume: 100,
-  ponsPower: 90,
-  holderCardSupport: 87,
+  priceMomentum: 16 * POINT,
+  relativeVolume: 10 * POINT,
+  ponsPower: 9 * POINT,
+  holderCardSupport: 8.7 * POINT,
 };
 
 const RESULT = {
@@ -54,10 +68,10 @@ describe('resultView', () => {
   });
 
   it('keeps the two sides summing to a hundred points', () => {
-    // §12: the two shares are of one hundred. If the displayed halves did not
-    // add up, the screen whose job is to show the working would be the thing
-    // undermining it.
-    expect(totalScore(LEFT) + totalScore(RIGHT)).toBe(1_000);
+    // §12: the two shares are of one hundred. Asserted against the shared
+    // `FULL_BATTLE_SCORE_SCALED` rather than a literal, because a literal is
+    // exactly how this fixture drifted away from the engine the first time.
+    expect(BigInt(totalScore(LEFT) + totalScore(RIGHT))).toBe(FULL_BATTLE_SCORE_SCALED);
   });
 
   it('carries the provenance a result can be argued with', () => {
@@ -74,19 +88,29 @@ describe('resultView', () => {
 });
 
 describe('formatScore', () => {
-  it('places the separator without rounding', () => {
-    expect(formatScore(563)).toBe('56.3');
-    expect(formatScore(437)).toBe('43.7');
-    expect(formatScore(1_000)).toBe('100.0');
+  it('renders engine-scale points as one decimal', () => {
+    expect(formatScore(56.3 * POINT)).toBe('56.3');
+    expect(formatScore(43.7 * POINT)).toBe('43.7');
+    expect(formatScore(100 * POINT)).toBe('100.0');
     expect(formatScore(0)).toBe('0.0');
   });
 
-  it('handles a single digit of tenths', () => {
-    expect(formatScore(5)).toBe('0.5');
+  it('renders a real engine value rather than its raw magnitude', () => {
+    // The regression this exists for: 48.40954 points is 48_409_540 scaled, and
+    // an earlier formatter rendered it as `4840954.0`.
+    expect(formatScore(48_409_540)).toBe('48.4');
+  });
+
+  it('handles a fraction of a point', () => {
+    expect(formatScore(0.5 * POINT)).toBe('0.5');
+  });
+
+  it('rounds half up', () => {
+    expect(formatScore(48_450_000)).toBe('48.5');
   });
 
   it('refuses a fractional input rather than inventing precision', () => {
-    // The engine works in whole tenths (§66.4). A fraction here means someone
+    // A component arrives as a scaled integer (§66.4). A fraction means someone
     // has already divided, and the honest response is to say so.
     expect(() => formatScore(56.35)).toThrow(RangeError);
   });

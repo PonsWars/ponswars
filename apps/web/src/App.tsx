@@ -267,10 +267,10 @@ const PLACEHOLDER_POOL: PoolStatus = { balance: '12.40' };
 /**
  * A placeholder finalized battle.
  *
- * Scores are carried in whole tenths, exactly as the engine produces them, so
- * the screen formats rather than divides. The two sides sum to 100.0 — the
- * result screen is the one place a number is finally shown, and halves that did
- * not add up would undermine the only screen whose job is to show the working.
+ * Scores are at engine scale: one point is `POINT_SCALE`, so 24.0 points is
+ * `24_000_000`. The two sides sum to exactly 100 points, because the result
+ * screen is the one place a number is finally shown and halves that did not add
+ * up would undermine the only screen whose job is to show the working.
  */
 const PLACEHOLDER_RESULT: FinishedBattle = {
   result: {
@@ -280,16 +280,16 @@ const PLACEHOLDER_RESULT: FinishedBattle = {
     right: 'META',
     winner: 'GME',
     leftScore: {
-      priceMomentum: 238,
-      relativeVolume: 141,
-      ponsPower: 118,
-      holderCardSupport: 66,
+      priceMomentum: 23_800_000,
+      relativeVolume: 14_100_000,
+      ponsPower: 11_800_000,
+      holderCardSupport: 6_600_000,
     },
     rightScore: {
-      priceMomentum: 162,
-      relativeVolume: 109,
-      ponsPower: 82,
-      holderCardSupport: 84,
+      priceMomentum: 16_200_000,
+      relativeVolume: 10_900_000,
+      ponsPower: 8_200_000,
+      holderCardSupport: 8_400_000,
     },
     victoryLabel: 'MAJOR_UPSET',
     scoringEngineVersion: 'battle-engine-v1',

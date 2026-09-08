@@ -1,4 +1,5 @@
 import {
+  BATTLE_POINT_SCALE,
   isUpset,
   totalScore,
   winningPickWp,
@@ -66,19 +67,42 @@ function sideView(
 /**
  * Formats a score component to one decimal place.
  *
- * The engine works in tenths of a point, so a component arrives as a whole
- * number of tenths and this only places the separator. Nothing is rounded here:
- * a displayed total that disagreed with the sum of its parts would undermine the
- * one screen whose job is to show the working.
+ * The engine carries points scaled by `BATTLE_POINT_SCALE` — one point is
+ * 1 000 000 —
+ * so a component arrives as a large integer and this is where it becomes
+ * readable. Rounded half up in integer arithmetic, never by dividing into a
+ * float: ADR 0003 keeps value-bearing numbers out of floating point, and the
+ * result screen is the one place those numbers are shown to the person they
+ * were computed for.
+ *
+ * Getting this wrong is not subtle in hindsight and was not obvious in advance:
+ * an earlier version assumed tenths and rendered a 48.4 as `4840954.0`. The
+ * fixture it was tested against had been written to match the assumption rather
+ * than the engine, so the test agreed with the bug.
  */
-export function formatScore(tenths: number): string {
-  if (!Number.isInteger(tenths)) {
-    throw new RangeError(`A score is carried in whole tenths, received ${String(tenths)}`);
+export function formatScore(scaled: number): string {
+  if (!Number.isInteger(scaled)) {
+    throw new RangeError(`A score is carried as a scaled integer, received ${String(scaled)}`);
   }
-  const negative = tenths < 0;
-  const magnitude = Math.abs(tenths);
-  return `${negative ? '-' : ''}${String(Math.floor(magnitude / 10))}.${String(magnitude % 10)}`;
+  const perTenth = POINT_SCALE_NUMBER / 10;
+  const negative = scaled < 0;
+  const magnitude = Math.abs(scaled);
+  const tenths = Math.floor((magnitude + perTenth / 2) / perTenth);
+  return `${negative ? '-' : ''}${String(Math.floor(tenths / 10))}.${String(tenths % 10)}`;
 }
+
+/**
+ * `BATTLE_POINT_SCALE` as a `number`.
+ *
+ * The engine works in `bigint`; a `FinalizedBattleResult` has already narrowed
+ * each component to a `number` at the boundary, so the scale is needed in the
+ * same form to undo it.
+ *
+ * Read from `@ponswars/shared-types` and not from the scoring engine: the
+ * engine imports `node:crypto`, and pulling it into a browser bundle for one
+ * constant reaches server-only code from the client's import graph.
+ */
+const POINT_SCALE_NUMBER = Number(BATTLE_POINT_SCALE);
 
 /**
  * What the player earned from this result (§11, §27.8).
