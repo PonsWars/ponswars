@@ -1,0 +1,26 @@
+{
+  "name": "@ponswars/market-data",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Market data ingestion, normalization and feed-health evaluation.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/battle-math": "workspace:*",
+    "@ponswars/shared-types": "workspace:*"
+  }
+}

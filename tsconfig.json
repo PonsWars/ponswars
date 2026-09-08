@@ -21,6 +21,12 @@
     },
     {
       "path": "./packages/schemas/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/market-data/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/pons-indexer/tsconfig.build.json"
     }
   ]
 }
