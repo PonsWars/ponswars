@@ -87,6 +87,17 @@ export function deriveGenesisSeed(input: GenesisSeedInput): string {
   return hash.digest('hex');
 }
 
+/**
+ * Rarity table identifiers (§76.3).
+ *
+ * *"The table version must be stored with the result."* The same slot resolves
+ * to a different rarity under each table, so a replay that does not know which
+ * one was in force cannot reproduce the outcome — and §8.3 switches between
+ * them automatically on vault coverage, without anyone deploying anything.
+ */
+export const RARITY_TABLE_FUNDED = 'rarity-table-v1';
+export const RARITY_TABLE_SECRET_DISABLED = 'rarity-table-v1-secret-disabled';
+
 /** A finalized Genesis outcome. */
 export interface GenesisOutcome {
   /** The slot the entropy reduced to, in `[0, 1_000_000)`. Retained as evidence. */
@@ -102,15 +113,27 @@ export interface GenesisOutcome {
    * coverage, so a replay needs to know what coverage was at commit time.
    */
   readonly secretAvailable: boolean;
+  /** Which rarity table produced the result (§76.3). */
+  readonly rarityTableVersion: string;
 }
+
+/**
+ * Domain for the card-within-rarity draw (§76.4).
+ *
+ * *"A separate hash domain/sub-value should select card type within rarity to
+ * avoid ambiguous modulo reuse."* Two independent streams rather than two draws
+ * from one, so the card choice cannot correlate with the slot that produced its
+ * rarity.
+ */
+const GENESIS_CARD_DOMAIN = `${GENESIS_DOMAIN_SEPARATOR}_CARD`;
 
 /**
  * Resolves a Genesis request to a card.
  *
- * Two draws from one stream: the rarity slot, then the card within that rarity.
- * §9.2 makes a three-card rarity an even third each and a two-card rarity a
- * straight 50/50, which a uniform draw over the rarity's catalog entries gives
- * directly.
+ * Two draws from two separately-domained streams: the rarity slot, then the
+ * card within that rarity (§76.4). §9.2 makes a three-card rarity an even third
+ * each and a two-card rarity a straight 50/50, which a uniform draw over the
+ * rarity's catalog entries gives directly.
  *
  * @param secretAvailable Whether the vault covered a full reward at the moment
  *   the result was committed (§8.3). Evaluated **before** the reveal — a user
@@ -118,9 +141,8 @@ export interface GenesisOutcome {
  */
 export function resolveGenesis(input: GenesisSeedInput, secretAvailable: boolean): GenesisOutcome {
   const seed = deriveGenesisSeed(input);
-  const prng = new DeterministicPrng(seed, GENESIS_DOMAIN_SEPARATOR);
 
-  const slot = prng.nextBelow(RNG_SLOT_COUNT);
+  const slot = new DeterministicPrng(seed, GENESIS_DOMAIN_SEPARATOR).nextBelow(RNG_SLOT_COUNT);
   const rarity = rarityForSlot(slot, secretAvailable);
 
   const candidates = cardsOfRarity(rarity);
@@ -128,7 +150,8 @@ export function resolveGenesis(input: GenesisSeedInput, secretAvailable: boolean
   if (candidates.length === 0) {
     throw new Error(`No cards defined for rarity ${rarity}`);
   }
-  const chosen = candidates[prng.nextBelow(candidates.length)];
+  const cardDraw = new DeterministicPrng(seed, GENESIS_CARD_DOMAIN).nextBelow(candidates.length);
+  const chosen = candidates[cardDraw];
   /* c8 ignore next 3 -- unreachable: the index is drawn within range. */
   if (chosen === undefined) {
     throw new Error(`Card selection out of range for rarity ${rarity}`);
@@ -140,6 +163,7 @@ export function resolveGenesis(input: GenesisSeedInput, secretAvailable: boolean
     cardType: chosen.type,
     seed,
     secretAvailable,
+    rarityTableVersion: secretAvailable ? RARITY_TABLE_FUNDED : RARITY_TABLE_SECRET_DISABLED,
   };
 }
 
