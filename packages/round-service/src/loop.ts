@@ -25,6 +25,14 @@ import type { RoundPorts } from './ports.js';
  * instant either performs the same transition twice on a state machine that
  * refuses the second, or does nothing at all. Nothing here decides that a round
  * should void, and nothing retries a failed finalization silently.
+ *
+ * It publishes three of the five names in §48.3, and the two it leaves alone
+ * are worth saying out loud. `ROUND_OPENED` belongs to whoever creates a round;
+ * this loop is handed one already open. `BATTLE_VOID` carries §110.6's
+ * card-refund confirmation — *"Any deployed card use for this battle has been
+ * restored"* — and that is the Player service's fact to state; a void reaches
+ * clients here as the `voided` list on `ROUND_FINALIZED` instead. Publishing a
+ * refund this service never made would be worse than publishing nothing.
  */
 
 export interface StepResult {
@@ -84,7 +92,7 @@ async function performLock(state: RoundEngineState, ports: RoundPorts): Promise<
   const locked = lockRound(state, state.clock.lockAt, picks);
 
   await ports.store.saveState(locked);
-  await ports.publisher.publish('ROUND_LOCKED', roundChannel(state.roundId), state.clock.lockAt, {
+  await ports.publisher.publish('PICKS_LOCKED', roundChannel(state.roundId), state.clock.lockAt, {
     roundId: state.roundId,
     battles: locked.battles.map((battle) => ({
       battleId: battle.setup.battleId,

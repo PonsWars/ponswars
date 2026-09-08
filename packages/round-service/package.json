@@ -23,6 +23,7 @@
     "@ponswars/battle-engine": "workspace:*",
     "@ponswars/battle-math": "workspace:*",
     "@ponswars/realtime": "workspace:*",
+    "@ponswars/schemas": "workspace:*",
     "@ponswars/shared-types": "workspace:*"
   }
 }

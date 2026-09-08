@@ -7,7 +7,6 @@ import {
   confidenceSnapshotSchema,
   distributionIdSchema,
   durationMsSchema,
-  eventIdSchema,
   hash32Schema,
   momentumStateSchema,
   publicFeedHealthSchema,
@@ -32,17 +31,51 @@ import {
  * "I missed something" detectable at all.
  */
 
-const envelope = {
-  eventId: eventIdSchema,
-  serverTime: utcTimestampSchema,
-  /** Monotonic within its own stream (§48.5). */
+/**
+ * Channel names (§48.1, §48.2).
+ *
+ * A private channel is bound to one wallet, and §48.2 requires the session to
+ * own that address. Parsing the name here does not authorise anything — it only
+ * makes the claim explicit so the gateway has something to check.
+ */
+export const channelSchema = z.union([
+  z.literal('world'),
+  z.string().regex(/^round:[\w-]{1,64}$/),
+  z.string().regex(/^battle:[\w-]{1,96}$/),
+  // The wallet channel is matched on a lowercase address only. §48.2 binds the
+  // channel to one wallet, and accepting mixed case would let two spellings of
+  // one address look like two subscriptions.
+  z.string().regex(/^wallet:0x[0-9a-f]{40}$/),
+]);
+
+/**
+ * The transport every event travels in (§48.1, §48.5, §70.1).
+ *
+ * These fields used to be spread into each event body, which described a frame
+ * nothing sends: it had no `channel`, and §48.1 and §48.2 make the channel the
+ * thing a subscription and its authorisation are *about*. Separating transport
+ * from content also means one place decides ordering and one place decides
+ * meaning, which is what lets the receiver detect a gap without knowing what
+ * any event contains.
+ *
+ * §48.5 also asks for an event id. The transport does not carry one and this
+ * does not invent it: a schema describing a field nothing sends is the exact
+ * problem this restructure exists to fix. `channel` and `sequence` together
+ * identify an event within a gateway, which is as far as one process can go —
+ * a genuinely global id is worth adding when a second service starts producing
+ * events, and it should be added to the envelope and to this schema together.
+ */
+export const eventEnvelopeSchema = z.object({
+  event: z.string().min(1).max(64),
+  version: z.int().positive(),
+  /** Monotonic within `channel`, not globally (§48.5, §70.1). */
   sequence: z.int().nonnegative(),
-};
+  emittedAt: utcTimestampSchema,
+  channel: channelSchema,
+});
 
 /** `ROUND_OPENED` (§48.3). */
-export const roundOpenedSchema = z.object({
-  type: z.literal('ROUND_OPENED'),
-  ...envelope,
+export const roundOpenedPayloadSchema = z.object({
   roundId: roundIdSchema,
   clock: canonicalClockSchema,
   matchups: z
@@ -76,11 +109,18 @@ export const roundOpenedSchema = z.object({
  * started attaching a score would have the field silently stripped on the way
  * in and pass validation, hiding the leak instead of catching it.
  */
-export const battleStateUpdateSchema = z
+export const battleStateUpdatePayloadSchema = z
   .object({
-    type: z.literal('BATTLE_STATE_UPDATE'),
-    ...envelope,
     battleId: battleIdSchema,
+    /**
+     * When the engine produced this reading (§23.5).
+     *
+     * In the payload as well as the envelope, and not a duplicate of it: the
+     * envelope's `emittedAt` is when the gateway sent the frame, and a tick
+     * that queued behind a slow publish would otherwise appear to have been
+     * measured later than it was.
+     */
+    serverTime: utcTimestampSchema,
     timeRemaining: durationMsSchema,
     momentum: momentumStateSchema,
     frontline: unitIntervalSchema,
@@ -92,11 +132,30 @@ export const battleStateUpdateSchema = z
   .strict();
 
 /** `PICKS_LOCKED` (§48.3). */
-export const picksLockedSchema = z.object({
-  type: z.literal('PICKS_LOCKED'),
-  ...envelope,
-  roundId: roundIdSchema,
-});
+export const picksLockedPayloadSchema = z
+  .object({
+    roundId: roundIdSchema,
+    /**
+     * The matchups, repeated at lock.
+     *
+     * §48.3 asks only for the round id, and this carries more on purpose: a
+     * client that connected after `ROUND_OPENED` would otherwise have to fetch
+     * a snapshot to learn what it is now watching, at the exact moment five
+     * battles start.
+     */
+    battles: z
+      .array(
+        z
+          .object({
+            battleId: battleIdSchema,
+            left: activeTickerSchema,
+            right: activeTickerSchema,
+          })
+          .strict(),
+      )
+      .length(5),
+  })
+  .strict();
 
 /** One side's final component breakdown, revealed only after finalization. */
 const scoreBreakdownSchema = z.object({
@@ -112,9 +171,7 @@ const scoreBreakdownSchema = z.object({
  * This is the first and only event that carries exact scores. §12.6 reveals the
  * breakdown at finalization, and §27.8 shows it on the result screen.
  */
-export const roundFinalizedSchema = z.object({
-  type: z.literal('ROUND_FINALIZED'),
-  ...envelope,
+export const roundFinalizedPayloadSchema = z.object({
   roundId: roundIdSchema,
   results: z.array(
     z
@@ -133,6 +190,14 @@ export const roundFinalizedSchema = z.object({
         path: ['winner'],
       }),
   ),
+  /**
+   * Battles the round could not score (§25, §61 principle 19).
+   *
+   * Part of the result and not an omission from it. A round that finalized four
+   * battles and voided one has to say so, or a client shows four results and a
+   * battle that never ended.
+   */
+  voided: z.array(battleIdSchema),
 });
 
 /**
@@ -142,42 +207,46 @@ export const roundFinalizedSchema = z.object({
  * with it — *"Any deployed card use for this battle has been restored"* — and a
  * client should not have to infer whether that sentence is true.
  */
-export const battleVoidSchema = z.object({
-  type: z.literal('BATTLE_VOID'),
-  ...envelope,
+export const battleVoidPayloadSchema = z.object({
   battleId: battleIdSchema,
   reason: voidReasonSchema,
   cardUseRestored: z.boolean(),
 });
 
-export const publicEventSchema = z.discriminatedUnion('type', [
-  roundOpenedSchema,
-  battleStateUpdateSchema,
-  picksLockedSchema,
-  roundFinalizedSchema,
-  battleVoidSchema,
-]);
+/**
+ * Which payload belongs to which public event name (§48.3).
+ *
+ * The five names are the contract. An event this map does not know is not
+ * validated into something plausible — `parseEventFrame` refuses it, because a
+ * client that guessed at an unknown event would be rendering a protocol nobody
+ * agreed to.
+ */
+export const PUBLIC_EVENT_PAYLOADS = {
+  ROUND_OPENED: roundOpenedPayloadSchema,
+  BATTLE_STATE_UPDATE: battleStateUpdatePayloadSchema,
+  PICKS_LOCKED: picksLockedPayloadSchema,
+  ROUND_FINALIZED: roundFinalizedPayloadSchema,
+  BATTLE_VOID: battleVoidPayloadSchema,
+} as const;
 
-export type PublicEvent = z.infer<typeof publicEventSchema>;
+export type PublicEventName = keyof typeof PUBLIC_EVENT_PAYLOADS;
+
+export const PUBLIC_EVENT_NAMES = Object.keys(PUBLIC_EVENT_PAYLOADS) as readonly PublicEventName[];
 
 // ---------------------------------------------------------------------------
 // Private events (§48.4)
 // ---------------------------------------------------------------------------
 
-const privateEnvelope = { ...envelope, wallet: walletAddressSchema };
-
-export const pickConfirmedSchema = z.object({
-  type: z.literal('PICK_CONFIRMED'),
-  ...privateEnvelope,
+export const pickConfirmedPayloadSchema = z.object({
+  wallet: walletAddressSchema,
   roundId: roundIdSchema,
   battleId: battleIdSchema,
   backedTicker: activeTickerSchema,
   revision: z.int().positive(),
 });
 
-export const pickRejectedSchema = z.object({
-  type: z.literal('PICK_REJECTED'),
-  ...privateEnvelope,
+export const pickRejectedPayloadSchema = z.object({
+  wallet: walletAddressSchema,
   roundId: roundIdSchema,
   /**
    * Why it was refused.
@@ -190,61 +259,93 @@ export const pickRejectedSchema = z.object({
   reason: z.enum(['PICKS_CLOSED', 'ALREADY_PICKED', 'UNKNOWN_BATTLE', 'NOT_ELIGIBLE']),
 });
 
-export const cardEventSchema = z.object({
-  type: z.enum(['CARD_ARMED', 'CARD_DEPLOYED', 'CARD_USE_RESTORED']),
-  ...privateEnvelope,
+export const cardEventPayloadSchema = z.object({
+  wallet: walletAddressSchema,
   roundId: roundIdSchema,
   remainingUses: z.int().nonnegative(),
 });
 
-export const wpCreditedSchema = z.object({
-  type: z.literal('WP_CREDITED'),
-  ...privateEnvelope,
+export const wpCreditedPayloadSchema = z.object({
+  wallet: walletAddressSchema,
   battleId: battleIdSchema,
   reason: z.enum(['WIN', 'UNDERDOG_WIN', 'HEAVY_UNDERDOG_WIN', 'CARD_ASSIST']),
   points: z.int().positive(),
 });
 
-export const rewardFinalizedSchema = z.object({
-  type: z.literal('REWARD_FINALIZED'),
-  ...privateEnvelope,
+export const rewardFinalizedPayloadSchema = z.object({
+  wallet: walletAddressSchema,
   distributionId: distributionIdSchema,
   /** Base units as a string: an amount sent as a JSON number would round. */
   amount: baseUnitsSchema,
 });
 
-export const secretEventSchema = z.object({
-  type: z.enum(['SECRET_RESERVED', 'SECRET_CLAIMED']),
-  ...privateEnvelope,
+export const secretEventPayloadSchema = z.object({
+  wallet: walletAddressSchema,
   entitlementId: z.string().min(1).max(64),
   amount: baseUnitsSchema,
   transactionHash: hash32Schema.optional(),
 });
 
-export const privateEventSchema = z.discriminatedUnion('type', [
-  pickConfirmedSchema,
-  pickRejectedSchema,
-  cardEventSchema,
-  wpCreditedSchema,
-  rewardFinalizedSchema,
-  secretEventSchema,
-]);
+/**
+ * Which payload belongs to which private event name (§48.4).
+ *
+ * Several names share one payload where the shape is the same and only the verb
+ * differs — arming, deploying and restoring a card all report the same wallet,
+ * round and remaining uses. The name lives in the envelope, so they no longer
+ * need a discriminator inside the body to tell them apart.
+ */
+export const PRIVATE_EVENT_PAYLOADS = {
+  PICK_CONFIRMED: pickConfirmedPayloadSchema,
+  PICK_REJECTED: pickRejectedPayloadSchema,
+  CARD_ARMED: cardEventPayloadSchema,
+  CARD_DEPLOYED: cardEventPayloadSchema,
+  CARD_USE_RESTORED: cardEventPayloadSchema,
+  WP_CREDITED: wpCreditedPayloadSchema,
+  REWARD_FINALIZED: rewardFinalizedPayloadSchema,
+  SECRET_RESERVED: secretEventPayloadSchema,
+  SECRET_CLAIMED: secretEventPayloadSchema,
+} as const;
 
-export type PrivateEvent = z.infer<typeof privateEventSchema>;
+export type PrivateEventName = keyof typeof PRIVATE_EVENT_PAYLOADS;
 
 /**
- * Channel names (§48.1, §48.2).
+ * Parses one frame off the wire (§66.2).
  *
- * A private channel is bound to one wallet, and §48.2 requires the session to
- * own that address. Parsing the name here does not authorise anything — it only
- * makes the claim explicit so the gateway has something to check.
+ * Envelope first, then the payload its event name calls for. An unknown event
+ * is refused rather than passed through with an unchecked payload: a client
+ * that rendered whatever arrived under a name it did not recognise would be
+ * following a protocol nobody agreed to.
  */
-export const channelSchema = z.union([
-  z.literal('world'),
-  z.string().regex(/^round:[\w-]{1,64}$/),
-  z.string().regex(/^battle:[\w-]{1,96}$/),
-  // The wallet channel is matched on a lowercase address only. §48.2 binds the
-  // channel to one wallet, and accepting mixed case would let two spellings of
-  // one address look like two subscriptions.
-  z.string().regex(/^wallet:0x[0-9a-f]{40}$/),
-]);
+export function parseEventFrame(
+  value: unknown,
+  payloads: Readonly<Record<string, z.ZodType>> = PUBLIC_EVENT_PAYLOADS,
+):
+  | {
+      readonly ok: true;
+      readonly event: string;
+      readonly channel: string;
+      readonly payload: unknown;
+    }
+  | { readonly ok: false; readonly reason: string } {
+  const envelope = eventEnvelopeSchema.safeParse(value);
+  if (!envelope.success) {
+    return { ok: false, reason: envelope.error.issues[0]?.message ?? 'malformed envelope' };
+  }
+
+  const schema = payloads[envelope.data.event];
+  if (schema === undefined) {
+    return { ok: false, reason: `unknown event ${envelope.data.event}` };
+  }
+
+  const payload = schema.safeParse((value as { payload?: unknown }).payload);
+  if (!payload.success) {
+    return { ok: false, reason: payload.error.issues[0]?.message ?? 'malformed payload' };
+  }
+
+  return {
+    ok: true,
+    event: envelope.data.event,
+    channel: envelope.data.channel,
+    payload: payload.data,
+  };
+}

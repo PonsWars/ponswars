@@ -22,6 +22,7 @@ import {
   type UtcTimestamp,
   type WalletAddress,
 } from '@ponswars/shared-types';
+import { parseEventFrame } from '@ponswars/schemas';
 import { describe, expect, it } from 'vitest';
 import { stepRound } from './loop.js';
 import { memoryPorts, type MemoryPorts } from './memory.js';
@@ -170,7 +171,7 @@ describe('locking', () => {
     const late = utcTimestamp(CLOCK.lockAt + 3_000);
     await stepRound(openRound(), late, p, CONFIG);
 
-    const locked = p.publisher.eventsOf('ROUND_LOCKED');
+    const locked = p.publisher.eventsOf('PICKS_LOCKED');
     expect(locked).toHaveLength(1);
     expect(locked[0]?.emittedAt).toBe(CLOCK.lockAt);
   });
@@ -178,7 +179,7 @@ describe('locking', () => {
   it('announces the matchups', async () => {
     const p = ports();
     await stepRound(openRound(), CLOCK.lockAt, p, CONFIG);
-    expect(p.publisher.eventsOf('ROUND_LOCKED')).toHaveLength(1);
+    expect(p.publisher.eventsOf('PICKS_LOCKED')).toHaveLength(1);
   });
 });
 
@@ -347,5 +348,77 @@ describe('a full round through the loop', () => {
       expect(seen.has(key)).toBe(false);
       seen.add(key);
     }
+  });
+});
+
+describe('the published contract', () => {
+  it('emits only frames that parse against the schemas §48 publishes', async () => {
+    // The test this file most needed. The schemas described a flat message with
+    // a `type` field and no channel, and the gateway sends a sequenced envelope
+    // wrapping a payload — so nothing validated what actually travels, at
+    // either end, and the two shapes drifted without a single test noticing.
+    //
+    // Driving a whole round and parsing every frame is what makes that
+    // impossible to repeat: a payload that gains a field, or an event published
+    // under a name §48.3 does not list, fails here.
+    const round = openRound();
+    const first = round.battles[0];
+    if (first === undefined) throw new Error('round has no battles');
+
+    const p = ports({
+      picks: [
+        {
+          wallet: wallet(1),
+          battleId: first.setup.battleId,
+          backedTicker: first.setup.left,
+          cardDeployed: false,
+        },
+      ],
+    });
+
+    let state = round;
+    for (const offset of [
+      30_000,
+      60_000,
+      ...Array.from({ length: 9 }, (_, minute) => 120_000 + minute * 60_000 - 1_000),
+      600_000,
+    ]) {
+      state = (await stepRound(state, at(offset), p, CONFIG)).state;
+    }
+
+    // Guards the loop: zero frames would make every assertion below vacuous.
+    expect(p.publisher.published.length).toBeGreaterThan(5);
+
+    for (const envelope of p.publisher.published) {
+      const parsed = parseEventFrame(JSON.parse(JSON.stringify(envelope)));
+      expect(parsed.ok ? null : `${envelope.event}: ${parsed.reason}`).toBeNull();
+    }
+  });
+
+  it('publishes exactly the three names a round loop owns', async () => {
+    // Names, not shapes. `PICKS_LOCKED` was published as `ROUND_LOCKED` — a
+    // name no contract mentions — which a shape test would never have caught
+    // because the payload was fine.
+    //
+    // The other two names in §48.3 are deliberately absent, and this asserts
+    // that rather than leaving it to be noticed. `ROUND_OPENED` belongs to
+    // whoever creates a round; the loop is handed one. `BATTLE_VOID` carries
+    // §110.6's card-refund confirmation, which is the Player service's fact —
+    // publishing it from here would mean claiming a refund happened that this
+    // service never made.
+    const round = openRound();
+    const p = ports({});
+
+    let state = round;
+    for (const offset of [
+      60_000,
+      ...Array.from({ length: 9 }, (_, minute) => 120_000 + minute * 60_000 - 1_000),
+      600_000,
+    ]) {
+      state = (await stepRound(state, at(offset), p, CONFIG)).state;
+    }
+
+    const names = new Set(p.publisher.published.map((envelope) => envelope.event));
+    expect(names).toEqual(new Set(['PICKS_LOCKED', 'BATTLE_STATE_UPDATE', 'ROUND_FINALIZED']));
   });
 });

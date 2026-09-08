@@ -14,11 +14,11 @@ import {
 } from './api.js';
 import { canonicalClockSchema, walletAddressSchema } from './primitives.js';
 import {
-  battleStateUpdateSchema,
+  battleStateUpdatePayloadSchema,
   channelSchema,
-  privateEventSchema,
-  publicEventSchema,
-  roundOpenedSchema,
+  parseEventFrame,
+  PRIVATE_EVENT_PAYLOADS,
+  roundOpenedPayloadSchema,
 } from './websocket.js';
 
 /**
@@ -49,10 +49,7 @@ const clock = {
 };
 
 const update = {
-  type: 'BATTLE_STATE_UPDATE' as const,
-  eventId: 'evt-1',
   serverTime: T0,
-  sequence: 1,
   battleId: 'round-0000000001-b0',
   timeRemaining: 480_000,
   momentum: 'CONTESTED' as const,
@@ -98,7 +95,7 @@ describe('primitives', () => {
 
 describe('BATTLE_STATE_UPDATE', () => {
   it('accepts a presentation-safe payload', () => {
-    expect(battleStateUpdateSchema.safeParse(update).success).toBe(true);
+    expect(battleStateUpdatePayloadSchema.safeParse(update).success).toBe(true);
   });
 
   it('rejects any attempt to attach a score', () => {
@@ -112,31 +109,37 @@ describe('BATTLE_STATE_UPDATE', () => {
       { leftScoreScaled: '56300000' },
       { exactScore: 56 },
     ]) {
-      const result = battleStateUpdateSchema.safeParse({ ...update, ...extra });
+      const result = battleStateUpdatePayloadSchema.safeParse({ ...update, ...extra });
       expect(result.success).toBe(false);
     }
   });
 
   it('rejects a frontline outside the unit interval', () => {
-    expect(battleStateUpdateSchema.safeParse({ ...update, frontline: 1.5 }).success).toBe(false);
-    expect(battleStateUpdateSchema.safeParse({ ...update, frontline: -0.1 }).success).toBe(false);
+    expect(battleStateUpdatePayloadSchema.safeParse({ ...update, frontline: 1.5 }).success).toBe(
+      false,
+    );
+    expect(battleStateUpdatePayloadSchema.safeParse({ ...update, frontline: -0.1 }).success).toBe(
+      false,
+    );
   });
 
   it('rejects a negative time remaining', () => {
     // A countdown that has run out reads zero, never a negative.
-    expect(battleStateUpdateSchema.safeParse({ ...update, timeRemaining: -1 }).success).toBe(false);
+    expect(battleStateUpdatePayloadSchema.safeParse({ ...update, timeRemaining: -1 }).success).toBe(
+      false,
+    );
   });
 
   it('accepts every declared momentum state', () => {
     for (const momentum of MOMENTUM_STATES) {
-      expect(battleStateUpdateSchema.safeParse({ ...update, momentum }).success).toBe(true);
+      expect(battleStateUpdatePayloadSchema.safeParse({ ...update, momentum }).success).toBe(true);
     }
   });
 
   it('rejects an undeclared momentum state', () => {
-    expect(battleStateUpdateSchema.safeParse({ ...update, momentum: 'WINNING' }).success).toBe(
-      false,
-    );
+    expect(
+      battleStateUpdatePayloadSchema.safeParse({ ...update, momentum: 'WINNING' }).success,
+    ).toBe(false);
   });
 });
 
@@ -151,23 +154,20 @@ describe('ROUND_OPENED', () => {
   });
 
   const opened = {
-    type: 'ROUND_OPENED' as const,
-    eventId: 'evt-0',
-    serverTime: T0,
-    sequence: 0,
     roundId: 'round-0000000001',
     clock,
     matchups: [0, 1, 2, 3, 4].map(matchup),
   };
 
   it('accepts exactly five matchups', () => {
-    expect(roundOpenedSchema.safeParse(opened).success).toBe(true);
+    expect(roundOpenedPayloadSchema.safeParse(opened).success).toBe(true);
   });
 
   it('rejects any other count', () => {
     // §4.3: ten stocks produce exactly five simultaneous battles.
     expect(
-      roundOpenedSchema.safeParse({ ...opened, matchups: opened.matchups.slice(0, 4) }).success,
+      roundOpenedPayloadSchema.safeParse({ ...opened, matchups: opened.matchups.slice(0, 4) })
+        .success,
     ).toBe(false);
   });
 
@@ -178,7 +178,7 @@ describe('ROUND_OPENED', () => {
       ...opened,
       matchups: [{ ...matchup(0), leftIntel: 67 }, ...opened.matchups.slice(1)],
     };
-    expect(roundOpenedSchema.safeParse(numeric).success).toBe(false);
+    expect(roundOpenedPayloadSchema.safeParse(numeric).success).toBe(false);
 
     // And not smuggled inside the snapshot either: the schema is strict, so an
     // extra field is a parse failure rather than something a client ignores.
@@ -189,7 +189,7 @@ describe('ROUND_OPENED', () => {
         ...opened.matchups.slice(1),
       ],
     };
-    expect(roundOpenedSchema.safeParse(smuggled).success).toBe(false);
+    expect(roundOpenedPayloadSchema.safeParse(smuggled).success).toBe(false);
   });
 });
 
@@ -205,34 +205,33 @@ describe('ROUND_FINALIZED', () => {
     evidenceHash: 'abc123',
   };
 
-  const finalized = {
-    type: 'ROUND_FINALIZED' as const,
-    eventId: 'evt-9',
-    serverTime: T0 + 600_000,
+  const finalized = { roundId: 'round-0000000001', results: [result], voided: [] };
+
+  /** The finalized payload wrapped in the envelope it actually travels in. */
+  const frame = (payload: unknown) => ({
+    event: 'ROUND_FINALIZED',
+    version: 1,
     sequence: 9,
-    roundId: 'round-0000000001',
-    results: [result],
-  };
+    emittedAt: T0 + 600_000,
+    channel: 'round:round-0000000001',
+    payload,
+  });
 
   it('is the only event carrying exact scores', () => {
     // §12.6 reveals the breakdown at finalization and not before.
-    expect(publicEventSchema.safeParse(finalized).success).toBe(true);
+    expect(parseEventFrame(frame(finalized)).ok).toBe(true);
   });
 
   it('rejects a winner that did not take part', () => {
     expect(
-      publicEventSchema.safeParse({
-        ...finalized,
-        results: [{ ...result, winner: 'TSLA' }],
-      }).success,
+      parseEventFrame(frame({ ...finalized, results: [{ ...result, winner: 'TSLA' }] })).ok,
     ).toBe(false);
   });
 
   it('accepts every declared victory label', () => {
     for (const victoryLabel of VICTORY_LABELS) {
       expect(
-        publicEventSchema.safeParse({ ...finalized, results: [{ ...result, victoryLabel }] })
-          .success,
+        parseEventFrame(frame({ ...finalized, results: [{ ...result, victoryLabel }] })).ok,
       ).toBe(true);
     }
   });
@@ -244,33 +243,22 @@ describe('private events', () => {
     // §72.4 case - a request that arrived after lock even though the sender's
     // screen still showed time.
     const rejected = {
-      type: 'PICK_REJECTED' as const,
-      eventId: 'e',
-      serverTime: T0,
-      sequence: 3,
       wallet: WALLET,
       roundId: 'round-0000000001',
       reason: 'PICKS_CLOSED' as const,
     };
-    expect(privateEventSchema.safeParse(rejected).success).toBe(true);
+    expect(PRIVATE_EVENT_PAYLOADS.PICK_REJECTED.safeParse(rejected).success).toBe(true);
   });
 
   it('carries reward amounts as strings, never numbers', () => {
     // JSON has no integer wide enough. An amount sent as a number would round
     // past 2^53, and §66.3 keeps money exact across the wire too.
-    const base = {
-      type: 'REWARD_FINALIZED' as const,
-      eventId: 'e',
-      serverTime: T0,
-      sequence: 4,
-      wallet: WALLET,
-      distributionId: 'dist-1',
-    };
-    expect(privateEventSchema.safeParse({ ...base, amount: '123456789012345678901' }).success).toBe(
-      true,
-    );
-    expect(privateEventSchema.safeParse({ ...base, amount: 1234 }).success).toBe(false);
-    expect(privateEventSchema.safeParse({ ...base, amount: '1.5' }).success).toBe(false);
+    const base = { wallet: WALLET, distributionId: 'dist-1' };
+    const reward = PRIVATE_EVENT_PAYLOADS.REWARD_FINALIZED;
+
+    expect(reward.safeParse({ ...base, amount: '123456789012345678901' }).success).toBe(true);
+    expect(reward.safeParse({ ...base, amount: 1234 }).success).toBe(false);
+    expect(reward.safeParse({ ...base, amount: '1.5' }).success).toBe(false);
   });
 });
 
