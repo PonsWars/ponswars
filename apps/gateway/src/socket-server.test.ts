@@ -197,6 +197,31 @@ describe('liveness over the wire', () => {
   });
 });
 
+describe('starting up', () => {
+  it('reports a taken port instead of taking the process down', async () => {
+    // The bug: `ws` announces a failed bind by emitting `error` on the server,
+    // and with no listener that is an unhandled event — the process dies with a
+    // stack trace, a tick after the call that caused it, by which time whatever
+    // started next has bound its own port too. A caller that can await the
+    // failure can stop before that happens.
+    const { server } = start(() => null);
+    const port = (server.wss.address() as AddressInfo).port;
+
+    const second = startSocketServer({ port, now: () => AT, walletOf: () => null });
+    await expect(second.ready).rejects.toMatchObject({ code: 'EADDRINUSE' });
+    await second.close();
+  });
+
+  it('resolves once it is actually accepting connections', async () => {
+    const { url, server } = start(() => null);
+    await expect(server.ready).resolves.toBeUndefined();
+
+    // Ready means ready: a client may connect the moment it settles.
+    const socket = await client(url);
+    expect(socket.readyState).toBe(socket.OPEN);
+  });
+});
+
 describe('decoding a frame', () => {
   it('reads a single buffer', () => {
     expect(decodeFrame(Buffer.from('{"type":"PING"}', 'utf8'))).toBe('{"type":"PING"}');

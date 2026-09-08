@@ -119,6 +119,12 @@ async function main(): Promise<void> {
     walletOf: (authorization) => (authorization === undefined ? null : DEMO_WALLET),
   });
 
+  // Before anything else binds. A failed WebSocket bind surfaces a tick later
+  // than the call that caused it, so without this the API port was already
+  // taken by the time the process died — leaving a half-started stack and a
+  // stack trace that named neither port.
+  await sockets.ready;
+
   const ports: RoundPorts = {
     marketData: market,
     picks,
@@ -144,7 +150,14 @@ async function main(): Promise<void> {
     walletOf: (authorization) => (authorization === undefined ? null : DEMO_WALLET),
   });
 
-  await api.listen({ port: PORT_API, host: '127.0.0.1' });
+  try {
+    await api.listen({ port: PORT_API, host: '127.0.0.1' });
+  } catch (error) {
+    // The socket server is accepting connections by now and would hold the
+    // process open long after the failure, so it comes down with it.
+    await sockets.close();
+    throw error;
+  }
 
   process.stdout.write(
     [
@@ -200,7 +213,33 @@ async function main(): Promise<void> {
   }
 }
 
+/**
+ * The port a listen error failed on, if that is what it was.
+ *
+ * Node reports a taken port as a `code` and a `port` on an otherwise ordinary
+ * `Error`, and starting this stack while one is already running is the most
+ * likely way to start it wrongly — so it is worth a sentence rather than a
+ * stack trace that names neither port.
+ */
+function portInUse(error: unknown): number | null {
+  if (typeof error !== 'object' || error === null) {
+    return null;
+  }
+  const { code, port } = error as { code?: unknown; port?: unknown };
+  return code === 'EADDRINUSE' && typeof port === 'number' ? port : null;
+}
+
 main().catch((error: unknown) => {
-  process.stderr.write(`local stack failed: ${String(error)}\n`);
+  const taken = portInUse(error);
+  process.stderr.write(
+    taken === null
+      ? `local stack failed: ${String(error)}\n`
+      : [
+          `local stack: port ${String(taken)} is already in use.`,
+          '  Another stack is probably still running. Stop it, or set PORT_API',
+          '  and PORT_WS to different ports.',
+          '',
+        ].join('\n'),
+  );
   process.exitCode = 1;
 });

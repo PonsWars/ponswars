@@ -33,6 +33,22 @@ export interface SocketServerOptions {
 export interface RunningSocketServer {
   readonly gateway: Gateway;
   readonly wss: WebSocketServer;
+  /**
+   * Resolves once the server is accepting connections, and rejects if it never
+   * gets there.
+   *
+   * `ws` reports a failed bind by emitting `error` on the server. With no
+   * listener that is an unhandled event: the process dies with a stack trace,
+   * and it dies *later* than the call that caused it, so anything started in
+   * between has already taken its own ports. Handing the caller a promise makes
+   * a bind failure something it can act on before it binds anything else.
+   *
+   * Only startup is settled here. An error after the server is listening is
+   * left unhandled exactly as before, because a socket server failing while
+   * serving should be loud rather than swallowed by a promise nobody is
+   * awaiting any more.
+   */
+  readonly ready: Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -53,6 +69,25 @@ export function startSocketServer(options: SocketServerOptions): RunningSocketSe
     options.server === undefined
       ? new WebSocketServer({ port: options.port ?? 0 })
       : new WebSocketServer({ server: options.server });
+
+  // Attached to an existing server, binding is the caller's business and
+  // already done; `ws` emits no `listening` of its own in that case, so waiting
+  // for one would hang forever.
+  const ready =
+    options.server === undefined
+      ? new Promise<void>((resolve, reject) => {
+          const onListening = (): void => {
+            wss.off('error', onError);
+            resolve();
+          };
+          const onError = (error: Error): void => {
+            wss.off('listening', onListening);
+            reject(error);
+          };
+          wss.once('listening', onListening);
+          wss.once('error', onError);
+        })
+      : Promise.resolve();
 
   wss.on('connection', (socket, request) => {
     const connectionId = randomUUID();
@@ -76,6 +111,7 @@ export function startSocketServer(options: SocketServerOptions): RunningSocketSe
   return {
     gateway,
     wss,
+    ready,
     close: () =>
       new Promise<void>((resolve, reject) => {
         for (const socket of sockets.values()) {
