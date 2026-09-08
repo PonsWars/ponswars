@@ -1,8 +1,9 @@
 /*
  * PonsWars design tokens.
  *
- * Transcribed from 02_Claude_Guides/PONSWARS_DESIGN_TOKENS.md §2, §3 and §5.
- * That document is source-of-truth rank 4; this file is its executable form,
+ * Transcribed from the PonsWars design-token specification §2, §3 and §5 — one
+ * of the planning documents kept privately, see the README. This file is that
+ * document's executable form,
  * and the two must not drift — a test asserts every value here matches the
  * constants in tokens.ts.
  *

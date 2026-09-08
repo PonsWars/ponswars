@@ -59,4 +59,6 @@ apps/web/dist/
 # and launch. The code documents the rules it implements; these documents are
 # where those rules were decided.
 01_Masterplan/
+02_Claude_Guides/
 03_Visual_Pack/
+START_HERE.md

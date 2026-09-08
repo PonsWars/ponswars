@@ -10,29 +10,29 @@ activity. Real SPY rewards settle on chain every 24 hours.
 
 ## Source of truth
 
-When documents disagree, this order decides:
+The product rules come from a set of planning documents kept privately: the
+PonsWars Masterplan v1.4, a kickoff brief, a visual implementation guide, a
+design-token specification, and an art-direction pack of generated references.
+When they disagree, the masterplan decides.
 
-1. **The PonsWars Masterplan v1.4** — mechanics and product rules
-2. [`02_Claude_Guides/CLAUDE_KICKOFF_BRIEF.md`](02_Claude_Guides/CLAUDE_KICKOFF_BRIEF.md) — sequencing and non-negotiables
-3. [`02_Claude_Guides/PONSWARS_VISUAL_IMPLEMENTATION_GUIDE.md`](02_Claude_Guides/PONSWARS_VISUAL_IMPLEMENTATION_GUIDE.md) — visual hierarchy and mockup corrections
-4. Design tokens — _not yet delivered, see [`02_Claude_Guides/_MISSING.md`](02_Claude_Guides/_MISSING.md)_
-5. The visual pack — art direction only
-6. Text, numbers and logos rendered _inside_ the generated PNGs — **non-canonical**
-
-The masterplan and the visual pack are **not in this repository**. The masterplan
-carries the treasury wallet topology (§44.4) and the complete security threat
-model (§45), and the visual pack is unreleased art direction — neither belongs in
-a public repository before an independent contract review and launch.
+**None of them is published here.** The masterplan carries the treasury wallet
+topology (§44.4) and the complete security threat model (§45); the visual pack
+is unreleased art direction. Neither belongs in a public repository before an
+independent contract review and launch. Afterwards transparency is the point —
+§61 requires reward allocations to be auditable and reproducible — but until
+then the security section reads more like a map for an attacker than evidence of
+good faith.
 
 That is a deliberate split rather than a gap. Every rule those documents fix is
-implemented here and cited by section number at the point it is enforced, so the
-code is readable on its own; what is missing is the record of how each rule was
-decided, not the rule.
+implemented here and cited by section number at the point it is enforced, so
+this codebase is readable on its own. What is not published is the record of how
+each rule was decided, not the rule.
 
-The PNGs are art direction, never production UI exports and never a source of
-gameplay truth. Several contain attractive but non-canonical mechanics — a live
-exact battle score, staggered battle scheduling, an active-window reward
-estimate — and each is called out where the code refuses to implement it.
+One consequence is worth stating plainly, because it shaped a lot of this code:
+the generated PNGs in that pack are art direction and several contain
+attractive but **non-canonical** mechanics — a live exact battle score,
+staggered battle scheduling, an active-window reward estimate. Each is called
+out in this repository at the point where the code refuses to implement it.
 
 ## Architecture in one line
 
@@ -183,9 +183,10 @@ endpoint, the RPC provider and the market-data vendor are all still `OPEN` in
 one and shipping it as policy. Every seeded value passes through the same types
 and the same reducers the real feed will.
 
-Design tokens are transcribed in `@ponswars/ui-tokens` from the visual guide;
-the gaps noted in [`02_Claude_Guides/_MISSING.md`](02_Claude_Guides/_MISSING.md)
-are still open.
+Design tokens are transcribed into `@ponswars/ui-tokens` from the design-token
+specification, with a test asserting the stylesheet and the typed constants
+agree value by value. The gaps that specification still leaves open are tracked
+privately alongside it.
 
 **Milestone 4 — flows, replay and runbooks: complete.** The full
 Pick → Card → Live Battle → Result sequence of execution-order step 15 and the

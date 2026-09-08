@@ -7,7 +7,7 @@
 ## Context
 
 The masterplan settles what PonsWars does. It deliberately leaves a set of
-engineering choices open, and §6 of `START_HERE.md` is explicit about the
+engineering choices open, and §6 of the handoff brief is explicit about the
 failure mode to avoid:
 
 > If implementation pressure reveals a conflict, performance issue, or missing
