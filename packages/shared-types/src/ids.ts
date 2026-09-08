@@ -59,3 +59,89 @@ export type EventId = Brand<string, 'EventId'>;
  * Correlation identifier threaded through logs and audit records (§66.7).
  */
 export type CorrelationId = Brand<string, 'CorrelationId'>;
+
+// ---------------------------------------------------------------------------
+// Checked constructors
+// ---------------------------------------------------------------------------
+
+/**
+ * Applying a brand is the moment to check the value, not a moment to skip it.
+ *
+ * Every identifier above is a branded string, and a brand only helps if it is
+ * applied where the value is validated. `value as RoundId` scattered through
+ * callers gives the same compile-time comfort with none of the safety, which is
+ * exactly the erosion branding exists to prevent — the same reasoning that put
+ * `utcTimestamp` and `milliseconds` in `time.ts`.
+ *
+ * Length limits deliberately live in `@ponswars/schemas` rather than here.
+ * Those are wire concerns and belong with the wire contract; duplicating them
+ * would create two numbers to keep in agreement.
+ */
+function checkIdentifier(value: string, label: string): string {
+  if (value.length === 0) {
+    throw new RangeError(`A ${label} cannot be empty`);
+  }
+  return value;
+}
+
+export function roundId(value: string): RoundId {
+  return checkIdentifier(value, 'round id') as RoundId;
+}
+
+export function battleId(value: string): BattleId {
+  return checkIdentifier(value, 'battle id') as BattleId;
+}
+
+export function sectorId(value: string): SectorId {
+  return checkIdentifier(value, 'sector id') as SectorId;
+}
+
+export function genesisId(value: string): GenesisId {
+  return checkIdentifier(value, 'genesis id') as GenesisId;
+}
+
+export function genesisRequestId(value: string): GenesisRequestId {
+  return checkIdentifier(value, 'genesis request id') as GenesisRequestId;
+}
+
+export function cardInstanceId(value: string): CardInstanceId {
+  return checkIdentifier(value, 'card instance id') as CardInstanceId;
+}
+
+export function distributionId(value: string): DistributionId {
+  return checkIdentifier(value, 'distribution id') as DistributionId;
+}
+
+export function secretEntitlementId(value: string): SecretEntitlementId {
+  return checkIdentifier(value, 'secret entitlement id') as SecretEntitlementId;
+}
+
+export function clientRequestId(value: string): ClientRequestId {
+  return checkIdentifier(value, 'client request id') as ClientRequestId;
+}
+
+export function eventId(value: string): EventId {
+  return checkIdentifier(value, 'event id') as EventId;
+}
+
+export function correlationId(value: string): CorrelationId {
+  return checkIdentifier(value, 'correlation id') as CorrelationId;
+}
+
+/**
+ * Brands an EVM address, lowercased.
+ *
+ * Normalisation is part of the construction rather than something callers are
+ * asked to remember. `maySubscribe` in `@ponswars/realtime` compares channel
+ * names built from a `WalletAddress` and documents that it relies on them being
+ * lowercase; a mixed-case address branded by a cast would fail that comparison
+ * silently, and the player would simply never receive their own events.
+ *
+ * @throws RangeError unless `value` is a 20-byte hex address.
+ */
+export function walletAddress(value: string): WalletAddress {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(value)) {
+    throw new RangeError(`Not an EVM address: ${value}`);
+  }
+  return value.toLowerCase() as WalletAddress;
+}
