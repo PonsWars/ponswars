@@ -1,0 +1,16 @@
+{
+  "name": "@ponswars/simulations",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic end-to-end simulations across many rounds and a full distribution window.",
+  "scripts": {
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/battle-engine": "workspace:*",
+    "@ponswars/battle-math": "workspace:*",
+    "@ponswars/rewards-math": "workspace:*",
+    "@ponswars/shared-types": "workspace:*"
+  }
+}

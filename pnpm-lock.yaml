@@ -71,6 +71,21 @@ importers:
 
   packages/shared-types: {}
 
+  simulations:
+    dependencies:
+      '@ponswars/battle-engine':
+        specifier: workspace:*
+        version: link:../packages/battle-engine
+      '@ponswars/battle-math':
+        specifier: workspace:*
+        version: link:../packages/battle-math
+      '@ponswars/rewards-math':
+        specifier: workspace:*
+        version: link:../packages/rewards-math
+      '@ponswars/shared-types':
+        specifier: workspace:*
+        version: link:../packages/shared-types
+
 packages:
 
   '@adraffy/ens-normalize@1.11.1':
