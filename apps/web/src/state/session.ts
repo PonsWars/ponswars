@@ -1,15 +1,27 @@
 import type { ActiveTicker, ConfidenceLabel, MomentumState } from '@ponswars/shared-types';
 import {
   advance,
+  applyDrift,
+  beginPan,
+  endPan,
   flyTo,
   focusMyWar,
   hudBudgetFor,
+  IDLE_NAVIGATION,
   initialCamera,
+  panTo,
+  pinchTo,
   resetView,
+  stepOutward,
+  zoomByNotches,
   zoomLevelForMode,
   type CameraConfig,
+  type CameraMode,
   type CameraState,
   type HudBudget,
+  type NavigationConfig,
+  type NavigationState,
+  type PointerSample,
   type QualityTier,
   type ZoomLevel,
 } from '@ponswars/world-runtime';
@@ -20,9 +32,11 @@ import {
   battlefieldPose,
   cinematicPose,
   GLOBAL_ANCHOR,
+  poseForMode,
   sectorPose,
   WORLD_BOUNDARY_RADIUS,
 } from '../world/layout.js';
+import { NAVIGATION } from '../world/navigation-config.js';
 
 /**
  * Transient client session state (§80.2).
@@ -60,6 +74,18 @@ export interface ClientBattle {
 interface SessionState {
   readonly camera: CameraState;
   readonly cameraConfig: CameraConfig;
+  /** Drag and drift for direct navigation (§37.3, §37.4). */
+  readonly navigation: NavigationState;
+  readonly navigationConfig: NavigationConfig;
+  /**
+   * Whether the gesture in progress has travelled far enough to be a drag.
+   *
+   * §37.3 and §37.4 give tap and drag to the same button and the same finger, so
+   * something has to tell them apart. Without this, panning the world across a
+   * sector releases into a click and flies the camera somewhere the player never
+   * asked to go.
+   */
+  readonly dragMoved: boolean;
   readonly battles: readonly ClientBattle[];
   /** The player's own battle this round, if they picked (§37.7 FOCUS MY WAR). */
   readonly myBattleId: string | null;
@@ -77,6 +103,18 @@ interface SessionState {
   playCinematic: (index: number, at: UtcTimestamp) => void;
   focusMyWar: (at: UtcTimestamp) => void;
   resetView: (at: UtcTimestamp) => void;
+
+  /** Drag (§37.3 left drag, §37.4 one-finger drag). */
+  startDrag: (sample: PointerSample) => void;
+  /** Marks the gesture as a drag, so its release is not read as a tap. */
+  noteDragMoved: () => void;
+  dragTo: (sample: PointerSample, perPixel: number) => void;
+  finishDrag: (at: UtcTimestamp) => void;
+  /** Wheel (§37.3) and pinch (§37.4) both reach the same zoom. */
+  zoomNotches: (notches: number) => void;
+  pinch: (ratio: number) => void;
+  /** `ESC`: one spatial level outward (§37.3). */
+  stepOutward: (at: UtcTimestamp) => void;
 }
 
 function configFor(reducedMotion: boolean): CameraConfig {
@@ -96,9 +134,27 @@ function configFor(reducedMotion: boolean): CameraConfig {
   };
 }
 
+/**
+ * The sector index of the focused battle, or `null` when none is focused.
+ *
+ * Derived rather than stored. A second copy of "which battle is selected" is a
+ * second thing that can be wrong, and the camera already owns the answer.
+ */
+function focusedSectorIndex(state: Pick<SessionState, 'battles' | 'camera'>): number | null {
+  const { focusedBattleId } = state.camera;
+  if (focusedBattleId === null) {
+    return null;
+  }
+  const index = state.battles.findIndex((battle) => battle.battleId === focusedBattleId);
+  return index < 0 ? null : index;
+}
+
 export const useSession = create<SessionState>((set, get) => ({
   camera: initialCamera(configFor(false)),
   cameraConfig: configFor(false),
+  navigation: IDLE_NAVIGATION,
+  navigationConfig: NAVIGATION,
+  dragMoved: false,
   battles: [],
   myBattleId: null,
   quality: 'BALANCED',
@@ -123,13 +179,60 @@ export const useSession = create<SessionState>((set, get) => ({
   },
 
   tick: (at) => {
-    const { camera, cameraConfig } = get();
-    const next = advance(camera, at, cameraConfig);
+    const { camera, cameraConfig, navigation, navigationConfig } = get();
+    // A queued fly-to first, then any residual drift. `applyDrift` stands down
+    // while a transition is running, so the two never fight over the pose.
+    const advanced = advance(camera, at, cameraConfig);
+    const drifted = applyDrift(advanced, navigation, at, cameraConfig, navigationConfig);
     // Reference equality when nothing moved, so a still camera does not
     // re-render the tree sixty times a second.
-    if (next !== camera) {
-      set({ camera: next });
+    if (drifted.camera !== camera || drifted.navigation !== navigation) {
+      set({ camera: drifted.camera, navigation: drifted.navigation });
     }
+  },
+
+  startDrag: (sample) => {
+    const { camera, navigation } = get();
+    set({ ...beginPan(camera, navigation, sample), dragMoved: false });
+  },
+
+  noteDragMoved: () => {
+    if (!get().dragMoved) {
+      set({ dragMoved: true });
+    }
+  },
+
+  dragTo: (sample, perPixel) => {
+    const { camera, navigation, cameraConfig } = get();
+    set(panTo(camera, navigation, sample, perPixel, cameraConfig));
+  },
+
+  finishDrag: (at) => {
+    const { navigation, cameraConfig } = get();
+    set({ navigation: endPan(navigation, at, cameraConfig) });
+  },
+
+  zoomNotches: (notches) => {
+    const { camera, cameraConfig, navigationConfig } = get();
+    set({ camera: zoomByNotches(camera, notches, cameraConfig, navigationConfig) });
+  },
+
+  pinch: (ratio) => {
+    const { camera, cameraConfig, navigationConfig } = get();
+    set({ camera: pinchTo(camera, ratio, cameraConfig, navigationConfig) });
+  },
+
+  stepOutward: (at) => {
+    const state = get();
+    const sectorIndex = focusedSectorIndex(state);
+    const poseFor = (mode: CameraMode): ReturnType<typeof poseForMode> =>
+      poseForMode(mode, sectorIndex);
+    set({
+      camera: stepOutward(state.camera, poseFor, at, state.cameraConfig),
+      // Stepping out is a deliberate move to a known place. Letting a leftover
+      // flick keep sliding the camera afterwards would undo it.
+      navigation: IDLE_NAVIGATION,
+    });
   },
 
   focusSector: (index, at) => {
@@ -206,6 +309,19 @@ export const useSession = create<SessionState>((set, get) => ({
     set({ camera: resetView(camera, at, cameraConfig) });
   },
 }));
+
+/**
+ * A development-only handle on the store.
+ *
+ * Camera behaviour is the one part of this app that cannot be read off the DOM:
+ * a wrong sign or a wrong scale looks like a plausible picture, and the only way
+ * to tell is to read the pose. `import.meta.env.DEV` is a compile-time constant,
+ * so this whole block is dropped from the production bundle.
+ */
+if (import.meta.env.DEV) {
+  (globalThis as unknown as { __ponswarsSession?: typeof useSession }).__ponswarsSession =
+    useSession;
+}
 
 /**
  * The current instant, as a checked UTC timestamp.
