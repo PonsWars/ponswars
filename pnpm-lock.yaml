@@ -185,6 +185,9 @@ importers:
       '@ponswars/battle-math':
         specifier: workspace:*
         version: link:../packages/battle-math
+      '@ponswars/realtime':
+        specifier: workspace:*
+        version: link:../packages/realtime
       '@ponswars/rewards-math':
         specifier: workspace:*
         version: link:../packages/rewards-math
