@@ -1,5 +1,5 @@
 import { BATTLES_PER_ROUND } from '@ponswars/shared-types';
-import { vec3, type CameraPose, type Vec3 } from '@ponswars/world-runtime';
+import { vec3, type CameraMode, type CameraPose, type Vec3 } from '@ponswars/world-runtime';
 
 /**
  * The physical layout of the world (§38).
@@ -114,4 +114,31 @@ export function cinematicPose(index: number): CameraPose {
     position: vec3(sector.x * outward, sector.y + 20, sector.z * outward),
     target: sector,
   };
+}
+
+/**
+ * The pose a camera mode corresponds to, given the sector currently in focus.
+ *
+ * `stepOutward` in `@ponswars/world-runtime` decides *which* level `ESC` leads
+ * to; the geometry of that level lives here. The runtime holds decisions, the
+ * app holds the world.
+ *
+ * Returns `null` when a level needs a sector and none is focused, which the
+ * runtime reads as "stay put" rather than guessing at a sector the player never
+ * chose.
+ */
+export function poseForMode(mode: CameraMode, sectorIndex: number | null): CameraPose | null {
+  switch (mode) {
+    case 'GLOBAL_FREE':
+    case 'GLOBAL_FOCUS':
+    case 'PROFILE_PRESENTATION':
+    case 'RESETTING':
+      return GLOBAL_ANCHOR;
+    case 'SECTOR_FOCUS':
+      return sectorIndex === null ? null : sectorPose(sectorIndex);
+    case 'BATTLE_TACTICAL':
+      return sectorIndex === null ? null : battlefieldPose(sectorIndex);
+    case 'CINEMATIC_TEMP':
+      return sectorIndex === null ? null : cinematicPose(sectorIndex);
+  }
 }
