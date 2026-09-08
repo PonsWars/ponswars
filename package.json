@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "PonsWars — a persistent spatial market-war world driven by real market data",
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
     "node": ">=22.0.0",

@@ -8,6 +8,10 @@ pnpm-lock.yaml
 _archive
 START_HERE.md
 
+# The licence is a verbatim upstream text. Reformatting it would change a
+# document whose exact wording is the point.
+LICENSE
+
 # Generated scripts and env example are checked, not formatted
 .env.example
 

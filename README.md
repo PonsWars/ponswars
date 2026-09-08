@@ -229,3 +229,20 @@ implementation. Listed so the blocking decision is visible rather than buried:
 Each of those is a product or business decision, and §102 is explicit that an
 `OPEN` value must not be invented and shipped as policy. The cores every one of
 them would wire into are built, tested and replayable.
+
+## Licence
+
+Copyright (C) 2026 PonsWars.
+
+Licensed under the **GNU Affero General Public License, version 3** — see
+[`LICENSE`](LICENSE).
+
+The Affero clause is the reason for this choice over a permissive licence. Use
+it, fork it, change it; but if you run a modified version as a network service,
+the people using that service are entitled to its source. PonsWars is a hosted
+game settling real value, so a closed fork operating as a competing service is
+the case the licence is meant to cover — and the one an MIT or Apache licence
+would allow without recourse.
+
+Nothing here is deployed and the contracts are unaudited. See
+[`SECURITY.md`](SECURITY.md) before relying on any of it.
