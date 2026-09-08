@@ -58,6 +58,20 @@ export interface ServerDeps {
    * only writes reject it.
    */
   readonly walletOf: (authorization: string | undefined) => WalletAddress | null;
+  /**
+   * Browser origins allowed to read this API.
+   *
+   * No default, and no wildcard shortcut. §5 makes spectating the normal case,
+   * so a browser has to be able to reach this — but *which* browsers is a
+   * deployment fact, and `*` would also hand any page on the internet the
+   * ability to make authenticated requests on a visitor's behalf if credentials
+   * were ever enabled.
+   *
+   * An empty list is a valid answer meaning "no browser": a service reached
+   * only by other services needs no CORS at all, and saying so explicitly is
+   * different from forgetting.
+   */
+  readonly allowedOrigins: readonly string[];
 }
 
 /** Correlation id for one request, so an error can be traced (§110.5). */
@@ -67,6 +81,40 @@ function correlationId(): string {
 
 export function buildServer(deps: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: false });
+
+  const allowed = new Set(deps.allowedOrigins);
+
+  /**
+   * Cross-origin access (§5, §47).
+   *
+   * The origin is echoed back rather than answered with `*`, and `Vary: Origin`
+   * goes with it — without that header a shared cache can serve one origin's
+   * allowed response to another origin, which turns a correct check into an
+   * incorrect one at the cache layer.
+   *
+   * An origin that is not on the list simply gets no CORS headers. The request
+   * still succeeds; the browser is the one that refuses to hand the body to the
+   * page, which is exactly where that decision belongs.
+   */
+  app.addHook('onRequest', (request, reply, done) => {
+    const origin = request.headers.origin;
+    if (origin !== undefined && allowed.has(origin)) {
+      void reply.header('access-control-allow-origin', origin);
+      void reply.header('vary', 'Origin');
+    }
+
+    if (request.method !== 'OPTIONS') {
+      done();
+      return;
+    }
+
+    // Preflight. A PUT carrying JSON and an authorization header triggers one,
+    // so a pick cannot be submitted from a browser without answering it.
+    void reply.header('access-control-allow-methods', 'GET, PUT, OPTIONS');
+    void reply.header('access-control-allow-headers', 'content-type, authorization');
+    void reply.header('access-control-max-age', '600');
+    void reply.code(204).send();
+  });
 
   const send = (reply: FastifyReply, failure: ErrorResponse): FastifyReply =>
     reply.code(failure.status).send(failure.body);
@@ -98,7 +146,13 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const body = currentRoundSchema.parse({
       roundId: round.roundId,
       state: round.state,
-      clock: round.clock,
+      // `serverTime` is stamped now, not carried from the round.
+      // `CanonicalClock` defines it as "server time at the moment this payload
+      // was produced", and the round's copy was taken when the round opened —
+      // up to ten minutes ago. A client computing its clock offset from that
+      // would project every countdown ten minutes wrong, which is the one thing
+      // §23.5 exists to prevent.
+      clock: { ...round.clock, serverTime: deps.now() },
       // The sector a battle occupies is its slot in the round (§38.4): five
       // fixed, neutral sectors, reused every round. It is positional rather
       // than stored, so it is derived here rather than duplicated onto setup.

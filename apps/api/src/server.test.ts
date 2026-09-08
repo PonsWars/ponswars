@@ -89,6 +89,8 @@ function openRound(): RoundEngineState {
   return { ...round, state: 'PICK_OPEN' };
 }
 
+const ALLOWED_ORIGIN = 'https://play.example.test';
+
 let round: RoundEngineState;
 let picks: PickStore;
 let now: UtcTimestamp;
@@ -102,6 +104,7 @@ beforeEach(() => {
     currentRound: () => round,
     picks,
     config: CONFIG,
+    allowedOrigins: [ALLOWED_ORIGIN],
     now: () => now,
     // Any bearer token is treated as that wallet. Signature verification is
     // §45.2 and belongs to the auth service; these tests are about the routes.
@@ -375,5 +378,82 @@ describe('GET /v1/health', () => {
   it('reports the round it is serving', async () => {
     const response = await app.inject({ method: 'GET', url: '/v1/health' });
     expect(response.json()).toMatchObject({ status: 'ok', round: { state: 'PICK_OPEN' } });
+  });
+});
+
+describe('the canonical clock', () => {
+  it('stamps server time when the payload is produced, not when the round opened', async () => {
+    // §23.5 and the type's own words: "server time at the moment this payload
+    // was produced". The round's stored copy was taken at `pickOpenAt`, so
+    // serving it unchanged made a client's clock offset the age of the round —
+    // fourteen seconds into a pick phase, and up to ten minutes by the end.
+    now = utcTimestamp(EPOCH + 240_000);
+    const response = await app.inject({ method: 'GET', url: '/v1/rounds/current' });
+    const body = currentRoundSchema.parse(response.json());
+
+    expect(body.clock.serverTime).toBe(now);
+    expect(body.clock.serverTime).not.toBe(body.clock.pickOpenAt);
+    // The other four are the round's and must not move with the request.
+    expect(body.clock.pickOpenAt).toBe(round.clock.pickOpenAt);
+    expect(body.clock.lockAt).toBe(round.clock.lockAt);
+    expect(body.clock.battleEndAt).toBe(round.clock.battleEndAt);
+  });
+});
+
+describe('cross-origin access', () => {
+  it('lets a listed browser origin read a round', async () => {
+    // §5 makes spectating the normal case, and a spectator is a browser. Before
+    // this the API sent no CORS headers at all, so no page could read it — the
+    // request succeeded and the browser threw the body away.
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/rounds/current',
+      headers: { origin: ALLOWED_ORIGIN },
+    });
+
+    expect(response.headers['access-control-allow-origin']).toBe(ALLOWED_ORIGIN);
+    expect(response.headers.vary).toBe('Origin');
+  });
+
+  it('answers a preflight for a pick', async () => {
+    // A PUT carrying JSON and an authorization header is preflighted, so
+    // without this a pick cannot be submitted from a browser at all.
+    const response = await app.inject({
+      method: 'OPTIONS',
+      url: '/v1/rounds/round-0000000000/pick',
+      headers: { origin: ALLOWED_ORIGIN, 'access-control-request-method': 'PUT' },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['access-control-allow-methods']).toContain('PUT');
+    expect(response.headers['access-control-allow-headers']).toContain('authorization');
+  });
+
+  it('gives an unlisted origin no permission, and no error either', async () => {
+    // The request still succeeds; the browser is what refuses to hand the body
+    // to the page. Answering with an error instead would tell an attacker which
+    // origins are allowed.
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/rounds/current',
+      headers: { origin: 'https://elsewhere.example.test' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('never answers with a wildcard', async () => {
+    // `*` would also hand any page on the internet the ability to make
+    // authenticated requests on a visitor's behalf the moment credentials are
+    // enabled, and that is not a change anyone would notice happening.
+    for (const origin of [ALLOWED_ORIGIN, 'https://elsewhere.example.test']) {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/rounds/current',
+        headers: { origin },
+      });
+      expect(response.headers['access-control-allow-origin']).not.toBe('*');
+    }
   });
 });

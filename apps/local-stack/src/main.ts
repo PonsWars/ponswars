@@ -126,6 +126,17 @@ const CONFIDENCE_CALIBRATION: ConfidenceCalibration = {
   matchup: { favored: 20, strongFavorite: 60, dominant: 120 },
 };
 
+/**
+ * Browser origins this stack serves (§5).
+ *
+ * Development only, like everything else here. A deployment names its own, and
+ * `packages/config` is where that belongs once there is one.
+ */
+const WEB_ORIGINS = (process.env['WEB_ORIGINS'] ?? 'http://localhost:5173,http://127.0.0.1:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter((origin) => origin !== '');
+
 const now = (): UtcTimestamp => utcTimestamp(Date.now());
 
 /** A demo wallet for any authenticated request. Real auth is §45.2. */
@@ -199,6 +210,10 @@ async function main(): Promise<void> {
   let round = await openRound(index, clock, market, now());
 
   const api = buildServer({
+    // The Vite dev server, on both spellings of localhost — a browser treats
+    // them as different origins, and which one a developer types is not
+    // something to leave failing with a CORS error that names neither.
+    allowedOrigins: WEB_ORIGINS,
     currentRound: () => round,
     picks,
     config: CONFIG,
