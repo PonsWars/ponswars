@@ -12,6 +12,41 @@ export type UtcTimestamp = Brand<number, 'UtcTimestamp'>;
 /** A duration in milliseconds. */
 export type DurationMs = Brand<number, 'DurationMs'>;
 
+/**
+ * Wraps a raw millisecond count as a {@link UtcTimestamp}.
+ *
+ * Validating rather than casting. A branded type only helps if the brand is
+ * applied at a checked boundary; `value as UtcTimestamp` scattered through
+ * callers would give the same compile-time comfort with none of the safety,
+ * which is exactly the erosion branding exists to prevent.
+ *
+ * @throws RangeError unless `value` is a non-negative whole millisecond. A
+ *   fractional timestamp compares unpredictably against the round boundaries
+ *   §72 defines.
+ */
+export function utcTimestamp(value: number): UtcTimestamp {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(
+      `A UTC timestamp must be a non-negative whole millisecond, received ${String(value)}`,
+    );
+  }
+  return value as UtcTimestamp;
+}
+
+/**
+ * Wraps a raw millisecond count as a {@link DurationMs}.
+ *
+ * @throws RangeError unless `value` is a non-negative whole millisecond.
+ */
+export function milliseconds(value: number): DurationMs {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(
+      `A duration must be a non-negative whole millisecond, received ${String(value)}`,
+    );
+  }
+  return value as DurationMs;
+}
+
 /** Builds a {@link DurationMs} from whole seconds. */
 export function seconds(count: number): DurationMs {
   return (count * 1_000) as DurationMs;

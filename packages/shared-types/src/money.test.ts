@@ -12,6 +12,7 @@ import {
   sumAmounts,
   tokenDecimals,
 } from './money.js';
+import { milliseconds, utcTimestamp } from './time.js';
 
 const SIX = tokenDecimals(6);
 const EIGHTEEN = tokenDecimals(18);
@@ -215,5 +216,21 @@ describe('integerSqrt', () => {
 
   it('rejects negative input', () => {
     expect(() => integerSqrt(-1n)).toThrow(RangeError);
+  });
+});
+
+describe('time constructors', () => {
+  it('accept whole non-negative milliseconds', () => {
+    expect(utcTimestamp(1_800_000_000_000)).toBe(1_800_000_000_000);
+    expect(milliseconds(0)).toBe(0);
+    expect(milliseconds(1_050)).toBe(1_050);
+  });
+
+  it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])('reject %s', (value) => {
+    // A branded type only helps if the brand is applied at a checked boundary.
+    // A fractional timestamp would compare unpredictably against the round
+    // boundaries §72 defines.
+    expect(() => utcTimestamp(value)).toThrow(RangeError);
+    expect(() => milliseconds(value)).toThrow(RangeError);
   });
 });
