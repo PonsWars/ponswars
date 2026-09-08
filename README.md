@@ -131,6 +131,18 @@ procedure, the PostgreSQL schema, both contracts with 57 Foundry tests, and a
 generated fixture proving the TypeScript and Solidity Merkle code agree
 ([ADR 0006](docs/adr/0006-cross-language-conformance-by-generated-fixture.md)).
 
-Milestone 2 is the core services — Market Data, Pons Indexer, Genesis/Card,
-Battle Engine and the WebSocket Gateway. The build order is in Kickoff Brief
-§18.
+**Milestone 2 — core services: logic complete, transports pending.** The
+deterministic core of every service in Kickoff Brief §18 is built and tested:
+market-data ingestion, Pons qualification, the Genesis lifecycle, the battle
+engine and round orchestration, and the realtime protocol. Each is a pure
+reducer, so the same code runs in production, in a test and in a replay.
+
+What is **not** built is the runnable `apps/*` shells that wire those cores to
+real transports — an HTTP server, a WebSocket server, PostgreSQL, an RPC client,
+a market-data vendor. Every one of those choices is still `OPEN` in
+[`docs/OPEN_PARAMETERS.md`](docs/OPEN_PARAMETERS.md), and §102 forbids picking
+one and shipping it as policy. The cores are shaped to be wired in when the
+decisions land.
+
+Milestone 3 is the spatial frontend prototype. It needs the design tokens noted
+in [`02_Claude_Guides/_MISSING.md`](02_Claude_Guides/_MISSING.md).
