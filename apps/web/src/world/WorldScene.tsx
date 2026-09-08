@@ -5,6 +5,7 @@ import { useMemo, useRef, type JSX } from 'react';
 import type { Group, PerspectiveCamera } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
 import { MARKET_CORE, SECTOR_POSITIONS } from './layout.js';
+import { WorldInput } from './WorldInput.js';
 
 /**
  * The persistent world scene (§37.9, §38).
@@ -177,6 +178,8 @@ export function WorldScene(): JSX.Element {
       <ambientLight intensity={0.25} />
       <directionalLight position={[400, 900, 300]} intensity={1.1} />
 
+      <WorldInput />
+
       <MarketCore />
 
       {SECTOR_POSITIONS.map((_, index) => (
@@ -187,8 +190,14 @@ export function WorldScene(): JSX.Element {
           detail={details[index] ?? 'SILHOUETTE'}
           isFocused={battles[index]?.battleId === camera.focusedBattleId}
           onSelect={(selected) => {
-            // Clicking a sector node flies to it (§37.3). At the sector level a
-            // second click descends to the battlefield.
+            // A pan that happens to end over a sector is not a click on it.
+            // Without this, dragging across the world flies the camera to
+            // whatever the finger was over when it lifted.
+            if (useSession.getState().dragMoved) {
+              return;
+            }
+            // Tapping a sector node flies to it (§37.3, §37.4). At the sector
+            // level a second tap descends to the battlefield.
             const now = nowUtc();
             if (zoom >= 2 && battles[selected]?.battleId === camera.focusedBattleId) {
               useSession.getState().enterBattlefield(selected, now);
