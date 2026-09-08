@@ -41,9 +41,6 @@ importers:
 
   apps/web:
     dependencies:
-      '@ponswars/battle-math':
-        specifier: workspace:*
-        version: link:../../packages/battle-math
       '@ponswars/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas

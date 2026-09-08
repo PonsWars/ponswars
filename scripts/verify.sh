@@ -23,6 +23,14 @@ if ! command -v forge >/dev/null 2>&1; then
   fi
 fi
 
+# First, because everything after it runs against whatever the dependency graph
+# actually is. CI installs with --frozen-lockfile, so a lockfile that disagrees
+# with a package.json fails there and nowhere else — which is how a green local
+# run pushed a red build twice. `--lockfile-only` resolves without touching
+# node_modules, so this costs well under a second.
+step 'lockfile in sync'
+pnpm install --frozen-lockfile --lockfile-only
+
 step 'format'
 npx prettier --check .
 
