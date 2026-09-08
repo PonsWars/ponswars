@@ -1,0 +1,28 @@
+{
+  "name": "@ponswars/round-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The round loop and the ports it needs. Composition, not transport.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/battle-engine": "workspace:*",
+    "@ponswars/battle-math": "workspace:*",
+    "@ponswars/realtime": "workspace:*",
+    "@ponswars/shared-types": "workspace:*"
+  }
+}

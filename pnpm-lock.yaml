@@ -154,6 +154,21 @@ importers:
         specifier: ^2.56.3
         version: 2.56.3(typescript@6.0.3)(zod@4.5.4)
 
+  packages/round-service:
+    dependencies:
+      '@ponswars/battle-engine':
+        specifier: workspace:*
+        version: link:../battle-engine
+      '@ponswars/battle-math':
+        specifier: workspace:*
+        version: link:../battle-math
+      '@ponswars/realtime':
+        specifier: workspace:*
+        version: link:../realtime
+      '@ponswars/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+
   packages/schemas:
     dependencies:
       '@ponswars/shared-types':
