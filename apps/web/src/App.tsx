@@ -40,62 +40,143 @@ const PLACEHOLDER_BATTLES: readonly ClientBattle[] = [
     sectorIndex: 0,
     left: 'NVDA',
     right: 'AAPL',
-    leftConfidence: 'FAVORED',
-    rightConfidence: 'UNDERDOG',
+    leftIntel: {
+      label: 'FAVORED',
+      priceTrend: 'STRONG',
+      volumePulse: 'RISING',
+      ponsActivity: 'HIGH',
+      momentumStability: 'STABLE',
+    },
+    rightIntel: {
+      label: 'UNDERDOG',
+      priceTrend: 'MIXED',
+      volumePulse: 'NORMAL',
+      ponsActivity: 'MEDIUM',
+      momentumStability: 'MIXED',
+    },
     momentum: 'CONTESTED',
     frontline: 0.5,
+    backing: null,
   },
   {
     battleId: 'preview-b1',
     sectorIndex: 1,
     left: 'MSFT',
     right: 'TSLA',
-    leftConfidence: 'EVEN',
-    rightConfidence: 'EVEN',
+    leftIntel: {
+      label: 'EVEN',
+      priceTrend: 'MIXED',
+      volumePulse: 'NORMAL',
+      ponsActivity: 'MEDIUM',
+      momentumStability: 'STABLE',
+    },
+    rightIntel: {
+      label: 'EVEN',
+      priceTrend: 'MIXED',
+      volumePulse: 'RISING',
+      ponsActivity: 'MEDIUM',
+      momentumStability: 'MIXED',
+    },
     momentum: 'PUSHING',
     frontline: 0.58,
+    backing: null,
   },
   {
     battleId: 'preview-b2',
     sectorIndex: 2,
     left: 'GME',
     right: 'META',
-    leftConfidence: 'HEAVY_UNDERDOG',
-    rightConfidence: 'DOMINANT',
+    leftIntel: {
+      label: 'HEAVY_UNDERDOG',
+      priceTrend: 'WEAK',
+      volumePulse: 'RISING',
+      ponsActivity: 'HIGH',
+      momentumStability: 'UNSTABLE',
+    },
+    rightIntel: {
+      label: 'DOMINANT',
+      priceTrend: 'STRONG',
+      volumePulse: 'NORMAL',
+      ponsActivity: 'LOW',
+      momentumStability: 'STABLE',
+    },
     momentum: 'SURGING',
     frontline: 0.34,
+    backing: { ticker: 'GME', cardDeployed: true },
   },
   {
     battleId: 'preview-b3',
     sectorIndex: 3,
     left: 'AMZN',
     right: 'GOOGL',
-    leftConfidence: 'STRONG_FAVORITE',
-    rightConfidence: 'UNDERDOG',
+    leftIntel: {
+      label: 'STRONG_FAVORITE',
+      priceTrend: 'STRONG',
+      volumePulse: 'RISING',
+      ponsActivity: 'MEDIUM',
+      momentumStability: 'STABLE',
+    },
+    rightIntel: {
+      label: 'UNDERDOG',
+      priceTrend: 'WEAK',
+      volumePulse: 'WEAK',
+      ponsActivity: 'LOW',
+      momentumStability: 'MIXED',
+    },
     momentum: 'DOMINATING',
     frontline: 0.71,
+    backing: null,
   },
   {
     battleId: 'preview-b4',
     sectorIndex: 4,
     left: 'AMD',
     right: 'SPY',
-    leftConfidence: 'UNDERDOG',
-    rightConfidence: 'FAVORED',
+    leftIntel: {
+      label: 'UNDERDOG',
+      priceTrend: 'MIXED',
+      volumePulse: 'RISING',
+      ponsActivity: 'HIGH',
+      momentumStability: 'UNSTABLE',
+    },
+    rightIntel: {
+      label: 'FAVORED',
+      priceTrend: 'STRONG',
+      volumePulse: 'NORMAL',
+      ponsActivity: 'LOW',
+      momentumStability: 'STABLE',
+    },
     momentum: 'COMEBACK',
     frontline: 0.53,
+    backing: null,
   },
 ];
+
+/**
+ * A placeholder wallet.
+ *
+ * The real values come from the indexer and the chain. Showing a fixed fragment
+ * in the prototype is honest as long as it is never mistaken for a connected
+ * wallet — `setWallet(null)` is what a disconnected session looks like, and the
+ * HUD renders that state explicitly rather than as a balance of zero.
+ */
+const PLACEHOLDER_WALLET = {
+  addressFragment: '0x4f2…9c1',
+  warBalance: '12,400',
+  warPoints: 1_180,
+};
 
 export function App(): JSX.Element {
   const setBattles = useSession((state) => state.setBattles);
   const setMyBattle = useSession((state) => state.setMyBattle);
+  const setWallet = useSession((state) => state.setWallet);
   const setReducedMotion = useSession((state) => state.setReducedMotion);
 
   useEffect(() => {
     setBattles(PLACEHOLDER_BATTLES);
     setMyBattle('preview-b2');
-  }, [setBattles, setMyBattle]);
+    setWallet(PLACEHOLDER_WALLET);
+  }, [setBattles, setMyBattle, setWallet]);
 
   useEffect(() => {
     // §83.3: honour the operating-system preference, and keep honouring it if
