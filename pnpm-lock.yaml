@@ -84,6 +84,12 @@ importers:
         specifier: workspace:*
         version: link:../shared-types
 
+  packages/realtime:
+    dependencies:
+      '@ponswars/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+
   packages/rewards-math:
     dependencies:
       '@ponswars/shared-types':

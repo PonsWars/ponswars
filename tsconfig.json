@@ -30,6 +30,9 @@
     },
     {
       "path": "./packages/genesis-service/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/realtime/tsconfig.build.json"
     }
   ]
 }
