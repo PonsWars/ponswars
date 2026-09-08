@@ -1,4 +1,4 @@
-import type { ActiveTicker, ConfidenceLabel, MomentumState } from '@ponswars/shared-types';
+import type { ActiveTicker, ConfidenceSnapshot, MomentumState } from '@ponswars/shared-types';
 import {
   advance,
   applyDrift,
@@ -52,14 +52,34 @@ import { NAVIGATION } from '../world/navigation-config.js';
  * already finalized.
  */
 
+/**
+ * What the player has committed to in one battle (§22, §42.6).
+ *
+ * Server-confirmed. A pick becomes real when the round state says so, never
+ * when the button was pressed — §22 makes the lock authoritative, and a client
+ * that shows its own optimistic guess as settled is how a player believes they
+ * are in a war they never entered.
+ */
+export interface Backing {
+  readonly ticker: ActiveTicker;
+  readonly cardDeployed: boolean;
+}
+
 /** A battle as the client knows it. Presentation fields only. */
 export interface ClientBattle {
   readonly battleId: string;
   readonly sectorIndex: number;
   readonly left: ActiveTicker;
   readonly right: ActiveTicker;
-  readonly leftConfidence: ConfidenceLabel;
-  readonly rightConfidence: ConfidenceLabel;
+  /**
+   * Pre-battle intel for each side (§27.5, §42.4).
+   *
+   * A `ConfidenceSnapshot` and not a number: §10.2 gives the client a label and
+   * four qualitative sub-signals, and deliberately no percentage. Carrying the
+   * snapshot whole means a panel cannot render a confidence it computed itself.
+   */
+  readonly leftIntel: ConfidenceSnapshot;
+  readonly rightIntel: ConfidenceSnapshot;
   /**
    * Latest momentum from `BATTLE_STATE_UPDATE`.
    *
@@ -69,6 +89,42 @@ export interface ClientBattle {
    */
   readonly momentum: MomentumState;
   readonly frontline: number;
+  /** The player's confirmed backing, or `null` if they have not picked. */
+  readonly backing: Backing | null;
+}
+
+/**
+ * The wallet fragment §42.2 keeps at the global view.
+ *
+ * `null` until a wallet is connected, which renders as an explicit
+ * disconnected state. §42.14 asks for useful sync states rather than a
+ * placeholder that looks like a real balance of zero.
+ */
+export interface WalletSummary {
+  /** Shortened address, e.g. `0x4f2…9c1`. Never the full address in the HUD. */
+  readonly addressFragment: string;
+  /**
+   * `$WAR` balance, already formatted from base units by the caller.
+   *
+   * A string, not a number. §66.3 keeps token amounts in integer base units all
+   * the way to the edge; formatting them into a float here to render them would
+   * be the one place the rule quietly breaks.
+   */
+  readonly warBalance: string;
+  /** Current-window War Points (§16.2). A whole count, not a token amount. */
+  readonly warPoints: number;
+}
+
+/**
+ * A pick the player is composing but the server has not confirmed (§42.5).
+ *
+ * Transient interaction state, which is exactly what §80.2 allows the store to
+ * hold. It is deliberately separate from `ClientBattle.backing`: one is what the
+ * player is doing, the other is what is true.
+ */
+export interface PendingPick {
+  readonly battleId: string;
+  readonly ticker: ActiveTicker;
 }
 
 interface SessionState {
@@ -91,11 +147,16 @@ interface SessionState {
   readonly myBattleId: string | null;
   readonly quality: QualityTier;
   readonly reducedMotion: boolean;
+  readonly wallet: WalletSummary | null;
+  readonly pendingPick: PendingPick | null;
 
   setBattles: (battles: readonly ClientBattle[]) => void;
   setMyBattle: (battleId: string | null) => void;
   setQuality: (tier: QualityTier) => void;
   setReducedMotion: (reduced: boolean) => void;
+  setWallet: (wallet: WalletSummary | null) => void;
+  /** Composes a pick for the focused battle (§42.5 step 3). */
+  proposePick: (pick: PendingPick | null) => void;
 
   tick: (at: UtcTimestamp) => void;
   focusSector: (index: number, at: UtcTimestamp) => void;
@@ -159,9 +220,16 @@ export const useSession = create<SessionState>((set, get) => ({
   myBattleId: null,
   quality: 'BALANCED',
   reducedMotion: false,
+  wallet: null,
+  pendingPick: null,
 
   setBattles: (battles) => {
-    set({ battles });
+    // A pick aimed at a battle that no longer exists — a reshuffle, a
+    // reconnect — is dropped rather than left pointing at nothing.
+    const { pendingPick } = get();
+    const stillOffered =
+      pendingPick !== null && battles.some((battle) => battle.battleId === pendingPick.battleId);
+    set({ battles, pendingPick: stillOffered ? pendingPick : null });
   },
 
   setMyBattle: (battleId) => {
@@ -170,6 +238,14 @@ export const useSession = create<SessionState>((set, get) => ({
 
   setQuality: (quality) => {
     set({ quality });
+  },
+
+  setWallet: (wallet) => {
+    set({ wallet });
+  },
+
+  proposePick: (pendingPick) => {
+    set({ pendingPick });
   },
 
   setReducedMotion: (reducedMotion) => {
