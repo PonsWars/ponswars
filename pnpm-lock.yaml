@@ -106,6 +106,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@ponswars/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
       '@ponswars/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
@@ -242,6 +245,9 @@ importers:
       '@ponswars/realtime':
         specifier: workspace:*
         version: link:../realtime
+      '@ponswars/schemas':
+        specifier: workspace:*
+        version: link:../schemas
       '@ponswars/shared-types':
         specifier: workspace:*
         version: link:../shared-types

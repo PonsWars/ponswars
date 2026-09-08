@@ -11,6 +11,7 @@
     "clean": "tsc --build --clean"
   },
   "dependencies": {
+    "@ponswars/realtime": "workspace:*",
     "@ponswars/schemas": "workspace:*",
     "@ponswars/shared-types": "workspace:*",
     "@ponswars/ui-tokens": "workspace:*",

@@ -12,5 +12,6 @@
     "apps/**/*.test.tsx",
     "tools/**/*.test.ts",
     "simulations/**/*.test.ts"
-  ]
+  ],
+  "exclude": ["apps/web/**"]
 }

@@ -49,6 +49,10 @@ npx tsc --build
 step 'lint'
 npx eslint .
 
+# The web app's own tests are excluded here and covered by the build below.
+# They need the DOM lib and Vite's ambient `import.meta.env`, which this project
+# does not have and should not gain — adding browser globals to the config that
+# checks server tests would let a Node service reference `window` and compile.
 step 'typecheck (test projects)'
 npx tsc -p tsconfig.tests.json
 

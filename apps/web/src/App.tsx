@@ -3,7 +3,10 @@ import {
   utcTimestamp,
   type FinalizedBattleResult,
 } from '@ponswars/shared-types';
+import { LAYER } from '@ponswars/ui-tokens';
 import { lazy, Suspense, useEffect, type JSX } from 'react';
+import { PreviewBanner } from './live/PreviewBanner.js';
+import { useLiveWorld } from './live/useLiveWorld.js';
 import type { GenesisOutcome } from './genesis/GenesisReveal.js';
 import { Hud } from './hud/Hud.js';
 import { Presentations, type FinishedBattle } from './presentation/Presentations.js';
@@ -320,13 +323,25 @@ export function App(): JSX.Element {
   const setCard = useSession((state) => state.setCard);
   const setReducedMotion = useSession((state) => state.setReducedMotion);
 
+  // Opens the round fetch and the realtime stream, or reports that this build
+  // was never told where they are.
+  const status = useLiveWorld();
+
   useEffect(() => {
+    // Only when there is nothing real to show. A configured build that fell
+    // back to these would be presenting invented battles as a running round,
+    // which is the one thing this client must never do — the banner says
+    // PREVIEW because the content is a preview, and both have to stay true
+    // together.
+    if (status.live) {
+      return;
+    }
     setBattles(PLACEHOLDER_BATTLES);
     setMyBattle('preview-b2');
     setWallet(PLACEHOLDER_WALLET);
     setRound(placeholderRound());
     setCard({ name: 'Bull Run', rarity: 'RARE', usesRemaining: 7 });
-  }, [setBattles, setMyBattle, setWallet, setRound, setCard]);
+  }, [status.live, setBattles, setMyBattle, setWallet, setRound, setCard]);
 
   useEffect(() => {
     // A shared `/war/:battleId` link arrives focused on that battle (§80.4).
@@ -364,6 +379,22 @@ export function App(): JSX.Element {
         <WorldCanvas />
       </Suspense>
       <Hud onNavigate={navigate} />
+      <div
+        style={{
+          position: 'fixed',
+          top: 'var(--pw-space-3)',
+          left: 0,
+          right: 0,
+          display: 'grid',
+          justifyItems: 'center',
+          // Information, not a control: it must never intercept a drag meant
+          // for the world beneath it (§37.3).
+          pointerEvents: 'none',
+          zIndex: LAYER.hud,
+        }}
+      >
+        <PreviewBanner status={status} />
+      </div>
       {isPresentation(route) ? (
         <Presentations
           route={route}
