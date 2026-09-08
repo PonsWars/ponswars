@@ -46,6 +46,15 @@ export function PresentationLinks({
       >
         GENESIS
       </button>
+      <button
+        type="button"
+        style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
+        onClick={() => {
+          onNavigate({ kind: 'RESULT' });
+        }}
+      >
+        RESULT
+      </button>
     </div>
   );
 }

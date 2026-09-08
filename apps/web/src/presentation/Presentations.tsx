@@ -1,8 +1,11 @@
 import { useState, type JSX } from 'react';
+import type { ActiveTicker, ConfidenceLabel, FinalizedBattleResult } from '@ponswars/shared-types';
 import { GenesisReveal, type GenesisOutcome } from '../genesis/GenesisReveal.js';
 import { WarRoom, type ProfileData } from '../profile/WarRoom.js';
 import { RewardsHub, type PoolStatus } from '../rewards/RewardsHub.js';
 import { canTransitionClaim, type ClaimState, type RewardView } from '../rewards/reward-view.js';
+import { ResultScreen } from '../result/ResultScreen.js';
+import { playerResultView } from '../result/result-view.js';
 import { WORLD_ROUTE, type PresentationRoute, type Route } from '../routing/route.js';
 import { Overlay } from './Overlay.js';
 
@@ -21,6 +24,7 @@ export function Presentations({
   reward,
   pool,
   genesis,
+  result,
 }: {
   readonly route: PresentationRoute;
   readonly navigate: (next: Route) => void;
@@ -28,6 +32,7 @@ export function Presentations({
   readonly reward: RewardView;
   readonly pool: PoolStatus | null;
   readonly genesis: GenesisOutcome | null;
+  readonly result: FinishedBattle | null;
 }): JSX.Element {
   const close = (): void => {
     navigate(WORLD_ROUTE);
@@ -46,6 +51,32 @@ export function Presentations({
           <RewardsPresentation view={reward} pool={pool} />
         </Overlay>
       );
+    case 'RESULT':
+      return (
+        <Overlay title="BATTLE RESULT" onClose={close}>
+          {result === null ? (
+            // §22: a result exists only after finalization. Before that there is
+            // nothing honest to show, and inventing a placeholder scoreline on
+            // the one screen that carries real numbers would be the worst place
+            // in the product to do it.
+            <div style={{ color: 'var(--pw-text-3)', fontSize: 13 }}>NO FINALIZED BATTLE YET</div>
+          ) : (
+            <ResultScreen
+              result={result.result}
+              player={
+                result.backed === null
+                  ? null
+                  : playerResultView({
+                      backed: result.backed,
+                      winner: result.result.winner,
+                      winnerConfidence: result.winnerConfidence,
+                      cardDeployed: result.cardDeployed,
+                    })
+              }
+            />
+          )}
+        </Overlay>
+      );
     case 'GENESIS':
       return (
         <Overlay title="GENESIS" onClose={close}>
@@ -61,6 +92,21 @@ export function Presentations({
         </Overlay>
       );
   }
+}
+
+/**
+ * A finalized battle plus what the player had riding on it.
+ *
+ * The backing is separate from the result because the result is the same for
+ * every spectator and the backing is not (§61 principle 3). `null` is a
+ * spectator, which is the common case.
+ */
+export interface FinishedBattle {
+  readonly result: FinalizedBattleResult;
+  readonly backed: ActiveTicker | null;
+  /** The winner's pre-battle confidence, snapshotted at lock (§10.3). */
+  readonly winnerConfidence: ConfidenceLabel;
+  readonly cardDeployed: boolean;
 }
 
 /**

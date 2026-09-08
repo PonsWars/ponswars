@@ -22,7 +22,7 @@ export interface WorldRoute {
 
 /** A presentation layered over the world. */
 export interface PresentationRoute {
-  readonly kind: 'PROFILE' | 'REWARDS' | 'GENESIS';
+  readonly kind: 'PROFILE' | 'REWARDS' | 'GENESIS' | 'RESULT';
 }
 
 export type Route = WorldRoute | PresentationRoute;
@@ -48,6 +48,8 @@ export function parseRoute(pathname: string): Route {
       return { kind: 'REWARDS' };
     case 'genesis':
       return { kind: 'GENESIS' };
+    case 'result':
+      return { kind: 'RESULT' };
     case 'war':
       // `/war` with no id is still the world, just unfocused. A URL truncated
       // in a chat client should not become a dead end.
@@ -66,6 +68,8 @@ export function pathFor(route: Route): string {
       return '/rewards';
     case 'GENESIS':
       return '/genesis';
+    case 'RESULT':
+      return '/result';
     case 'WORLD':
       return route.battleId === null ? '/' : `/war/${route.battleId}`;
   }

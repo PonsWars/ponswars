@@ -1,8 +1,12 @@
-import { buildCanonicalClock, utcTimestamp } from '@ponswars/shared-types';
+import {
+  buildCanonicalClock,
+  utcTimestamp,
+  type FinalizedBattleResult,
+} from '@ponswars/shared-types';
 import { lazy, Suspense, useEffect, type JSX } from 'react';
 import type { GenesisOutcome } from './genesis/GenesisReveal.js';
 import { Hud } from './hud/Hud.js';
-import { Presentations } from './presentation/Presentations.js';
+import { Presentations, type FinishedBattle } from './presentation/Presentations.js';
 import type { ProfileData } from './profile/WarRoom.js';
 import { activeWindowView } from './rewards/reward-view.js';
 import type { PoolStatus } from './rewards/RewardsHub.js';
@@ -260,6 +264,43 @@ const PLACEHOLDER_PROFILE: ProfileData = {
 
 const PLACEHOLDER_POOL: PoolStatus = { balance: '12.40' };
 
+/**
+ * A placeholder finalized battle.
+ *
+ * Scores are carried in whole tenths, exactly as the engine produces them, so
+ * the screen formats rather than divides. The two sides sum to 100.0 — the
+ * result screen is the one place a number is finally shown, and halves that did
+ * not add up would undermine the only screen whose job is to show the working.
+ */
+const PLACEHOLDER_RESULT: FinishedBattle = {
+  result: {
+    battleId: 'preview-b2',
+    roundId: 'preview-round',
+    left: 'GME',
+    right: 'META',
+    winner: 'GME',
+    leftScore: {
+      priceMomentum: 238,
+      relativeVolume: 141,
+      ponsPower: 118,
+      holderCardSupport: 66,
+    },
+    rightScore: {
+      priceMomentum: 162,
+      relativeVolume: 109,
+      ponsPower: 82,
+      holderCardSupport: 84,
+    },
+    victoryLabel: 'MAJOR_UPSET',
+    scoringEngineVersion: 'battle-engine-v1',
+    finalizedAt: utcTimestamp(Date.now()),
+    evidenceHash: '0x9f2c41ab7e5d0c3891fe64d0a27b5c18e3d47f9a0b6c2e81',
+  } as FinalizedBattleResult,
+  backed: 'GME',
+  winnerConfidence: 'HEAVY_UNDERDOG',
+  cardDeployed: true,
+};
+
 const PLACEHOLDER_GENESIS: GenesisOutcome = {
   genesisId: '008271',
   rarity: 'RARE',
@@ -335,6 +376,7 @@ export function App(): JSX.Element {
           })}
           pool={PLACEHOLDER_POOL}
           genesis={PLACEHOLDER_GENESIS}
+          result={PLACEHOLDER_RESULT}
         />
       ) : null}
     </>

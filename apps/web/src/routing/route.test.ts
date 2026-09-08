@@ -7,6 +7,7 @@ const ALL_ROUTES: readonly Route[] = [
   { kind: 'PROFILE' },
   { kind: 'REWARDS' },
   { kind: 'GENESIS' },
+  { kind: 'RESULT' },
 ];
 
 describe('parseRoute', () => {
@@ -40,6 +41,7 @@ describe('parseRoute', () => {
     expect(parseRoute('/profile')).toEqual({ kind: 'PROFILE' });
     expect(parseRoute('/rewards')).toEqual({ kind: 'REWARDS' });
     expect(parseRoute('/genesis')).toEqual({ kind: 'GENESIS' });
+    expect(parseRoute('/result')).toEqual({ kind: 'RESULT' });
   });
 });
 
@@ -62,5 +64,6 @@ describe('isPresentation', () => {
     expect(isPresentation({ kind: 'PROFILE' })).toBe(true);
     expect(isPresentation({ kind: 'REWARDS' })).toBe(true);
     expect(isPresentation({ kind: 'GENESIS' })).toBe(true);
+    expect(isPresentation({ kind: 'RESULT' })).toBe(true);
   });
 });
