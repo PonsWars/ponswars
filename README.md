@@ -56,12 +56,13 @@ docs/         ADRs, open-parameter registry, operations
 
 ## Packages
 
-| Package                                           | Holds                                                                                 |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [`@ponswars/shared-types`](packages/shared-types) | Every **LOCKED** constant and the domain types that cross a process boundary          |
-| [`@ponswars/config`](packages/config)             | Every **OPEN** parameter, validated at startup with no defaults                       |
-| [`@ponswars/battle-math`](packages/battle-math)   | Deterministic matchmaking, the battle score engine, winner resolution and Genesis RNG |
-| [`@ponswars/rewards-math`](packages/rewards-math) | The 24-hour allocation procedure and the Merkle tree behind on-chain claims           |
+| Package                                             | Holds                                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [`@ponswars/shared-types`](packages/shared-types)   | Every **LOCKED** constant and the domain types that cross a process boundary          |
+| [`@ponswars/config`](packages/config)               | Every **OPEN** parameter, validated at startup with no defaults                       |
+| [`@ponswars/battle-math`](packages/battle-math)     | Deterministic matchmaking, the battle score engine, winner resolution and Genesis RNG |
+| [`@ponswars/rewards-math`](packages/rewards-math)   | The 24-hour allocation procedure and the Merkle tree behind on-chain claims           |
+| [`@ponswars/round-service`](packages/round-service) | The round loop and the five ports it needs. Composition, not transport                |
 
 The split is deliberate and is the subject of
 [ADR 0002](docs/adr/0002-locked-constants-versus-open-configuration.md).
@@ -209,6 +210,21 @@ and 18 that do not need a running transport, plus the runbooks of step 20.
   distribution needs publishing, or a result is disputed — and, more often the
   point, what never to do.
 
+**Milestone 5 — the round loop: complete.** `nextRoundAction` decides what a
+round is due for at an instant, and `@ponswars/round-service` performs it
+against five ports: market data, picks, chain, publisher, store.
+
+Those five are the entire surface between the deterministic core and the outside
+world. Everything else — matchmaking, scoring, momentum, victory, awards,
+evidence — is already computed from inputs the engine is handed. Which database
+and which vendor sit behind the ports is still `OPEN`, and naming one would ship
+that decision as policy; naming the shape does not, because the shape is fixed
+by what the engine consumes and by the schema in `database/migrations`.
+
+In-memory adapters make the loop runnable and are deliberately not a default. A
+service that stored rounds in a `Map` unless told otherwise would be exactly the
+silent `OPEN` value §102 rules out.
+
 There is no `as never`, `as any`, `@ts-ignore`, `@ts-expect-error` or ESLint
 suppression anywhere in the repository, and no skipped test.
 
@@ -217,14 +233,15 @@ suppression anywhere in the repository, and no skipped test.
 Everything remaining in §60's execution order waits on a decision rather than on
 implementation. Listed so the blocking decision is visible rather than buried:
 
-| Step                                     | Blocked on                                                                                                                |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Runnable `apps/*` service shells         | The HTTP framework, WebSocket server, database, RPC provider and market-data vendor — all `OPEN` (§102)                   |
-| 17 · historical calibration              | The market-data vendor. The replay harness is built and takes recorded ticks from any source                              |
-| 18 · load testing                        | A running transport to put load on                                                                                        |
-| 19 · contract security review            | An independent auditor. Not something this repository can do to itself                                                    |
-| 20 · infrastructure, backups, monitoring | Hosting. The runbooks that do not depend on it are written                                                                |
-| 21–23 · freeze, deploy, activation       | Steps 1 and 2 of §60: the `$WAR` launch and treasury parameters, and the legal review of the Genesis and Secret structure |
+| Step                                     | Blocked on                                                                                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Adapters behind the five ports           | The database, market-data vendor, RPC provider and socket server — all `OPEN` (§102). The loop and the ports they plug into are built |
+| An HTTP surface for pick submission      | The web framework. `@ponswars/schemas` already defines the payloads                                                                   |
+| 17 · historical calibration              | The market-data vendor. The replay harness is built and takes recorded ticks from any source                                          |
+| 18 · load testing                        | A running transport to put load on                                                                                                    |
+| 19 · contract security review            | An independent auditor. Not something this repository can do to itself                                                                |
+| 20 · infrastructure, backups, monitoring | Hosting. The runbooks that do not depend on it are written                                                                            |
+| 21–23 · freeze, deploy, activation       | Steps 1 and 2 of §60: the `$WAR` launch and treasury parameters, and the legal review of the Genesis and Secret structure             |
 
 Each of those is a product or business decision, and §102 is explicit that an
 `OPEN` value must not be invented and shipped as policy. The cores every one of
