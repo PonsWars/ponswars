@@ -1,4 +1,4 @@
-import { ROUND_DURATION, type UtcTimestamp } from '@ponswars/shared-types';
+import { milliseconds, ROUND_DURATION, type UtcTimestamp } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
 import {
   acceptsPickAt,
@@ -14,7 +14,7 @@ import {
 const EPOCH = 1_800_000_000_000 as UtcTimestamp;
 const at = (offset: number): UtcTimestamp => (EPOCH + offset) as UtcTimestamp;
 
-const POLICY: FinalizationPolicy = { maxWait: 5_000 as never };
+const POLICY: FinalizationPolicy = { maxWait: milliseconds(5_000) };
 
 describe('clockForRound', () => {
   it('places round zero at the epoch', () => {

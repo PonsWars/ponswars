@@ -9,6 +9,7 @@ import {
   type RoundId,
   type UtcTimestamp,
   type WalletAddress,
+  milliseconds,
 } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
 import { CURRENT_ENGINE_VERSIONS, type EngineConfig, type TickInput } from './engine.js';
@@ -36,7 +37,7 @@ const CONFIG: EngineConfig = {
   },
   momentum: { push: 100_000n, surge: 200_000n, dominance: 400_000n, comeback: 300_000n },
   victory: { narrowMargin: 4_000_000n, decisiveMargin: 30_000_000n },
-  finalization: { maxWait: 5_000 as never },
+  finalization: { maxWait: milliseconds(5_000) },
   versions: CURRENT_ENGINE_VERSIONS,
   cardSupportTiers: { medium: 100n, high: 1_000n, max: 10_000n },
 };
