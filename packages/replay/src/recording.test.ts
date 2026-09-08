@@ -35,7 +35,24 @@ const RECORDING = {
   clock: buildCanonicalClock(OPEN_AT, OPEN_AT),
   baseSeedHex: `0x${'5c'.repeat(32)}`,
   recentRounds: [],
-  confidence: { NVDA: 'EVEN' },
+  confidence: {
+    lookback: {
+      NVDA: {
+        windowReturn: 250_000n,
+        volatility: 1_000_000n,
+        relativeVolume: 1_100_000n,
+        qualifiedPonsActivity: 30n,
+        subWindowReturns: [10n, -20n, 30n],
+      },
+    },
+    calibration: {
+      priceTrend: { strong: 500_000n, weak: -500_000n },
+      volumePulse: { rising: 1_300_000n, weak: 700_000n },
+      ponsActivity: { high: 40n, medium: 15n },
+      momentumStability: { stable: 2, mixed: 5 },
+      matchup: { favored: 20, strongFavorite: 60, dominant: 120 },
+    },
+  },
   picks: [],
   tickLogs: [],
   finalizationBlockHash: `0x${'e1'.repeat(32)}`,
@@ -55,14 +72,32 @@ describe('the codec', () => {
     expect(typeof decoded.config.scoring.priceEdgeDivisor).toBe('bigint');
     expect(decoded.config.scoring.priceEdgeDivisor).toBe(CONFIG.scoring.priceEdgeDivisor);
     expect(decoded.config.momentum.push).toBe(CONFIG.momentum.push);
+
+    // Including the ones nested inside the confidence lookback and its array of
+    // sub-window returns (§10.1). A recording whose lookback came back as
+    // strings would replay to different labels, and §11 prices an upset from
+    // those labels.
+    const lookback = decoded.confidence.lookback['NVDA'];
+    expect(lookback?.windowReturn).toBe(250_000n);
+    expect(lookback?.subWindowReturns).toEqual([10n, -20n, 30n]);
   });
 
   it('does not confuse a plain object for an encoded bigint', () => {
     // The encoding marks a bigint with a `$bigint` string. An ordinary object
     // that happens to have that key with a non-string value must pass through
     // rather than be coerced.
-    const odd = { ...RECORDING, confidence: { NVDA: 'EVEN' }, roundId: 'r-2' };
-    expect(decodeRecording(encodeRecording(odd as unknown as RoundRecording)).roundId).toBe('r-2');
+    // The object has the marker key, which is what makes it a near miss: only
+    // the value's type separates it from a real encoded bigint. The previous
+    // version of this test passed an object with no marker at all, so it never
+    // reached the branch it describes.
+    const encoded = encodeRecording(RECORDING).replace(
+      '"roundId":"r-1"',
+      '"roundId":"r-1","decoy":{"$bigint":42}',
+    );
+    const decoded = decodeRecording(encoded) as RoundRecording & { decoy: unknown };
+
+    expect(decoded.decoy).toEqual({ $bigint: 42 });
+    expect(decoded.roundId).toBe('r-1');
   });
 });
 
