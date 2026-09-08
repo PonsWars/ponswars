@@ -1,0 +1,26 @@
+@import 'tailwindcss';
+@import '@ponswars/ui-tokens/tokens.css';
+
+/*
+ * The world is the hero (§42.1). The page itself is a dark ground the canvas
+ * sits on, with no chrome of its own.
+ */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--pw-bg-0);
+  color: var(--pw-text-1);
+  font-family: var(--pw-font-ui);
+  overscroll-behavior: none;
+}
+
+/*
+ * The canvas owns drag and pinch (§37.3, §37.4). Letting the page scroll
+ * underneath would make panning the world fight the browser.
+ */
+canvas {
+  touch-action: none;
+  display: block;
+}
