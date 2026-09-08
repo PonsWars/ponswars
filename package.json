@@ -32,7 +32,8 @@
     "hooks:install": "git config core.hooksPath .githooks",
     "replay": "node tools/replay-round.mjs",
     "audit:distribution": "node tools/verify-distribution.mjs",
-    "audit:genesis": "node tools/audit-genesis.mjs"
+    "audit:genesis": "node tools/audit-genesis.mjs",
+    "local": "pnpm run build && node apps/local-stack/dist/main.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

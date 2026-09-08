@@ -1,0 +1,22 @@
+{
+  "name": "@ponswars/local-stack",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs the whole loop locally against a synthetic market. Development only — not a deployable.",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@ponswars/api": "workspace:*",
+    "@ponswars/battle-engine": "workspace:*",
+    "@ponswars/battle-math": "workspace:*",
+    "@ponswars/gateway": "workspace:*",
+    "@ponswars/realtime": "workspace:*",
+    "@ponswars/round-service": "workspace:*",
+    "@ponswars/shared-types": "workspace:*"
+  }
+}

@@ -68,6 +68,32 @@ from every one of them is the same thing: a decision. The web framework, the
 socket server, the database, the RPC provider and the market-data vendor are all
 `OPEN` (§102), and inventing one to fill a directory would ship it as policy.
 
+## Running it
+
+```bash
+pnpm install && pnpm run local
+```
+
+One process: the round orchestrator, the HTTP API on `:4000` and the WebSocket
+gateway on `:4001`. Rounds open, accept picks, lock after a minute, tick for
+nine and finalize, and anything connected watches it happen.
+
+```bash
+curl http://127.0.0.1:4000/v1/rounds/current
+```
+
+**It is a development stack and says so on startup.** Two of the five ports are
+stand-ins: the market is synthetic and the store is in memory. That is not a
+shortcut taken to get something running — the market-data vendor and the
+database are `OPEN` decisions (§102), and a stack that quietly picked one would
+be shipping that decision as policy. Replacing either is one constructor
+argument, which is the property the stack exists to demonstrate.
+
+The synthetic market is explicitly not a vendor adapter and must never become
+one. Choosing a provider is a commercial and licensing decision before it is an
+engineering one: showing real-time prices to visitors who have not logged in is
+redistribution under most market-data agreements, and priced accordingly.
+
 ## Operator tools
 
 Three commands, each one a step an incident runbook tells someone to take. A

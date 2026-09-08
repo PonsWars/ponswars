@@ -80,6 +80,30 @@ importers:
         specifier: ^8.18.1
         version: 8.18.1
 
+  apps/local-stack:
+    dependencies:
+      '@ponswars/api':
+        specifier: workspace:*
+        version: link:../api
+      '@ponswars/battle-engine':
+        specifier: workspace:*
+        version: link:../../packages/battle-engine
+      '@ponswars/battle-math':
+        specifier: workspace:*
+        version: link:../../packages/battle-math
+      '@ponswars/gateway':
+        specifier: workspace:*
+        version: link:../gateway
+      '@ponswars/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
+      '@ponswars/round-service':
+        specifier: workspace:*
+        version: link:../../packages/round-service
+      '@ponswars/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+
   apps/web:
     dependencies:
       '@ponswars/schemas':

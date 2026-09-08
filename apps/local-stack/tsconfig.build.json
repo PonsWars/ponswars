@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../../packages/shared-types/tsconfig.build.json" },
+    { "path": "../../packages/battle-math/tsconfig.build.json" },
+    { "path": "../../packages/battle-engine/tsconfig.build.json" },
+    { "path": "../../packages/realtime/tsconfig.build.json" },
+    { "path": "../../packages/round-service/tsconfig.build.json" },
+    { "path": "../api/tsconfig.build.json" },
+    { "path": "../gateway/tsconfig.build.json" }
+  ]
+}

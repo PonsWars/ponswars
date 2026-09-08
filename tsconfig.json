@@ -47,6 +47,9 @@
       "path": "./apps/gateway/tsconfig.build.json"
     },
     {
+      "path": "./apps/local-stack/tsconfig.build.json"
+    },
+    {
       "path": "./packages/world-runtime/tsconfig.build.json"
     },
     {
