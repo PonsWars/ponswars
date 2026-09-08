@@ -1,0 +1,64 @@
+# Foundry configuration for the two V1 contracts.
+#
+# Masterplan §19: minimal, non-upgradeable where practical, easy to audit,
+# narrow permissions. §65 fixes the src / test / script / deployments layout.
+
+[profile.default]
+src = "contracts/src"
+test = "contracts/test"
+script = "contracts/script"
+out = "contracts/out"
+cache_path = "contracts/cache"
+libs = ["lib"]
+solc_version = "0.8.30"
+
+# The optimizer is on with a low run count: these contracts are deployed once
+# and called often enough that runtime cost matters, but not so often that
+# aggressive inlining is worth the larger, harder-to-audit bytecode.
+optimizer = true
+optimizer_runs = 200
+
+# via_ir produces smaller, better-optimised code and, more importantly here,
+# avoids stack-too-deep rewrites that would obscure otherwise readable logic.
+via_ir = true
+
+# Warnings are failures. An unused variable or a shadowed declaration in a
+# contract that settles real value is worth stopping for.
+deny = "warnings"
+
+# OpenZeppelin comes from the workspace node_modules rather than a git
+# submodule, so one package manager owns every dependency in the repo and CI
+# does not need a second fetch step. That is also why this file sits at the
+# repository root: solc refuses to read outside the project root, and
+# node_modules is a sibling of contracts/, not a child.
+remappings = [
+  "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
+  "forge-std/=lib/forge-std/src/",
+]
+
+[fmt]
+line_length = 100
+tab_width = 4
+bracket_spacing = false
+int_types = "long"
+
+[profile.default.fuzz]
+runs = 512
+
+[profile.ci.fuzz]
+runs = 5000
+
+[lint]
+# asm-keccak256 suggests rewriting a keccak256 call in inline assembly to save
+# gas. §19 asks for contracts that are easy to audit, and hand-written assembly
+# in the line that decides whether a payout is authorised is a poor trade for a
+# few hundred gas on a once-per-wallet call.
+#
+# calls-loop flags an external call inside a loop. Neither production contract
+# contains a loop at all — verified, and worth re-checking if that changes —
+# so every hit is in a test that deliberately drives N reservations or N
+# claims to prove an invariant holds across many accounts.
+exclude_lints = [
+  "asm-keccak256",
+  "calls-loop",
+]

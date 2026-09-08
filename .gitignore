@@ -19,10 +19,11 @@ coverage/
 !.env.example
 
 # Contracts (Foundry)
+# lib/ is deliberately NOT ignored: forge-std is a git submodule, and the
+# pinned commit is part of what makes a build reproducible.
 contracts/out/
 contracts/cache/
 contracts/broadcast/
-contracts/lib/
 
 # Logs
 *.log

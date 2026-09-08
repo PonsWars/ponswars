@@ -10,3 +10,9 @@ START_HERE.md
 
 # Generated scripts and env example are checked, not formatted
 .env.example
+
+# Vendored Foundry dependency. Not ours to format.
+lib
+
+# Solidity is formatted by `forge fmt`, which understands it; Prettier does not.
+contracts
