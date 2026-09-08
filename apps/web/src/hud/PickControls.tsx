@@ -2,6 +2,7 @@ import type { ActiveTicker } from '@ponswars/shared-types';
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
 import { useSession, type ClientBattle } from '../state/session.js';
+import { roundView } from './round-phase.js';
 import { captionStyle, controlStyle, panelStyle } from './styles.js';
 
 /**
@@ -22,6 +23,12 @@ import { captionStyle, controlStyle, panelStyle } from './styles.js';
 export function PickControls({ battle }: { readonly battle: ClientBattle }): JSX.Element {
   const pendingPick = useSession((state) => state.pendingPick);
   const proposePick = useSession((state) => state.proposePick);
+  const round = useSession((state) => state.round);
+
+  // Picks close at lock and never reopen (§3.2, §22). The buttons go away
+  // rather than being shown disabled: an inert CTA still reads as an offer, and
+  // §42.1 would rather show less UI than a control that cannot be used.
+  const picksAllowed = round !== null && roundView(round.state, round.clock).picksAllowed;
 
   if (battle.backing !== null) {
     return (
@@ -36,6 +43,15 @@ export function PickControls({ battle }: { readonly battle: ClientBattle }): JSX
         >
           {battle.backing.ticker}
         </div>
+      </div>
+    );
+  }
+
+  if (!picksAllowed) {
+    return (
+      <div style={panelStyle}>
+        <div style={captionStyle}>YOUR BACKING</div>
+        <div style={{ fontFamily: 'var(--pw-font-display)', fontSize: 15 }}>SPECTATING</div>
       </div>
     );
   }
