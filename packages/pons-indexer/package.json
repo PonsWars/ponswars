@@ -1,0 +1,25 @@
+{
+  "name": "@ponswars/pons-indexer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Chain activity qualification: anti-abuse filtering and unique active wallets.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/shared-types": "workspace:*"
+  }
+}
