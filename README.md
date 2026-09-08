@@ -47,10 +47,12 @@ docs/         ADRs, open-parameter registry, operations
 
 ## Packages
 
-| Package                                           | Holds                                                                        |
-| ------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [`@ponswars/shared-types`](packages/shared-types) | Every **LOCKED** constant and the domain types that cross a process boundary |
-| [`@ponswars/config`](packages/config)             | Every **OPEN** parameter, validated at startup with no defaults              |
+| Package                                           | Holds                                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [`@ponswars/shared-types`](packages/shared-types) | Every **LOCKED** constant and the domain types that cross a process boundary          |
+| [`@ponswars/config`](packages/config)             | Every **OPEN** parameter, validated at startup with no defaults                       |
+| [`@ponswars/battle-math`](packages/battle-math)   | Deterministic matchmaking, the battle score engine, winner resolution and Genesis RNG |
+| [`@ponswars/rewards-math`](packages/rewards-math) | The 24-hour allocation procedure and the Merkle tree behind on-chain claims           |
 
 The split is deliberate and is the subject of
 [ADR 0002](docs/adr/0002-locked-constants-versus-open-configuration.md).
@@ -102,9 +104,33 @@ with the config table. Nothing in it is piped, so a failing tool fails the gate.
 - **Money is never a float.** Integer base units and `bigint` throughout; see
   [ADR 0003](docs/adr/0003-integer-arithmetic-for-value-bearing-math.md).
 
+## Contracts
+
+Two V1 contracts (§19), built and tested with Foundry:
+
+- **`RewardsDistributor`** — Merkle claims against immutable published roots.
+  Admin can withdraw only uncommitted funds, and a published window's SPY is
+  outside the treasury's reach from the moment it is published.
+- **`SecretStockVault`** — the fixed Secret reward, reserved before the reveal.
+  Reserved SPY cannot be withdrawn or reassigned, and pausing never erases an
+  entitlement.
+
+`foundry.toml` lives at the repository root so solc can read OpenZeppelin from
+`node_modules`; forge-std is a submodule, so clone with
+`git submodule update --init --recursive`.
+
 ## Status
 
-Milestone 0 — requirements freeze — is complete. Canonical constants and types,
-the open-parameter registry, the enforced configuration contract, and the
-toolchain and verification gate are in place. Milestone 1 is the deterministic
-simulation and contracts foundation; the build order is in Kickoff Brief §18.
+**Milestone 0 — requirements freeze: complete.** Canonical constants and types,
+the open-parameter registry, the enforced configuration contract, the toolchain
+and the verification gate.
+
+**Milestone 1 — simulation and contracts foundation: complete.** Deterministic
+matchmaking and scoring, Genesis RNG with an audit path, the reward allocation
+procedure, the PostgreSQL schema, both contracts with 57 Foundry tests, and a
+generated fixture proving the TypeScript and Solidity Merkle code agree
+([ADR 0006](docs/adr/0006-cross-language-conformance-by-generated-fixture.md)).
+
+Milestone 2 is the core services — Market Data, Pons Indexer, Genesis/Card,
+Battle Engine and the WebSocket Gateway. The build order is in Kickoff Brief
+§18.
