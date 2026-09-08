@@ -29,7 +29,11 @@ jobs:
 
       - uses: foundry-rs/foundry-toolchain@v1
 
-      - uses: pnpm/action-setup@v4
+      # v6 rather than v4: v4 runs on Node 20, which GitHub has deprecated and
+      # currently forces onto Node 24 with a warning. The pnpm version comes
+      # from `packageManager` in package.json either way, so this changes which
+      # runtime the action itself uses and nothing about the install.
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v6
         with:
