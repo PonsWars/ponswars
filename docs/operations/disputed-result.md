@@ -69,7 +69,17 @@ rule is named.
 §45.4 governs RNG integrity, §76 the derivation.
 
 The Genesis RNG is deterministic from a domain-separated seed, so a specific
-wallet's outcome is recomputable. Two things to check that are easy to miss:
+wallet's outcome is recomputable:
+
+```bash
+pnpm run build && node tools/audit-genesis.mjs record.json
+```
+
+The record holds the finalized block hash, the wallet, the request id and
+whether Secret coverage was funded at commit time. Include the recorded outcome
+and the command compares it, exiting non-zero on a mismatch.
+
+It checks both of the things that are easy to miss:
 
 - **Which rarity table was in force.** A card opened while the Secret vault was
   dormant was drawn against `RARITY_TABLE_SECRET_DISABLED` — Legendary `2.0%`,

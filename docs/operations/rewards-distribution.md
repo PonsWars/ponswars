@@ -41,9 +41,22 @@ This is the only window where an error is cheap. Use it.
 The allocation is deterministic (`allocateDistribution` in
 `@ponswars/rewards-math`): the same snapshot produces the same allocations, the
 same weights, the same cap redistribution. Re-run it and compare before
-publishing.
+publishing:
 
-What to check:
+```bash
+pnpm run build && node tools/verify-distribution.mjs snapshot.json
+```
+
+Add `--expect-root <hash>` to compare against the root you are about to publish.
+It exits non-zero on any problem, so it can be run from a script and believed.
+
+The snapshot it reads is what the window is calculated _from_ — pool balance,
+minimum claim, and every wallet's window War Points. A snapshot carrying
+allocations is refused, because a file holding the answer could "verify" it by
+handing it back.
+
+Everything below is checked by that command; the list is here so you know what
+it is asserting rather than trusting the exit code alone:
 
 - **Conservation.** Allocations plus carry-forward equal the distributable
   amount. The simulation asserts a full window settles without creating or
