@@ -1,0 +1,26 @@
+{
+  "name": "@ponswars/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runtime schemas for every API payload and WebSocket event. Validation happens at ingress.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/shared-types": "workspace:*",
+    "zod": "^4.5.4"
+  }
+}

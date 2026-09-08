@@ -18,6 +18,9 @@
     },
     {
       "path": "./packages/rewards-math/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/schemas/tsconfig.build.json"
     }
   ]
 }
