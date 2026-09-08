@@ -1,7 +1,14 @@
 import { buildCanonicalClock, utcTimestamp } from '@ponswars/shared-types';
 import { lazy, Suspense, useEffect, type JSX } from 'react';
+import type { GenesisOutcome } from './genesis/GenesisReveal.js';
 import { Hud } from './hud/Hud.js';
-import { useSession, type ClientBattle, type ClientRound } from './state/session.js';
+import { Presentations } from './presentation/Presentations.js';
+import type { ProfileData } from './profile/WarRoom.js';
+import { activeWindowView } from './rewards/reward-view.js';
+import type { PoolStatus } from './rewards/RewardsHub.js';
+import { isPresentation } from './routing/route.js';
+import { useRoute } from './routing/useRoute.js';
+import { nowUtc, useSession, type ClientBattle, type ClientRound } from './state/session.js';
 
 /**
  * §82.3 stages the load: shell and UI first, then the global world.
@@ -17,14 +24,15 @@ const WorldCanvas = lazy(async () => import('./world/WorldCanvas.js'));
  * The application shell (§80.1).
  *
  * One canvas, one HUD, one persistent world. §37 is explicit that PonsWars is
- * *"not a conventional website with disconnected pages"* — there is no router
- * here yet because there is nothing to route between: moving from the global
- * world to a sector to a battlefield is camera movement inside one place.
+ * *"not a conventional website with disconnected pages"*, and the routes here
+ * do not contradict that: moving between the global world, a sector and a
+ * battlefield is camera movement inside one place, and `/profile`, `/rewards`
+ * and `/genesis` are presentations layered *over* that place.
  *
- * §80.4 will add shareable routes for `/war/:battleId`, `/profile` and
- * `/rewards`, with the constraint that a route change *"must not require
- * destroying the persistent world scene"*. Adding routes before the scene is
- * proven persistent would make that easy to get backwards.
+ * §80.4 requires that a route change *"must not require destroying the
+ * persistent world scene"*. The canvas is mounted here, once, outside every
+ * route branch — so no route has the power to unmount it, whatever anyone adds
+ * later.
  */
 
 /**
@@ -186,7 +194,84 @@ function placeholderRound(): ClientRound {
   };
 }
 
+/**
+ * A placeholder profile, pool and Genesis outcome.
+ *
+ * Every one of these comes from the indexer, the Player Service or the chain in
+ * production. They are seeded here so the presentations can be built and looked
+ * at; none of the numbers is derived on the client, which is the property that
+ * has to survive when the real sources are wired (§34, §35).
+ */
+const PLACEHOLDER_PROFILE: ProfileData = {
+  addressFragment: PLACEHOLDER_WALLET.addressFragment,
+  warBalance: PLACEHOLDER_WALLET.warBalance,
+  warHolder: true,
+  card: {
+    genesisId: '008271',
+    name: 'Bull Run',
+    rarity: 'RARE',
+    effect: 'Market Support +2',
+    usesRemaining: 7,
+    secretTrophy: false,
+  },
+  lifetime: {
+    battles: 128,
+    wins: 71,
+    losses: 57,
+    winRateBps: 5_547,
+    upsets: 14,
+    majorUpsets: 3,
+    cardAssistedWins: 22,
+    lifetimeWarPoints: 1_842,
+  },
+  history: [
+    {
+      roundId: '#718',
+      matchup: 'GME vs SPY',
+      backed: 'GME',
+      outcome: 'MAJOR_UPSET',
+      warPoints: 14,
+      cardName: 'Bull Run',
+    },
+    {
+      roundId: '#717',
+      matchup: 'NVDA vs AAPL',
+      backed: 'NVDA',
+      outcome: 'WIN',
+      warPoints: 6,
+      cardName: null,
+    },
+    {
+      roundId: '#716',
+      matchup: 'AMD vs MSFT',
+      backed: 'AMD',
+      outcome: 'UPSET',
+      warPoints: 10,
+      cardName: null,
+    },
+  ],
+  mostBacked: { ticker: 'NVDA', battles: 37, winRateBps: 6_480 },
+  biggestUpset: {
+    headline: 'GME defeated SPY',
+    classification: 'MAJOR UPSET',
+    roundId: '#718',
+  },
+};
+
+const PLACEHOLDER_POOL: PoolStatus = { balance: '12.40' };
+
+const PLACEHOLDER_GENESIS: GenesisOutcome = {
+  genesisId: '008271',
+  rarity: 'RARE',
+  cardName: 'Bull Run',
+  effect: 'Market Support +2',
+  secretReservationSecured: true,
+};
+
 export function App(): JSX.Element {
+  const { route, navigate } = useRoute();
+  const battles = useSession((state) => state.battles);
+  const focusSector = useSession((state) => state.focusSector);
   const setBattles = useSession((state) => state.setBattles);
   const setMyBattle = useSession((state) => state.setMyBattle);
   const setWallet = useSession((state) => state.setWallet);
@@ -199,6 +284,19 @@ export function App(): JSX.Element {
     setWallet(PLACEHOLDER_WALLET);
     setRound(placeholderRound());
   }, [setBattles, setMyBattle, setWallet, setRound]);
+
+  useEffect(() => {
+    // A shared `/war/:battleId` link arrives focused on that battle (§80.4).
+    // The camera flies rather than cutting, so a deep link lands the visitor in
+    // the world the same way navigating there would have.
+    if (route.kind !== 'WORLD' || route.battleId === null) {
+      return;
+    }
+    const index = battles.findIndex((battle) => battle.battleId === route.battleId);
+    if (index >= 0) {
+      focusSector(index, nowUtc());
+    }
+  }, [route, battles, focusSector]);
 
   useEffect(() => {
     // §83.3: honour the operating-system preference, and keep honouring it if
@@ -217,10 +315,26 @@ export function App(): JSX.Element {
 
   return (
     <>
+      {/* Mounted once, outside every route branch. Nothing below can unmount
+          it, which is how §80.4's constraint stays true by construction. */}
       <Suspense fallback={<WorldLoading />}>
         <WorldCanvas />
       </Suspense>
-      <Hud />
+      <Hud onNavigate={navigate} />
+      {isPresentation(route) ? (
+        <Presentations
+          route={route}
+          navigate={navigate}
+          profile={PLACEHOLDER_PROFILE}
+          reward={activeWindowView({
+            distributionId: 42,
+            warPoints: PLACEHOLDER_WALLET.warPoints,
+            closesAt: utcTimestamp(Date.now() + 6 * 3_600_000 + 42 * 60_000 + 18_000),
+          })}
+          pool={PLACEHOLDER_POOL}
+          genesis={PLACEHOLDER_GENESIS}
+        />
+      ) : null}
     </>
   );
 }

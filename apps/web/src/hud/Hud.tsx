@@ -1,5 +1,6 @@
 import { LAYER } from '@ponswars/ui-tokens';
 import type { JSX, ReactNode } from 'react';
+import type { Route } from '../routing/route.js';
 import { currentHudBudget, currentZoom, useSession, type ClientBattle } from '../state/session.js';
 import { BattleIntel } from './BattleIntel.js';
 import { BattleSwitcher } from './BattleSwitcher.js';
@@ -10,6 +11,7 @@ import { PickControls } from './PickControls.js';
 import { Countdown, RoundStatus } from './RoundStatus.js';
 import { panelStyle } from './styles.js';
 import { useNarrowViewport } from './useNarrowViewport.js';
+import { PresentationLinks } from './PresentationLinks.js';
 import { WalletSummary } from './WalletSummary.js';
 
 /**
@@ -28,7 +30,7 @@ import { WalletSummary } from './WalletSummary.js';
  * sheet, because §37.4 asks for *"dedicated bottom sheets rather than shrunken
  * desktop panels"* — the panels are not scaled down, they are re-placed.
  */
-export function Hud(): JSX.Element {
+export function Hud({ onNavigate }: { readonly onNavigate: (next: Route) => void }): JSX.Element {
   const camera = useSession((state) => state.camera);
   const battles = useSession((state) => state.battles);
   const narrow = useNarrowViewport();
@@ -69,6 +71,7 @@ export function Hud(): JSX.Element {
           {budget.countdown ? <Countdown /> : null}
         </Live>
         <Live>
+          {budget.walletSummary ? <PresentationLinks onNavigate={onNavigate} /> : null}
           {budget.walletSummary ? <WalletSummary /> : null}
           {budget.warMomentum && focused !== undefined ? (
             <LiveBattle battle={focused} showDeployedCard={budget.deployedCard} />
