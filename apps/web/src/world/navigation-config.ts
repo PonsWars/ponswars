@@ -1,0 +1,44 @@
+import { milliseconds } from '@ponswars/shared-types';
+import type { NavigationConfig } from '@ponswars/world-runtime';
+import { SECTOR_ORBIT_RADIUS, WORLD_BOUNDARY_RADIUS } from './layout.js';
+
+/**
+ * Feel tuning for direct camera navigation (§37.3, §37.4).
+ *
+ * `OPEN` production tuning, not a locked rule — §59.4 leaves the numbers that
+ * only affect feel to be calibrated against the real world once art is in.
+ * Every value here is derived from the layout rather than typed as a taste
+ * judgement, so the world can be rescaled without the camera going wrong.
+ */
+export const NAVIGATION: NavigationConfig = {
+  /**
+   * Slightly inside the cinematic pose, which sits about 31 units from its
+   * target. Zooming further than the closest scripted shot would put the camera
+   * inside the geometry.
+   */
+  minViewDistance: 26,
+
+  /**
+   * Comfortably outside the sector ring but well within the soft boundary of
+   * §38.8, so pulling all the way back still frames the whole world rather than
+   * the empty void beyond it.
+   */
+  maxViewDistance: Math.min(SECTOR_ORBIT_RADIUS * 5, WORLD_BOUNDARY_RADIUS * 0.9),
+
+  /** One wheel notch covers 18% of the remaining distance. */
+  zoomStep: 0.18,
+
+  /**
+   * Drift halves every 220 ms, so a flick glides for roughly a second before it
+   * falls under the floor. §37.5 asks for believable deceleration; a glide that
+   * outlasts the gesture that caused it reads as the camera having a mind of its
+   * own.
+   */
+  inertiaHalfLife: milliseconds(220),
+
+  /**
+   * Two world units per second. Below that the movement is invisible, and
+   * leaving it running would keep the scene re-rendering forever.
+   */
+  minDriftSpeed: 0.002,
+};
