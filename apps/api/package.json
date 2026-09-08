@@ -1,0 +1,32 @@
+{
+  "name": "@ponswars/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The HTTP surface. Validates with the shared schemas and decides nothing the engine already decides.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/battle-engine": "workspace:*",
+    "@ponswars/round-service": "workspace:*",
+    "@ponswars/schemas": "workspace:*",
+    "@ponswars/shared-types": "workspace:*",
+    "fastify": "^5.12.3"
+  },
+  "devDependencies": {
+    "@ponswars/battle-math": "workspace:*"
+  }
+}
