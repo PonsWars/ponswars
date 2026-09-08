@@ -23,7 +23,7 @@ import {
   TICKS_PER_BATTLE,
 } from './harness.js';
 import { observe } from './market.js';
-import { recordRound, replayRound, type RecordedRound } from './replay.js';
+import { recordRound, replayRound, type RecordedRound } from '@ponswars/replay';
 
 /**
  * Delivery chaos and exactly-once accounting (§49, §70.7, §66.6).
@@ -203,7 +203,7 @@ describe('finalization is exactly once', () => {
     // §25 and §66.6: finalization happens once and the result is immutable. A
     // retried job must not be able to produce a second set of War Points.
     const recorded = record();
-    const finalized = replayRound(recorded.recording, CONFIG);
+    const finalized = replayRound(recorded.recording);
     expect(finalized.state.state).toBe('FINALIZED');
     expect(() => finalizeRound(finalized.state, CLOCK.battleEndAt, BLOCK, CONFIG)).toThrow();
   });

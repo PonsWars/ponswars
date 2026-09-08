@@ -11,6 +11,7 @@
     "@ponswars/battle-engine": "workspace:*",
     "@ponswars/battle-math": "workspace:*",
     "@ponswars/realtime": "workspace:*",
+    "@ponswars/replay": "workspace:*",
     "@ponswars/rewards-math": "workspace:*",
     "@ponswars/shared-types": "workspace:*"
   }

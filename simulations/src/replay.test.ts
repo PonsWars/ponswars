@@ -16,7 +16,7 @@ import {
   recordRound,
   replayRound,
   type RecordedRound,
-} from './replay.js';
+} from '@ponswars/replay';
 
 /**
  * Replay fidelity (§26, §25).
@@ -66,7 +66,7 @@ function record(marketSeed = SEED): RecordedRound {
 describe('replaying a recording', () => {
   it('reproduces the result exactly', () => {
     const recorded = record();
-    const replayed = replayRound(recorded.recording, CONFIG);
+    const replayed = replayRound(recorded.recording);
     expect(replayed.results).toEqual(recorded.outcome.results);
     expect(replayed.voided).toEqual(recorded.outcome.voided);
     expect(replayed.awards).toEqual(recorded.outcome.awards);
@@ -74,7 +74,7 @@ describe('replaying a recording', () => {
 
   it('reproduces the evidence hash, which is what §26 actually promises', () => {
     const recorded = record();
-    const replayed = replayRound(recorded.recording, CONFIG);
+    const replayed = replayRound(recorded.recording);
     for (const [index, result] of replayed.results.entries()) {
       expect(result.evidenceHash).toBe(recorded.outcome.results[index]?.evidenceHash);
     }
@@ -82,8 +82,8 @@ describe('replaying a recording', () => {
 
   it('is stable across repeated replays', () => {
     const recorded = record();
-    const first = replayRound(recorded.recording, CONFIG);
-    const second = replayRound(recorded.recording, CONFIG);
+    const first = replayRound(recorded.recording);
+    const second = replayRound(recorded.recording);
     expect(second.results).toEqual(first.results);
   });
 
@@ -93,7 +93,7 @@ describe('replaying a recording', () => {
     // `bigint` that quietly became a string would replay to a different result.
     const recorded = record();
     const decoded = decodeRecording(encodeRecording(recorded.recording));
-    expect(replayRound(decoded, CONFIG).results).toEqual(recorded.outcome.results);
+    expect(replayRound(decoded).results).toEqual(recorded.outcome.results);
   });
 
   it('refuses a recording that lost a field on the way in', () => {
@@ -116,6 +116,7 @@ describe('replaying a recording', () => {
       'baseSeedHex',
       'clock',
       'confidence',
+      'config',
       'finalizationBlockHash',
       'picks',
       'recentRounds',
@@ -123,6 +124,34 @@ describe('replaying a recording', () => {
       'roundIndex',
       'tickLogs',
     ]);
+  });
+});
+
+describe('the recorded tuning', () => {
+  it('travels with the recording rather than being supplied by the caller', () => {
+    // §26 promises a result is reproducible from published evidence. The same
+    // inputs under different calibration produce a different result, so a
+    // replay that took a config from its caller could "reproduce" a round under
+    // tuning that round never saw — and two people replaying the same file
+    // would disagree while both believed they had verified it.
+    const recorded = record();
+    expect(recorded.recording.config).toBeDefined();
+    expect(recorded.recording.config.versions).toEqual(CONFIG.versions);
+  });
+
+  it('survives the JSON round trip with its bigints intact', () => {
+    // The scoring divisors are scaled bigints. One that came back as a string
+    // would replay to a different score without anything looking wrong.
+    const decoded = decodeRecording(encodeRecording(record().recording));
+    expect(decoded.config.scoring.priceEdgeDivisor).toBe(CONFIG.scoring.priceEdgeDivisor);
+    expect(typeof decoded.config.scoring.priceEdgeDivisor).toBe('bigint');
+  });
+
+  it('is refused when missing', () => {
+    const recorded = record();
+    const withoutConfig = { ...recorded.recording } as Record<string, unknown>;
+    delete withoutConfig['config'];
+    expect(() => decodeRecording(JSON.stringify(withoutConfig))).toThrow(TypeError);
   });
 });
 
@@ -163,7 +192,7 @@ describe('a replay that should diverge', () => {
       ],
     };
 
-    const replayed = replayRound(tampered, CONFIG);
+    const replayed = replayRound(tampered);
     const originalHash = recorded.outcome.results.find(
       (result) => result.battleId === firstLog.battleId,
     )?.evidenceHash;
@@ -181,10 +210,10 @@ describe('a replay that should diverge', () => {
     // and a replay that produced the original pairings anyway would mean the
     // seed was not really an input.
     const recorded = record();
-    const different = replayRound(
-      { ...recorded.recording, baseSeedHex: `0x${'3b'.repeat(32)}` },
-      CONFIG,
-    );
+    const different = replayRound({
+      ...recorded.recording,
+      baseSeedHex: `0x${'3b'.repeat(32)}`,
+    });
     const originalPairs = recorded.outcome.results.map(
       (result) => `${result.left}/${result.right}`,
     );

@@ -41,6 +41,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@ponswars/battle-math':
+        specifier: workspace:*
+        version: link:../../packages/battle-math
       '@ponswars/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
@@ -145,6 +148,18 @@ importers:
         specifier: workspace:*
         version: link:../shared-types
 
+  packages/replay:
+    dependencies:
+      '@ponswars/battle-engine':
+        specifier: workspace:*
+        version: link:../battle-engine
+      '@ponswars/battle-math':
+        specifier: workspace:*
+        version: link:../battle-math
+      '@ponswars/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+
   packages/rewards-math:
     dependencies:
       '@ponswars/shared-types':
@@ -203,6 +218,9 @@ importers:
       '@ponswars/realtime':
         specifier: workspace:*
         version: link:../packages/realtime
+      '@ponswars/replay':
+        specifier: workspace:*
+        version: link:../packages/replay
       '@ponswars/rewards-math':
         specifier: workspace:*
         version: link:../packages/rewards-math

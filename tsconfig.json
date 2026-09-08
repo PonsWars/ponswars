@@ -35,6 +35,9 @@
       "path": "./packages/realtime/tsconfig.build.json"
     },
     {
+      "path": "./packages/replay/tsconfig.build.json"
+    },
+    {
       "path": "./packages/round-service/tsconfig.build.json"
     },
     {

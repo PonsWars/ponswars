@@ -1,0 +1,27 @@
+{
+  "name": "@ponswars/replay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Recording and replaying a round, bit for bit. The evidence path behind §26.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/battle-engine": "workspace:*",
+    "@ponswars/battle-math": "workspace:*",
+    "@ponswars/shared-types": "workspace:*"
+  }
+}

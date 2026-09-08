@@ -53,6 +53,20 @@ export interface RoundRecording {
   /** Ticks in the order they were applied. Order is part of the record (§26). */
   readonly tickLogs: readonly BattleTickLog[];
   readonly finalizationBlockHash: string;
+  /**
+   * The engine tuning in force when the round ran (§59.4).
+   *
+   * Part of the record, not a parameter. §26 promises a result is reproducible
+   * from published evidence, and the same inputs under different calibration
+   * produce a different result — so a replay that accepted a config from its
+   * caller could "reproduce" a round under tuning that round never saw, and two
+   * people replaying the same file would disagree while both believed they had
+   * verified it.
+   *
+   * `scoringEngineVersion` on the result versions the code. This versions the
+   * numbers the code was given.
+   */
+  readonly config: EngineConfig;
 }
 
 /**
@@ -63,7 +77,8 @@ export interface RoundRecording {
  * implementations of the same sequence. A replay that used its own runner would
  * be testing the runner, not the engine.
  */
-export function replayRound(recording: RoundRecording, config: EngineConfig): RoundFinalization {
+export function replayRound(recording: RoundRecording): RoundFinalization {
+  const config = recording.config;
   const round = createRound({
     roundId: recording.roundId,
     roundIndex: recording.roundIndex,
@@ -161,9 +176,10 @@ export function recordRound(input: {
     picks: input.picks,
     tickLogs,
     finalizationBlockHash: input.finalizationBlockHash,
+    config: input.config,
   };
 
-  return { recording, outcome: replayRound(recording, input.config) };
+  return { recording, outcome: replayRound(recording) };
 }
 
 /**
@@ -216,6 +232,7 @@ const REQUIRED_RECORDING_FIELDS = [
   'picks',
   'tickLogs',
   'finalizationBlockHash',
+  'config',
 ] as const;
 
 function assertRecordingShape(value: unknown): asserts value is RoundRecording {
