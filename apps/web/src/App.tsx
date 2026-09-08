@@ -276,6 +276,7 @@ export function App(): JSX.Element {
   const setMyBattle = useSession((state) => state.setMyBattle);
   const setWallet = useSession((state) => state.setWallet);
   const setRound = useSession((state) => state.setRound);
+  const setCard = useSession((state) => state.setCard);
   const setReducedMotion = useSession((state) => state.setReducedMotion);
 
   useEffect(() => {
@@ -283,7 +284,8 @@ export function App(): JSX.Element {
     setMyBattle('preview-b2');
     setWallet(PLACEHOLDER_WALLET);
     setRound(placeholderRound());
-  }, [setBattles, setMyBattle, setWallet, setRound]);
+    setCard({ name: 'Bull Run', rarity: 'RARE', usesRemaining: 7 });
+  }, [setBattles, setMyBattle, setWallet, setRound, setCard]);
 
   useEffect(() => {
     // A shared `/war/:battleId` link arrives focused on that battle (§80.4).

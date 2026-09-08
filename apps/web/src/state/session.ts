@@ -1,11 +1,13 @@
 import type {
   ActiveTicker,
   CanonicalClock,
+  CardDecision,
   ConfidenceSnapshot,
   MomentumState,
   PublicFeedHealth,
   RoundState,
 } from '@ponswars/shared-types';
+import type { CardHolding } from '../hud/pick-flow.js';
 import type { ConnectionState } from '../hud/round-phase.js';
 import {
   advance,
@@ -180,6 +182,16 @@ interface SessionState {
   readonly pendingPick: PendingPick | null;
   /** `null` before the first round payload arrives (§42.14 sync state). */
   readonly round: ClientRound | null;
+  /** The wallet's Genesis Card, or `null` when it holds none (§7). */
+  readonly card: CardHolding | null;
+  /**
+   * USE or SAVE for this round, before the server confirms it (§40.7).
+   *
+   * Local like `pendingPick`, and for the same reason: arming a card is a
+   * decision the player has made, not yet a fact about the round. The use is
+   * consumed at lock, so nothing here spends anything.
+   */
+  readonly cardDecision: CardDecision | null;
   readonly connection: ConnectionState;
   /**
    * Server time minus local time, in milliseconds (§23.5).
@@ -196,6 +208,8 @@ interface SessionState {
   setReducedMotion: (reduced: boolean) => void;
   setWallet: (wallet: WalletSummary | null) => void;
   setRound: (round: ClientRound | null) => void;
+  setCard: (card: CardHolding | null) => void;
+  decideCard: (decision: CardDecision | null) => void;
   setConnection: (connection: ConnectionState) => void;
   setClockOffset: (offsetMs: number) => void;
   /** Composes a pick for the focused battle (§42.5 step 3). */
@@ -266,6 +280,8 @@ export const useSession = create<SessionState>((set, get) => ({
   wallet: null,
   pendingPick: null,
   round: null,
+  card: null,
+  cardDecision: null,
   connection: 'CONNECTED',
   clockOffsetMs: 0,
 
@@ -275,7 +291,14 @@ export const useSession = create<SessionState>((set, get) => ({
     const { pendingPick } = get();
     const stillOffered =
       pendingPick !== null && battles.some((battle) => battle.battleId === pendingPick.battleId);
-    set({ battles, pendingPick: stillOffered ? pendingPick : null });
+    // The card decision goes with the pick it belonged to. An armed card left
+    // pointing at a battle that no longer exists would read as armed for
+    // whatever replaced it.
+    set({
+      battles,
+      pendingPick: stillOffered ? pendingPick : null,
+      cardDecision: stillOffered ? get().cardDecision : null,
+    });
   },
 
   setMyBattle: (battleId) => {
@@ -292,6 +315,14 @@ export const useSession = create<SessionState>((set, get) => ({
 
   setRound: (round) => {
     set({ round });
+  },
+
+  setCard: (card) => {
+    set({ card });
+  },
+
+  decideCard: (cardDecision) => {
+    set({ cardDecision });
   },
 
   setConnection: (connection) => {
