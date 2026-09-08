@@ -7,11 +7,20 @@
  * results that agree to some tolerance.
  */
 
+import { BATTLE_POINT_SCALE } from '@ponswars/shared-types';
+
 /** Scale for ratios, returns and edges. One unit is 1e-6. */
 export const RATIO_SCALE = 1_000_000n;
 
-/** Scale for battle points. 45 points is `45n * POINT_SCALE`. */
-export const POINT_SCALE = 1_000_000n;
+/**
+ * Scale for battle points. 45 points is `45n * POINT_SCALE`.
+ *
+ * Re-exported from `@ponswars/shared-types` rather than declared here: the
+ * scale describes how a score is represented on the wire, so it belongs beside
+ * the type that carries it. Two declarations of the same constant is one more
+ * than can be kept in agreement.
+ */
+export const POINT_SCALE = BATTLE_POINT_SCALE;
 
 /** Converts a whole number of battle points into scaled points. */
 export function points(whole: number): bigint {

@@ -1,12 +1,12 @@
 import {
   BATTLE_SCORE_COMPONENTS,
-  BATTLE_SCORE_TOTAL,
   BATTLE_SCORE_WEIGHTS,
+  FULL_BATTLE_SCORE_SCALED,
   integerSqrt,
   PONS_POWER_COMPOSITION,
   type BattleScoreComponent,
 } from '@ponswars/shared-types';
-import { clampUnit, divScaled, points, POINT_SCALE, RATIO_SCALE } from './scale.js';
+import { clampUnit, divScaled, points, RATIO_SCALE } from './scale.js';
 
 /**
  * The battle score engine (§12).
@@ -284,4 +284,11 @@ export function totalOf(breakdown: ScaledBreakdown): bigint {
 }
 
 /** The scaled value of the full hundred points. */
-export const FULL_SCORE_SCALED = BigInt(BATTLE_SCORE_TOTAL) * POINT_SCALE;
+/**
+ * The whole score, scaled.
+ *
+ * Re-exported from `@ponswars/shared-types` for the same reason `POINT_SCALE`
+ * is: the value describes how a score is represented where it crosses a
+ * boundary, and one definition is the only way two of them stay equal.
+ */
+export const FULL_SCORE_SCALED = FULL_BATTLE_SCORE_SCALED;

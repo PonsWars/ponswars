@@ -16,6 +16,24 @@ import type { DurationMs, UtcTimestamp } from './time.js';
 /** Each battle resolves to exactly 100 battle points shared between two stocks. */
 export const BATTLE_SCORE_TOTAL = 100;
 
+/**
+ * Fixed-point scale for battle points. One point is `1_000_000`.
+ *
+ * Here rather than in the scoring engine because it describes how a score is
+ * *represented on the wire*, and `BattleScoreBreakdown` below crosses a process
+ * boundary carrying numbers in it. A type that says `number` without stating
+ * its scale invites exactly one mistake, and this codebase made it: a result
+ * screen read the components as tenths and rendered 48.4 points as `4840954.0`.
+ *
+ * §66.4 requires one deterministic numerical strategy across replay, production
+ * and tests. That strategy is only shared if the scale is stated where the
+ * shared type is.
+ */
+export const BATTLE_POINT_SCALE = 1_000_000n;
+
+/** The whole score, scaled: `100 * BATTLE_POINT_SCALE`. */
+export const FULL_BATTLE_SCORE_SCALED = BigInt(BATTLE_SCORE_TOTAL) * BATTLE_POINT_SCALE;
+
 /** The four scoring components, in masterplan order. */
 export const BATTLE_SCORE_COMPONENTS = [
   'priceMomentum',
@@ -237,7 +255,18 @@ export interface PublicBattleStateUpdate {
   readonly visualEvent?: VisualEventCue;
 }
 
-/** One side's four component scores, summing to that side's share of 100. */
+/**
+ * One side's four component scores, summing to that side's share of 100.
+ *
+ * **Every value is scaled by {@link BATTLE_POINT_SCALE}.** A component reading
+ * `23_800_000` is 23.8 points, not twenty-three million — and both sides'
+ * components together always sum to {@link FULL_BATTLE_SCORE_SCALED}.
+ *
+ * `number` rather than `bigint` because this is the shape that crosses the wire
+ * as JSON, where a `bigint` has no representation. The values are whole
+ * integers well inside the safe range, and anything deriving a new value from
+ * them belongs in the engine, in `bigint`, not here.
+ */
 export interface BattleScoreBreakdown {
   readonly priceMomentum: number;
   readonly relativeVolume: number;
