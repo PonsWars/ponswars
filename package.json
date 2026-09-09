@@ -2,7 +2,7 @@
   "name": "ponswars",
   "version": "0.0.0",
   "private": true,
-  "description": "PonsWars \u2014 a persistent spatial market-war world driven by real market data",
+  "description": "PonsWars — a persistent spatial market-war world driven by real market data",
   "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
@@ -43,6 +43,7 @@
     "eslint-config-prettier": "^10.1.8",
     "pgsql-parser": "^18.2.6",
     "prettier": "^3.9.6",
+    "sharp": "^0.35.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",
     "vitest": "^5.0.0"

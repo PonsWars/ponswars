@@ -1,7 +1,12 @@
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
-import { selectDetail, type DetailLevel, type LodThresholds } from '@ponswars/world-runtime';
+import {
+  selectDetail,
+  type CameraState,
+  type DetailLevel,
+  type LodThresholds,
+} from '@ponswars/world-runtime';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useMemo, useRef, type JSX } from 'react';
+import { useEffect, useMemo, useRef, type JSX } from 'react';
 import type { Group, PerspectiveCamera } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
 import { MARKET_CORE, SECTOR_POSITIONS } from './layout.js';
@@ -321,6 +326,12 @@ function Starfield(): JSX.Element {
   );
 }
 
+/** Points a camera at a pose. The one place the two are joined. */
+function aim(active: PerspectiveCamera, pose: CameraState['pose']): void {
+  active.position.set(pose.position.x, pose.position.y, pose.position.z);
+  active.lookAt(pose.target.x, pose.target.y, pose.target.z);
+}
+
 export function WorldScene(): JSX.Element {
   const camera = useSession((state) => state.camera);
   const battles = useSession((state) => state.battles);
@@ -334,10 +345,20 @@ export function WorldScene(): JSX.Element {
   // curve rather than leaving the camera short (§114.3).
   useFrame(() => {
     tick(nowUtc());
-    const active = three.camera as PerspectiveCamera;
-    active.position.set(camera.pose.position.x, camera.pose.position.y, camera.pose.position.z);
-    active.lookAt(camera.pose.target.x, camera.pose.target.y, camera.pose.target.z);
+    aim(three.camera as PerspectiveCamera, camera.pose);
   });
+
+  // And again whenever the pose changes, outside the loop.
+  //
+  // `Canvas` places the camera at the global anchor but cannot aim it, so until
+  // a frame runs it looks along −Z at empty space above the world. Any page that
+  // paints without the loop settling — a hidden tab, a screenshot, a throttled
+  // background — showed a correctly positioned camera pointing at nothing, and
+  // the world looked like it had failed to load. Aiming on change makes the
+  // first painted frame the right one.
+  useEffect(() => {
+    aim(three.camera as PerspectiveCamera, camera.pose);
+  }, [three.camera, camera.pose]);
 
   const zoom = currentZoom({ camera });
 

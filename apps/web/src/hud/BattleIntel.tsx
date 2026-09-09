@@ -1,6 +1,7 @@
 import type { ActiveTicker, ConfidenceSnapshot } from '@ponswars/shared-types';
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
+import { FACTION_ART, FACTION_LEGION } from '../art/manifest.js';
 import { captionStyle, humanize, panelStyle } from './styles.js';
 
 /**
@@ -30,7 +31,8 @@ export function BattleIntel({
     <div
       style={{
         ...panelStyle,
-        minWidth: 168,
+        minWidth: 176,
+        overflow: 'hidden',
         textAlign: align,
         // A hairline of faction colour, not a fill. Design tokens §3 keeps
         // faction accents to identity cues and local highlights, and §36.7
@@ -39,7 +41,44 @@ export function BattleIntel({
         [align === 'left' ? 'borderLeft' : 'borderRight']: `2px solid ${accent}`,
       }}
     >
+      {/* The faction's own dossier art (§39), cropped to a band rather than
+          shown whole: §2.1 keeps the world dominant, and a full portrait in a
+          flanking panel would be the *"giant opaque sidebar"* it rules out.
+          Decorative, so it carries an empty alt — the ticker and legion name
+          below say everything the image says, which is what §36.7 requires of
+          anything that must survive without colour or pictures. */}
+      <div
+        style={{
+          height: 64,
+          margin: 'calc(var(--pw-space-3) * -1) calc(var(--pw-space-4) * -1) var(--pw-space-2)',
+          borderRadius: 'var(--pw-radius-panel) var(--pw-radius-panel) 0 0',
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        <img
+          src={FACTION_ART[ticker]}
+          alt=""
+          loading="lazy"
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: 'center 40%',
+            opacity: 0.55,
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(to bottom, transparent, var(--pw-surface-2))',
+          }}
+        />
+      </div>
+
       <div style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>{ticker}</div>
+      <div style={{ ...captionStyle, fontSize: 9, color: accent }}>{FACTION_LEGION[ticker]}</div>
       <div
         style={{
           fontFamily: 'var(--pw-font-display)',
