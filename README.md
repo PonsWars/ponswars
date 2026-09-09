@@ -94,6 +94,28 @@ one. Choosing a provider is a commercial and licensing decision before it is an
 engineering one: showing real-time prices to visitors who have not logged in is
 redistribution under most market-data agreements, and priced accordingly.
 
+### Pointing the client at it
+
+The web client is told where the services are, and is never given a default —
+a compiled-in address would ship a localhost URL inside a production bundle and
+fail by quietly showing nothing while looking configured. Create
+`apps/web/.env.local`:
+
+```bash
+VITE_API_URL=http://127.0.0.1:4000
+VITE_WS_URL=ws://127.0.0.1:4001
+```
+
+then `pnpm --filter @ponswars/web dev`. Without both variables the client runs
+as a labelled preview: it shows placeholder battles under a
+`PREVIEW — NOT A LIVE ROUND` banner rather than presenting invented rounds as
+real ones.
+
+The stack allows the two spellings of the Vite dev origin by default and takes
+`WEB_ORIGINS` as a comma-separated override. There is no wildcard: `*` would
+also hand any page on the internet the ability to make authenticated requests
+on a visitor's behalf the moment credentials are enabled.
+
 ## Operator tools
 
 Three commands, each one a step an incident runbook tells someone to take. A
@@ -207,12 +229,22 @@ market-data ingestion, Pons qualification, the Genesis lifecycle, the battle
 engine and round orchestration, and the realtime protocol. Each is a pure
 reducer, so the same code runs in production, in a test and in a replay.
 
-What is **not** built is the runnable `apps/*` shells that wire those cores to
-real transports — an HTTP server, a WebSocket server, PostgreSQL, an RPC client,
-a market-data vendor. Every one of those choices is still `OPEN` in
-[`docs/OPEN_PARAMETERS.md`](docs/OPEN_PARAMETERS.md), and §102 forbids picking
-one and shipping it as policy. The cores are shaped to be wired in when the
-decisions land.
+The transports are now built around them: an HTTP API (`apps/api`), a WebSocket
+gateway (`apps/gateway`) and a single-process stack that runs the whole loop
+(`apps/local-stack`). Two stand-ins remain, and they are the two that are still
+`OPEN` in [`docs/OPEN_PARAMETERS.md`](docs/OPEN_PARAMETERS.md) — the market-data
+vendor and the database. §102 forbids picking either and shipping it as policy,
+and each is one constructor argument away from being replaced.
+
+Battle Confidence (§10) is computed rather than supplied. Price trend, volume
+pulse, Pons activity and momentum stability are weighted 40/25/20/15 over the
+fifteen minutes before Pick Phase, and the label comes from exactly the four
+sub-signals a player is shown — so a panel can never read
+`STRONG / RISING / HIGH / STABLE` beside the word `UNDERDOG`. Labels are
+produced for a matchup rather than for a ticker, because §10.2 calls them
+relative: a side has no label until it stands opposite someone. Nothing in the
+module produces a percentage, and §10.3's excluded input has no field to arrive
+through.
 
 **Milestone 3 — spatial frontend: complete.** One persistent world scene, a
 camera that reaches every level of §37.2 by pan, zoom, pinch, tap and `ESC`, and
@@ -237,12 +269,19 @@ Four rules the frontend enforces structurally rather than by care:
 - **A failed claim never touches the entitlement.** §35.6's `FAILED` returns to
   `READY_TO_CLAIM` and nowhere else.
 
-What the client still lacks is a server to talk to. Round state, picks, wallet
-and allocations are seeded locally, because the API host, the WebSocket
-endpoint, the RPC provider and the market-data vendor are all still `OPEN` in
-[`docs/OPEN_PARAMETERS.md`](docs/OPEN_PARAMETERS.md), and §102 forbids picking
-one and shipping it as policy. Every seeded value passes through the same types
-and the same reducers the real feed will.
+The client now talks to that server. It fetches the authoritative round, parses
+it through the same schemas the API parsed it with on the way out, follows the
+round and its five battle channels, and applies `BATTLE_STATE_UPDATE` through
+the receiver reducer — jumping to a snapshot on a gap rather than replaying
+missed ticks (§70.7, §24).
+
+It is told where the services are and is never given a default. A compiled-in
+address would ship a localhost URL inside a production bundle, failing in the
+worst way: a deployed client quietly showing nothing while looking configured.
+A build with no endpoints runs as a labelled preview — placeholder battles under
+`PREVIEW — NOT A LIVE ROUND` — rather than presenting invented rounds as real
+ones. Wallet, card and reward values are still seeded, because the RPC provider
+and the Player service behind them are `OPEN`.
 
 Design tokens are transcribed into `@ponswars/ui-tokens` from the design-token
 specification, with a test asserting the stylesheet and the typed constants
@@ -310,15 +349,15 @@ suppression anywhere in the repository, and no skipped test.
 Everything remaining in §60's execution order waits on a decision rather than on
 implementation. Listed so the blocking decision is visible rather than buried:
 
-| Step                                     | Blocked on                                                                                                                            |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Adapters behind the five ports           | The database, market-data vendor, RPC provider and socket server — all `OPEN` (§102). The loop and the ports they plug into are built |
-| An HTTP surface for pick submission      | The web framework. `@ponswars/schemas` already defines the payloads                                                                   |
-| 17 · historical calibration              | The market-data vendor. The replay harness is built and takes recorded ticks from any source                                          |
-| 18 · load testing                        | A running transport to put load on                                                                                                    |
-| 19 · contract security review            | An independent auditor. Not something this repository can do to itself                                                                |
-| 20 · infrastructure, backups, monitoring | Hosting. The runbooks that do not depend on it are written                                                                            |
-| 21–23 · freeze, deploy, activation       | Steps 1 and 2 of §60: the `$WAR` launch and treasury parameters, and the legal review of the Genesis and Secret structure             |
+| Step                                     | Blocked on                                                                                                                               |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| A market-data adapter                    | The vendor — a licensing and commercial decision before an engineering one (§102). The port and a synthetic stand-in behind it are built |
+| A database adapter                       | The database (§102). The schema in `database/migrations` and the store port are built; the in-memory store is deliberately not a default |
+| 17 · historical calibration              | The market-data vendor. The replay harness is built and takes recorded ticks from any source                                             |
+| 18 · load testing                        | A hosting decision. There is now a running transport to put load on                                                                      |
+| 19 · contract security review            | An independent auditor. Not something this repository can do to itself                                                                   |
+| 20 · infrastructure, backups, monitoring | Hosting. The runbooks that do not depend on it are written                                                                               |
+| 21–23 · freeze, deploy, activation       | Steps 1 and 2 of §60: the `$WAR` launch and treasury parameters, and the legal review of the Genesis and Secret structure                |
 
 Each of those is a product or business decision, and §102 is explicit that an
 `OPEN` value must not be invented and shipped as policy. The cores every one of
