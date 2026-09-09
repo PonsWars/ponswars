@@ -1,16 +1,21 @@
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import {
+  debrisField,
+  districtBlocks,
+  islandCrags,
   reshuffleFrame,
   selectDetail,
   SETTLED_WORLD,
   type CameraState,
   type DetailLevel,
+  type DistrictShape,
   type LodThresholds,
   type ReshuffleFrame,
 } from '@ponswars/world-runtime';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useMemo, useRef, type JSX } from 'react';
-import type { Group, PerspectiveCamera } from 'three';
+import { useEffect, useLayoutEffect, useMemo, useRef, type JSX } from 'react';
+import { Object3D } from 'three';
+import type { Group, InstancedMesh, PerspectiveCamera } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
 import { MARKET_CORE, SECTOR_POSITIONS } from './layout.js';
 import { RESHUFFLE, RESHUFFLE_REDUCED } from './navigation-config.js';
@@ -56,6 +61,120 @@ const SEGMENTS: Readonly<Record<DetailLevel, number>> = {
 };
 
 /**
+ * The envelope a side's district is generated into.
+ *
+ * `OPEN` production tuning (§59.4), sized to the staging platform it stands on.
+ * The generator keeps every structure inside these half-extents, so the number
+ * that matters is this one: a district wider than its own ground overhangs it,
+ * and that is the first thing that reads as broken from the sector camera.
+ */
+const DISTRICT_SHAPE: DistrictShape = {
+  halfWidth: 22,
+  halfDepth: 45,
+  // Tall against the platform, not against the frontline: the island is 22
+  // units thick and the sector camera sits 165 above it, so a district that
+  // peaks below about 60 reads as paving rather than as a skyline.
+  peakHeight: 74,
+  edgeHeight: 26,
+  minFootprint: 5,
+  maxFootprint: 10,
+  spacing: 1.4,
+};
+
+/** The height of a district's own platform, above the sector's ground. */
+const DISTRICT_DECK = 10;
+
+/** How much of a district gets built at each detail level (§82.2). */
+const DISTRICT_DENSITY: Readonly<Record<DetailLevel, number>> = {
+  FULL: 17,
+  REDUCED: 7,
+  SILHOUETTE: 0,
+  CULLED: 0,
+};
+
+/** How many rocks hang under one plateau. */
+const CRAGS_PER_ISLAND = 8;
+
+/**
+ * The seed a piece of terrain is generated from.
+ *
+ * A property of the *place* — which sector, which side — and of nothing else.
+ * Seeding it from the battle would tie the skyline to the matchup, and §38.3
+ * keeps a sector neutral: factions deploy into it, they do not own it. It would
+ * also make the world rebuild itself at every reshuffle, which is exactly the
+ * landmark §38.4 asks to keep.
+ */
+function terrainSeed(index: number, part: number): number {
+  return index * 977 + part * 13;
+}
+
+/**
+ * One instance of a shape, in the coordinate space of the field it belongs to.
+ *
+ * Positions rather than a scene graph, because these go through an
+ * `InstancedMesh`: a hundred boxes as a hundred meshes is a hundred draw calls,
+ * and §82.2 puts a frame budget on a world that has five of these fields in it
+ * at once.
+ */
+interface Placement {
+  readonly position: readonly [number, number, number];
+  readonly scale: readonly [number, number, number];
+  readonly rotation: readonly [number, number, number];
+}
+
+/**
+ * A field of one shape, drawn in a single call.
+ *
+ * The geometry and material come in as children, so the same helper draws
+ * buildings, their lit crowns, the rock under an island and the debris around
+ * the world — four fields that differ in what they are made of and not at all
+ * in how they are placed.
+ *
+ * Matrices are written in a layout effect rather than per frame: none of this
+ * moves. Nothing here is animated, so nothing here costs anything after the
+ * first commit.
+ */
+function InstancedField({
+  placements,
+  children,
+}: {
+  readonly placements: readonly Placement[];
+  readonly children: readonly JSX.Element[];
+}): JSX.Element | null {
+  const field = useRef<InstancedMesh>(null);
+
+  useLayoutEffect(() => {
+    const mesh = field.current;
+    if (mesh === null) {
+      return;
+    }
+    const step = new Object3D();
+    for (const [index, placement] of placements.entries()) {
+      step.position.set(...placement.position);
+      step.rotation.set(...placement.rotation);
+      step.scale.set(...placement.scale);
+      step.updateMatrix();
+      mesh.setMatrixAt(index, step.matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    // The renderer culls against bounds it did not compute: the matrices were
+    // set here, so the sphere it inherited from a unit cube is wrong until it
+    // is told. Without this a field vanishes as soon as its centre leaves frame.
+    mesh.computeBoundingSphere();
+  }, [placements]);
+
+  if (placements.length === 0) {
+    return null;
+  }
+
+  return (
+    <instancedMesh ref={field} args={[undefined, undefined, placements.length]}>
+      {children}
+    </instancedMesh>
+  );
+}
+
+/**
  * The Market Core's skyline, tallest at the centre.
  *
  * Written out rather than generated, because these are the shape of a landmark
@@ -90,7 +209,7 @@ function MarketCore({ pulse }: { readonly pulse: number }): JSX.Element {
           plateaus and raised structures rather than a flat disc. */}
       <mesh position={[0, -14, 0]}>
         <cylinderGeometry args={[92, 118, 28, 6]} />
-        <meshStandardMaterial color="#0d161d" metalness={0.5} roughness={0.8} />
+        <meshStandardMaterial color="#0d161d" metalness={0.2} roughness={0.88} />
       </mesh>
 
       {/* A spire cluster, tallest at the centre. The Market Core is the
@@ -101,11 +220,11 @@ function MarketCore({ pulse }: { readonly pulse: number }): JSX.Element {
         <mesh key={index} position={[spire.x, spire.height / 2, spire.z]}>
           <boxGeometry args={[spire.width, spire.height, spire.width]} />
           <meshStandardMaterial
-            color="#16222c"
-            metalness={0.85}
-            roughness={0.3}
+            color="#1a2a36"
+            metalness={0.2}
+            roughness={0.55}
             emissive="#0e3040"
-            emissiveIntensity={0.35}
+            emissiveIntensity={0.42}
           />
         </mesh>
       ))}
@@ -268,23 +387,46 @@ function Sector({
       >
         <cylinderGeometry args={[120, 96, 22, SEGMENTS[detail]]} />
         <meshStandardMaterial
-          color={isFocused ? '#16242e' : '#0f1a22'}
-          metalness={0.6}
-          roughness={0.7}
+          color={isFocused ? '#22394a' : '#1a2d3a'}
+          metalness={0.2}
+          roughness={0.85}
         />
       </mesh>
 
       {/* The underside, tapering into the void. What makes an island float. */}
+      <mesh position={[0, -46, 0]}>
+        <coneGeometry args={[92, 74, SEGMENTS[detail]]} />
+        <meshStandardMaterial color="#070d12" metalness={0.3} roughness={0.95} />
+      </mesh>
+
+      {/* Broken rock around that taper. Kept at silhouette range too: it is
+          part of the outline, and the outline is the whole of what a distant
+          island is. */}
+      <Crags seed={terrainSeed(index, 3)} />
+
       {detail !== 'SILHOUETTE' ? (
-        <mesh position={[0, -46, 0]}>
-          <coneGeometry args={[92, 74, SEGMENTS[detail]]} />
-          <meshStandardMaterial color="#070d12" metalness={0.3} roughness={0.95} />
-        </mesh>
+        <>
+          {/* The road around the rim. A closed loop, because that is what says
+              the plateau is one place rather than two platforms sharing a disc. */}
+          <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 11.4, 0]}>
+            <torusGeometry args={[104, 1.5, 5, SEGMENTS[detail]]} />
+            <meshBasicMaterial color="#1d3a46" transparent opacity={0.5} />
+          </mesh>
+
+          {/* The contested ground between the two sides (§38.3). Neutral, and
+              inset rather than raised — it is the ground the frontline moves
+              across, and anything standing on it would be in the way of the one
+              reading §36.15 asks a player to take in instantly. */}
+          <mesh position={[0, 11.2, 0]}>
+            <boxGeometry args={[26, 0.6, 150]} />
+            <meshBasicMaterial color="#0b1a22" transparent opacity={0.85} />
+          </mesh>
+        </>
       ) : null}
 
-      {/* Two staging areas with a contested centre between them (§38.3). */}
-      <StagingArea side={-1} accent={leftAccent} detail={detail} />
-      <StagingArea side={1} accent={rightAccent} detail={detail} />
+      {/* Two districts with that contested centre between them (§38.3). */}
+      <District side={-1} accent={leftAccent} detail={detail} seed={terrainSeed(index, 1)} />
+      <District side={1} accent={rightAccent} detail={detail} seed={terrainSeed(index, 2)} />
 
       {/* Each side's forward base (§38.5).
           Temporary by definition: deployed into whichever sector the round
@@ -319,8 +461,12 @@ function Sector({
           position={[(battle.frontline - 0.5) * 124 * reshuffle.frontline, 22, 0]}
           scale={[1, reshuffle.frontline, reshuffle.frontline]}
         >
-          <boxGeometry args={[3, 28, 104]} />
-          <meshBasicMaterial color="#d7e6ee" transparent opacity={0.8 * reshuffle.frontline} />
+          {/* Narrow and low enough to read across a district that now has a
+              skyline behind it. The first pass was a 28-unit wall in flat
+              white, and from the sector camera it hid the battlefield it was
+              drawn to explain (§36.2). */}
+          <boxGeometry args={[2.4, 19, 108]} />
+          <meshBasicMaterial color="#cfe2ec" transparent opacity={0.72 * reshuffle.frontline} />
         </mesh>
       ) : null}
 
@@ -343,47 +489,180 @@ function Sector({
 }
 
 /**
- * One side's staging ground: a raised platform with a few structures on it.
+ * One side's staging ground: a raised deck carrying a district.
  *
- * §38.9 asks for verticality, and §36.5 keeps faction colour an accent rather
- * than a wash — so the buildings are dark and the accent is the platform edge
- * and the emissive glow, not the whole mass.
+ * §38.9 asks for verticality — plateaus and raised structures, a place with a
+ * skyline — and four boxes on a slab was a diagram of one. The structures are
+ * generated (`districtBlocks`) rather than written out, because a city block is
+ * more geometry than anyone places by hand and a *generated* one is still the
+ * same city block on every client and in every round: the seed is the sector
+ * and the side, and nothing else can reach it.
+ *
+ * §36.5 keeps faction colour an accent rather than a wash, so the mass is dark
+ * and the accent is the deck edge and a lit band near the top of the tall
+ * buildings — the thing that makes a skyline read at night.
  */
-function StagingArea({
+function District({
   side,
   accent,
   detail,
+  seed,
 }: {
   readonly side: -1 | 1;
   readonly accent: string;
   readonly detail: DetailLevel;
+  readonly seed: number;
 }): JSX.Element {
+  const blocks = useMemo(
+    () => districtBlocks(seed, DISTRICT_SHAPE, DISTRICT_DENSITY[detail]),
+    [seed, detail],
+  );
+
+  const masses = useMemo<readonly Placement[]>(
+    () =>
+      blocks.map((block) => ({
+        position: [block.x, DISTRICT_DECK + block.height / 2, block.z],
+        scale: [block.width, block.height, block.depth],
+        rotation: [0, block.rotation, 0],
+      })),
+    [blocks],
+  );
+
+  const crowns = useMemo<readonly Placement[]>(
+    () =>
+      blocks
+        .filter((block) => block.lit)
+        .map((block) => ({
+          // A band just below the roof line, slightly proud of the wall, so it
+          // reads as a lit ring on the building rather than as its roof.
+          position: [block.x, DISTRICT_DECK + block.height - 3.4, block.z],
+          scale: [block.width * 1.1, 2.6, block.depth * 1.1],
+          rotation: [0, block.rotation, 0],
+        })),
+    [blocks],
+  );
+
   return (
     <group position={[side * 62, 11, 0]}>
-      <mesh position={[0, 5, 0]}>
-        <boxGeometry args={[46, 10, 96]} />
-        <meshStandardMaterial
-          color="#111d26"
-          metalness={0.5}
-          roughness={0.6}
-          emissive={accent}
-          emissiveIntensity={0.22}
-        />
+      {/* The apron, then the deck: two steps rather than one slab. Every
+          delivered frame of a sector is a terraced citadel, and a single plate
+          with towers on it reads as a model base. */}
+      <mesh position={[0, 2, 0]}>
+        <boxGeometry args={[56, 4, 104]} />
+        <meshStandardMaterial color="#121f29" metalness={0.22} roughness={0.82} />
       </mesh>
-      {detail !== 'SILHOUETTE'
-        ? STAGING_BLOCKS.map((block, index) => (
-            <mesh key={index} position={[side * block.x, 10 + block.height / 2, block.z]}>
-              <boxGeometry args={[block.width, block.height, block.width]} />
-              <meshStandardMaterial
-                color="#16242e"
-                metalness={0.7}
-                roughness={0.4}
-                emissive={accent}
-                emissiveIntensity={0.3}
-              />
-            </mesh>
-          ))
-        : null}
+      <mesh position={[0, 6, 0]}>
+        <boxGeometry args={[48, 8, 96]} />
+        <meshStandardMaterial color="#182733" metalness={0.24} roughness={0.7} />
+      </mesh>
+
+      {/* The lit edge, and the only place faction colour touches the ground.
+          §36.5 keeps it an accent: a deck painted in it reads as a coloured
+          plate rather than as territory a faction is standing on. */}
+      {/* Sunk below the deck's own surface and a little wider than it, so what
+          shows is a lit ledge running round the outside. Sitting it level with
+          the deck instead covers the deck: from above the wider plate simply
+          wins, and the whole district turns into a coloured rectangle. */}
+      <mesh position={[0, 9.1, 0]}>
+        <boxGeometry args={[49.8, 1, 97.8]} />
+        <meshBasicMaterial color={accent} transparent opacity={0.5} />
+      </mesh>
+
+      <InstancedField placements={masses}>
+        <boxGeometry key="mass" args={[1, 1, 1]} />
+        {/* Nearly dielectric, deliberately. There is no environment map in this
+            scene, and a metallic surface with nothing to reflect renders black:
+            the first pass at this district was a field of black rectangles that
+            looked like missing geometry rather than like buildings. */}
+        <meshStandardMaterial
+          key="mass-material"
+          color="#273c4a"
+          metalness={0.16}
+          roughness={0.62}
+          emissive="#0d2634"
+          emissiveIntensity={0.38}
+        />
+      </InstancedField>
+
+      <InstancedField placements={crowns}>
+        <boxGeometry key="crown" args={[1, 1, 1]} />
+        <meshBasicMaterial key="crown-material" color={accent} transparent opacity={0.85} />
+      </InstancedField>
+    </group>
+  );
+}
+
+/**
+ * The rock hanging under a plateau (§38.1).
+ *
+ * A cone alone reads as a spinning top. What says *floating island* is the
+ * ragged edge: shards breaking away around the rim with the point at the
+ * middle, which is the silhouette every one of the delivered world frames has.
+ */
+function Crags({ seed }: { readonly seed: number }): JSX.Element | null {
+  const crags = useMemo(() => islandCrags(seed, 88, CRAGS_PER_ISLAND), [seed]);
+
+  const placements = useMemo<readonly Placement[]>(
+    () =>
+      crags.map((crag) => ({
+        position: [crag.x, -14 - crag.length / 2, crag.z],
+        scale: [crag.radius, crag.length, crag.radius],
+        // Turned over so the point hangs downward, then leaned outward from the
+        // axis — which is the way rock breaks away from a mass.
+        rotation: [Math.PI + crag.tiltX, 0, crag.tiltZ],
+      })),
+    [crags],
+  );
+
+  return (
+    <InstancedField placements={placements}>
+      <coneGeometry key="crag" args={[1, 1, 5]} />
+      <meshStandardMaterial key="crag-material" color="#080f15" metalness={0.25} roughness={0.95} />
+    </InstancedField>
+  );
+}
+
+/**
+ * Loose rock in the space between the islands (§38.1, §36.14).
+ *
+ * Stars are infinitely far away, so they never move against the camera: a world
+ * with nothing between it and them reads as a model on a black table however
+ * many points are behind it. These are what the camera passes, and what gives
+ * the drag at the global view a sense of depth.
+ *
+ * The field turns as one, slowly. §36.14 asks for a world kept subtly alive
+ * rather than one full of particles.
+ */
+function Debris(): JSX.Element {
+  const field = useRef<Group>(null);
+
+  const placements = useMemo<readonly Placement[]>(
+    () =>
+      debrisField(4_207, 620, 1_500, 72).map((rock) => ({
+        position: [rock.x, rock.y, rock.z],
+        scale: [rock.radius, rock.radius * 0.8, rock.radius],
+        rotation: [rock.tilt, rock.tilt * 1.7, rock.tilt * 0.4],
+      })),
+    [],
+  );
+
+  useFrame((_, delta) => {
+    if (field.current !== null) {
+      field.current.rotation.y += delta * 0.004;
+    }
+  });
+
+  return (
+    <group ref={field}>
+      <InstancedField placements={placements}>
+        <icosahedronGeometry key="rock" args={[1, 0]} />
+        <meshStandardMaterial
+          key="rock-material"
+          color="#0b131a"
+          metalness={0.2}
+          roughness={0.98}
+        />
+      </InstancedField>
     </group>
   );
 }
@@ -411,11 +690,11 @@ function ForwardBase({
     <group position={[side * 92, 11, 0]} scale={[1, Math.max(extension, 0.001), 1]}>
       <mesh position={[0, 3, 0]}>
         <cylinderGeometry args={[10, 13, 6, 6]} />
-        <meshStandardMaterial color="#0f1a22" metalness={0.6} roughness={0.5} />
+        <meshStandardMaterial color="#111d26" metalness={0.22} roughness={0.6} />
       </mesh>
       <mesh position={[0, 20, 0]}>
         <cylinderGeometry args={[1.4, 1.4, 28, 6]} />
-        <meshStandardMaterial color="#1c2c37" metalness={0.8} roughness={0.3} />
+        <meshStandardMaterial color="#243745" metalness={0.24} roughness={0.45} />
       </mesh>
       <mesh position={[0, 35, 0]}>
         <octahedronGeometry args={[4, 0]} />
@@ -424,14 +703,6 @@ function ForwardBase({
     </group>
   );
 }
-
-/** Structures on a staging platform. Fixed, so a sector is recognisable. */
-const STAGING_BLOCKS: readonly { x: number; z: number; width: number; height: number }[] = [
-  { x: -8, z: -30, width: 12, height: 34 },
-  { x: 9, z: -8, width: 9, height: 22 },
-  { x: -6, z: 18, width: 11, height: 28 },
-  { x: 10, z: 36, width: 8, height: 16 },
-];
 
 /**
  * The void the world floats in (§38.1, §38.10).
@@ -567,13 +838,15 @@ export function WorldScene(): JSX.Element {
           void rather than ending at a hard line (§38.10). Pulled in from 3000
           so the boundary is felt before it is reached. */}
       <fog attach="fog" args={['#05080b', 700, 2_600]} />
-      <ambientLight intensity={0.22} />
+      <ambientLight intensity={0.3} />
       <directionalLight position={[400, 900, 300]} intensity={1.05} />
       {/* A cold rim from the opposite side, so a silhouette separates from the
           background instead of dissolving into it. */}
       <directionalLight position={[-600, 300, -500]} intensity={0.45} color="#5c8fb8" />
 
       <Starfield />
+      {/* Between the stars and the islands, so the void has a middle distance. */}
+      <Debris />
 
       <WorldInput />
 
