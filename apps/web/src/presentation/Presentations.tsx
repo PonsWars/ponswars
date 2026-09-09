@@ -51,6 +51,7 @@ export function Presentations({
       return (
         <Overlay
           title="COMMANDER PROFILE"
+          route={route}
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
@@ -61,6 +62,7 @@ export function Presentations({
       return (
         <Overlay
           title="REWARDS"
+          route={route}
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
@@ -71,6 +73,7 @@ export function Presentations({
       return (
         <Overlay
           title="ABOUT"
+          route={route}
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
@@ -81,6 +84,7 @@ export function Presentations({
       return (
         <Overlay
           title="BATTLE RESULT"
+          route={route}
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
@@ -121,6 +125,7 @@ export function Presentations({
         // a trap, and §80.4 puts the same bar on every surface.
         <Overlay
           title="GENESIS"
+          route={route}
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >

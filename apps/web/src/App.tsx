@@ -501,6 +501,7 @@ export function App(): JSX.Element {
       {route.kind === 'FACTIONS' ? (
         <Overlay
           title="FACTIONS"
+          route={route}
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={() => {
             navigate(WORLD_ROUTE);

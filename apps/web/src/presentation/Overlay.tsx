@@ -1,6 +1,7 @@
 import { LAYER, MIN_TOUCH_TARGET } from '@ponswars/ui-tokens';
 import { useEffect, useRef, type JSX, type ReactNode } from 'react';
 import { controlStyle } from '../hud/styles.js';
+import { pathFor, type Route } from '../routing/route.js';
 
 /**
  * A presentation layered over the world (§80.4, §81.2).
@@ -16,11 +17,21 @@ import { controlStyle } from '../hud/styles.js';
  */
 export function Overlay({
   title,
+  route,
   onClose,
   nav,
   children,
 }: {
   readonly title: string;
+  /**
+   * Which presentation this is showing.
+   *
+   * Required rather than optional, and a route rather than a caller-chosen
+   * key, because it is what decides when the page starts again from the top —
+   * see the effect below. A prop each call site had to remember to pass
+   * correctly is one that eventually stops being passed correctly.
+   */
+  readonly route: Route;
   readonly onClose: () => void;
   /**
    * The navigation bar, for presentations a visitor browses between.
@@ -33,6 +44,20 @@ export function Overlay({
   readonly children: ReactNode;
 }): JSX.Element {
   const panel = useRef<HTMLDivElement>(null);
+  const surface = useRef<HTMLDivElement>(null);
+  const path = pathFor(route);
+
+  // Back to the top when the presentation changes.
+  //
+  // Every one of these renders through the same component, so React keeps the
+  // scrolling element and only swaps what is inside it — which meant walking
+  // from the bottom of the about page to the rewards page landed a third of the
+  // way down a page nobody had scrolled, with its own heading above the fold.
+  // Keyed on the path, so choosing a different faction restarts the dossier
+  // too; the roster and a faction share a component but are not the same page.
+  useEffect(() => {
+    surface.current?.scrollTo({ top: 0 });
+  }, [path]);
 
   useEffect(() => {
     // Focus moves into the presentation when it opens, so a keyboard or screen
@@ -55,6 +80,7 @@ export function Overlay({
 
   return (
     <div
+      ref={surface}
       style={{
         position: 'fixed',
         inset: 0,
