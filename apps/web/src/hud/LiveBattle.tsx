@@ -42,6 +42,11 @@ export function LiveBattle({
       </div>
 
       <div>
+        <div style={captionStyle}>FRONTLINE</div>
+        <Frontline battle={battle} />
+      </div>
+
+      <div>
         <div style={captionStyle}>YOUR BACKING</div>
         <div style={{ fontSize: 13, color: 'var(--pw-text-2)' }}>
           {battle.backing === null ? (
@@ -62,6 +67,65 @@ export function LiveBattle({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Where the frontline stands, as a bar.
+ *
+ * The same number the world already draws (§13.4) — a normalized position, not
+ * a score — shown here because §36.15 puts *where the frontline is* among the
+ * things a player must take in instantly, and reading it off a 3D marker means
+ * finding the marker first.
+ *
+ * No figure on it, and none derivable from it by eye beyond what the world
+ * shows. Three of the delivered mockups put `68% — 32%` on exactly this bar;
+ * §12.5 and §24 hide the exact score for the whole live window, and a
+ * percentage here would be that score with a different unit on it. There is
+ * nothing to resist: `ClientBattle` carries a frontline and no score.
+ */
+function Frontline({ battle }: { readonly battle: ClientBattle }): JSX.Element {
+  const held = Math.min(Math.max(battle.frontline, 0), 1);
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        height: 8,
+        borderRadius: 2,
+        overflow: 'hidden',
+        background: 'var(--pw-surface-2)',
+        border: '1px solid var(--pw-border-1)',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          // Each side's ground, meeting where the line stands. Two accents
+          // rather than one filled bar: a single bar against an empty track
+          // reads as a meter with a value, and this is a position between two
+          // named sides.
+          background: `linear-gradient(to right, ${FACTION_ACCENT[battle.left]} 0%, ${
+            FACTION_ACCENT[battle.left]
+          } ${String(held * 100)}%, ${FACTION_ACCENT[battle.right]} ${String(
+            held * 100,
+          )}%, ${FACTION_ACCENT[battle.right]} 100%)`,
+          opacity: 0.5,
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: `${String(held * 100)}%`,
+          width: 2,
+          marginLeft: -1,
+          background: 'var(--pw-text-1)',
+        }}
+      />
     </div>
   );
 }
