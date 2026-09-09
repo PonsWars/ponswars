@@ -391,6 +391,24 @@ export function outwardMode(mode: CameraMode): CameraMode | null {
 }
 
 /**
+ * The level the camera is at, or the one it is on its way to.
+ *
+ * `mode` only becomes the destination when a transition finishes, which is the
+ * right answer for anything describing where the camera *is* — the HUD density
+ * §37.6 ties to zoom should change on arrival, not on departure. It is the
+ * wrong answer for a control the player presses, because a player who taps a
+ * sector and then presses `ESC` half a second later is changing their mind
+ * about where they are going, and reading the level they left makes the key do
+ * nothing at all.
+ *
+ * §37.7 asks never to leave someone stranded; a rail that ignores you for the
+ * second after every move is a smaller version of the same thing.
+ */
+export function intendedMode(camera: CameraState): CameraMode {
+  return camera.transition?.toMode ?? camera.mode;
+}
+
+/**
  * Flies one spatial level outward (`ESC`, §37.3).
  *
  * The pose for a level belongs to the world layout, not to this package — the
@@ -404,7 +422,7 @@ export function stepOutward(
   at: UtcTimestamp,
   cameraConfig: CameraConfig,
 ): CameraState {
-  const mode = outwardMode(camera.mode);
+  const mode = outwardMode(intendedMode(camera));
   if (mode === null) {
     return camera;
   }

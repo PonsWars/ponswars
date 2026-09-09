@@ -19,6 +19,7 @@ import {
   panTo,
   pinchTo,
   screenBasis,
+  intendedMode,
   stepOutward,
   worldUnitsPerPixel,
   zoomBy,
@@ -363,11 +364,36 @@ describe('stepping outward', () => {
       },
       CAMERA,
     );
-    // The cinematic has not yet applied its mode, so stepping out from
-    // BATTLE_TACTICAL lands on SECTOR_FOCUS — and crucially it is not refused.
+    // Half a second in, the cinematic is still flying and `mode` is therefore
+    // still BATTLE_TACTICAL. `ESC` acts on where the camera is *going*, so it
+    // steps out of the cinematic and back to the tactical view §81.3 returns
+    // control to — rather than out of the level the cinematic was launched
+    // from, which is one level further than anyone asked for. And crucially it
+    // is not refused: an uninterruptible transition still yields to the rail.
     const stepped = stepOutward(cinematic, poseFor, at(500), CAMERA);
     expect(stepped.transition?.interruptible).toBe(true);
-    expect(stepped.transition?.toMode).toBe('SECTOR_FOCUS');
+    expect(stepped.transition?.toMode).toBe('BATTLE_TACTICAL');
+  });
+
+  it('acts on the level being flown to, not the one being left', () => {
+    // A player who taps a sector and presses `ESC` half a second later has
+    // changed their mind. Reading `mode` — which only becomes the destination
+    // when the transition finishes — made the key do nothing for the length of
+    // every move, which §37.7's "never leave the user stranded" covers just as
+    // much as a dead end does.
+    const flying = flyTo(
+      still(GLOBAL),
+      { to: SECTOR, mode: 'SECTOR_FOCUS', at: at(0), duration: milliseconds(1_000) },
+      CAMERA,
+    );
+
+    expect(flying.mode).toBe('GLOBAL_FREE');
+    expect(intendedMode(flying)).toBe('SECTOR_FOCUS');
+    expect(stepOutward(flying, poseFor, at(400), CAMERA).transition?.toMode).toBe('GLOBAL_FREE');
+  });
+
+  it('reads the settled mode when nothing is in flight', () => {
+    expect(intendedMode(still(SECTOR, 'SECTOR_FOCUS'))).toBe('SECTOR_FOCUS');
   });
 
   it('arrives immediately under reduced motion', () => {
