@@ -69,3 +69,25 @@ export const RESHUFFLE_REDUCED: ReshuffleTiming = {
   connectMs: 120,
   deployMs: 100,
 };
+
+/**
+ * How wide the lens has to be for the world to fit the window (§37.4, §83).
+ *
+ * A perspective camera's field of view is vertical, so a fixed one narrows
+ * *horizontally* as the window gets taller than it is wide. At 45° on a
+ * 375×812 phone the horizontal field is under 22°, and the ring of five
+ * sectors — over 1 000 units across — did not come close to fitting: the
+ * global view on a phone was the Market Core and two of the five islands.
+ *
+ * `HORIZONTAL_FOV` is what the lens tries to keep across the frame whatever
+ * the shape of the window. The bounds are the honest part of it: a portrait
+ * phone cannot have both a comfortable lens and the whole ring, and past about
+ * 78° the distortion at the edges costs more than the sectors it recovers.
+ *
+ * `CALIBRATE` (§59.4).
+ */
+export const VIEWPORT_FIT = {
+  horizontalFov: 58,
+  minFov: 45,
+  maxFov: 78,
+} as const;

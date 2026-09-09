@@ -3,7 +3,9 @@ import { Html } from '@react-three/drei';
 import { FactionEmblem } from '../art/FactionEmblem.js';
 import type { JSX } from 'react';
 import { captionStyle, panelStyle } from '../hud/styles.js';
+import { useNarrowViewport } from '../hud/useNarrowViewport.js';
 import type { ClientBattle } from '../state/session.js';
+import { SECTOR_SKYLINE_HEIGHT } from './layout.js';
 
 /**
  * The label that floats over a sector (§2.1, §37.6, §38.4).
@@ -41,11 +43,14 @@ export function SectorLabel({
   readonly index: number;
   readonly onFocus: () => void;
 }): JSX.Element {
+  const narrow = useNarrowViewport();
+
   return (
     <Html
-      // Anchored above the platform so the label clears the geometry rather
-      // than sitting inside it.
-      position={[0, 96, 0]}
+      // Above the skyline rather than at a number that used to be above it.
+      // Anchored at 96 this sat among the towers once the districts were built,
+      // which is the same drift the camera poses had.
+      position={[0, SECTOR_SKYLINE_HEIGHT + 34, 0]}
       center
       // The world is the hero: the label must not swallow a drag meant for the
       // camera, so only the button inside it takes pointer events (§37.3).
@@ -73,6 +78,10 @@ export function SectorLabel({
           color: 'var(--pw-text-1)',
           font: 'inherit',
           textAlign: 'left',
+          // Screen-space labels do not shrink with the world. Five of them at
+          // desktop size on a phone cover the ring they are labelling, so they
+          // step down rather than the world stepping back (§37.4).
+          transform: narrow ? 'scale(0.68)' : undefined,
         }}
       >
         <span

@@ -24,7 +24,7 @@ import {
   SECTOR_POSITIONS,
   SECTOR_SKYLINE_HEIGHT,
 } from './layout.js';
-import { RESHUFFLE, RESHUFFLE_REDUCED } from './navigation-config.js';
+import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT } from './navigation-config.js';
 import { SectorLabel } from './SectorLabel.js';
 import { WorldInput } from './WorldInput.js';
 
@@ -782,6 +782,25 @@ export function WorldScene(): JSX.Element {
     tick(nowUtc());
     aim(three.camera as PerspectiveCamera, camera.pose);
   });
+
+  // The lens widens on a window taller than it is wide, so the ring still fits
+  // across the frame (§37.4). Reads the renderer's own size rather than the
+  // window's: the canvas is what the projection has to match, and on a split
+  // view or an embedded pane those are not the same number.
+  useEffect(() => {
+    const active = three.camera as PerspectiveCamera;
+    const aspect = three.size.width / Math.max(three.size.height, 1);
+    const wanted =
+      (2 *
+        Math.atan(Math.tan((VIEWPORT_FIT.horizontalFov * Math.PI) / 360) / Math.max(aspect, 0.05)) *
+        180) /
+      Math.PI;
+    const fov = Math.min(Math.max(wanted, VIEWPORT_FIT.minFov), VIEWPORT_FIT.maxFov);
+    if (Math.abs(active.fov - fov) > 0.01) {
+      active.fov = fov;
+      active.updateProjectionMatrix();
+    }
+  }, [three.camera, three.size.width, three.size.height]);
 
   // And again whenever the pose changes, outside the loop.
   //
