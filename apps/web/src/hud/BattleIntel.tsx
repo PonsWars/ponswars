@@ -1,8 +1,7 @@
-import type { ActiveTicker, ConfidenceSnapshot } from '@ponswars/shared-types';
+import { FACTIONS, type ActiveTicker, type ConfidenceSnapshot } from '@ponswars/shared-types';
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
 import { FactionEmblem } from '../art/FactionEmblem.js';
-import { FACTION_LEGION } from '../art/manifest.js';
 import { captionStyle, humanize, panelStyle } from './styles.js';
 
 /**
@@ -53,10 +52,11 @@ export function BattleIntel({
         <FactionEmblem ticker={ticker} size={28} />
         <div>
           <div style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>{ticker}</div>
-          {/* The legion name §39 gives it. §36.7 needs a faction identifiable
-              without colour, and a name does what an accent cannot. */}
+          {/* The legion name, from the roster §39 locks rather than from a
+              second list beside it. §36.7 needs a faction identifiable without
+              colour, and a name does what an accent cannot. */}
           <div style={{ ...captionStyle, fontSize: 9, color: accent }}>
-            {FACTION_LEGION[ticker]}
+            {FACTIONS[ticker].name.toUpperCase()}
           </div>
         </div>
       </div>

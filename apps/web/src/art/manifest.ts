@@ -1,4 +1,4 @@
-import type { ActiveTicker, CardType } from '@ponswars/shared-types';
+import type { CardType } from '@ponswars/shared-types';
 
 /**
  * Where the delivered art lives, by what it depicts.
@@ -23,27 +23,6 @@ import type { ActiveTicker, CardType } from '@ponswars/shared-types';
  * The card art has no such problem: original emblem, original units, no
  * third-party mark anywhere.
  */
-
-/**
- * The faction's legion name, as its own dossier titles it (§39).
- *
- * Beside the ticker rather than instead of it. §36.7 requires a faction to stay
- * identifiable without colour, and a name does that where an accent alone
- * cannot — but the ticker is what the round, the result and the ledger call it,
- * so the ticker stays the identifier.
- */
-export const FACTION_LEGION: Readonly<Record<ActiveTicker, string>> = {
-  NVDA: 'AI MECH LEGION',
-  AAPL: 'TITANIUM GUARD',
-  MSFT: 'AZURE CYBER CORPS',
-  TSLA: 'MARS VANGUARD',
-  GME: 'RETAIL REBELLION',
-  META: 'REALITY LEGION',
-  AMZN: 'FULFILLMENT ARMY',
-  GOOGL: 'INTELLIGENCE DIVISION',
-  AMD: 'RED CORE BATTALION',
-  SPY: 'MARKET FEDERATION',
-};
 
 /**
  * Card art, for the three cards that have any.

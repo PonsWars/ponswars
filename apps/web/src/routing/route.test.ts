@@ -11,9 +11,21 @@ const ALL_ROUTES: readonly Route[] = [
 ];
 
 describe('parseRoute', () => {
-  it('reads the world at the root', () => {
-    expect(parseRoute('/')).toEqual(WORLD_ROUTE);
-    expect(parseRoute('')).toEqual(WORLD_ROUTE);
+  it('reads the landing at the root, and the world beneath it', () => {
+    // The root is the way in: a visitor who has never seen this is told what it
+    // is before being dropped into a war. The world keeps its own path, and the
+    // scene behind the overlay is never unmounted either way (§37.9).
+    expect(parseRoute('/')).toEqual({ kind: 'LANDING' });
+    expect(parseRoute('')).toEqual({ kind: 'LANDING' });
+    expect(parseRoute('/world')).toEqual(WORLD_ROUTE);
+  });
+
+  it('still lands anything unrecognised in the world', () => {
+    // §37.1: a deep link that no longer resolves should put the player in the
+    // world they came for rather than on a not-found page — and that stays true
+    // now that the root means something else.
+    expect(parseRoute('/nonsense')).toEqual(WORLD_ROUTE);
+    expect(parseRoute('/war')).toEqual(WORLD_ROUTE);
   });
 
   it('reads a shared battle link', () => {
@@ -52,8 +64,9 @@ describe('pathFor', () => {
     }
   });
 
-  it('writes the root for an unfocused world', () => {
-    expect(pathFor(WORLD_ROUTE)).toBe('/');
+  it('writes its own path for an unfocused world', () => {
+    expect(pathFor(WORLD_ROUTE)).toBe('/world');
+    expect(pathFor({ kind: 'LANDING' })).toBe('/');
   });
 });
 

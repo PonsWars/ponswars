@@ -26,6 +26,18 @@ export interface PresentationRoute {
 }
 
 /**
+ * The way in.
+ *
+ * Its own type rather than a fourth presentation kind, because it is not one: a
+ * presentation is something a player opens *from* the world, and this is what
+ * they see before entering it. Keeping them separate is what lets the component
+ * that renders presentations be exhaustive over exactly the three it handles.
+ */
+export interface LandingRoute {
+  readonly kind: 'LANDING';
+}
+
+/**
  * A finished battle, shown over the world (§27.8).
  *
  * Carries a battle id because a result is about one battle, and because a
@@ -38,7 +50,7 @@ export interface ResultRoute {
   readonly battleId: string | null;
 }
 
-export type Route = WorldRoute | PresentationRoute | ResultRoute;
+export type Route = WorldRoute | LandingRoute | PresentationRoute | ResultRoute;
 
 export const WORLD_ROUTE: WorldRoute = { kind: 'WORLD', battleId: null };
 
@@ -55,6 +67,11 @@ export function parseRoute(pathname: string): Route {
   const [first, second] = segments;
 
   switch (first) {
+    // The way in. A visitor who has never seen this needs telling what it is
+    // before being dropped into a war — and the world keeps rendering behind
+    // it, so entering is an overlay lifting rather than a page load (§37.9).
+    case undefined:
+      return { kind: 'LANDING' };
     case 'profile':
       return { kind: 'PROFILE' };
     case 'rewards':
@@ -63,6 +80,8 @@ export function parseRoute(pathname: string): Route {
       return { kind: 'GENESIS' };
     case 'result':
       return { kind: 'RESULT', battleId: second ?? null };
+    case 'world':
+      return WORLD_ROUTE;
     case 'war':
       // `/war` with no id is still the world, just unfocused. A URL truncated
       // in a chat client should not become a dead end.
@@ -81,10 +100,12 @@ export function pathFor(route: Route): string {
       return '/rewards';
     case 'GENESIS':
       return '/genesis';
+    case 'LANDING':
+      return '/';
     case 'RESULT':
       return route.battleId === null ? '/result' : `/result/${route.battleId}`;
     case 'WORLD':
-      return route.battleId === null ? '/' : `/war/${route.battleId}`;
+      return route.battleId === null ? '/world' : `/war/${route.battleId}`;
   }
 }
 
@@ -95,6 +116,8 @@ export function pathFor(route: Route): string {
  * overlay is on top of it, which is what the camera uses to choose
  * `PROFILE_PRESENTATION` (§81.2).
  */
-export function isPresentation(route: Route): route is PresentationRoute | ResultRoute {
+export function isPresentation(
+  route: Route,
+): route is LandingRoute | PresentationRoute | ResultRoute {
   return route.kind !== 'WORLD';
 }

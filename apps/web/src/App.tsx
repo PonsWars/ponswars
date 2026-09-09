@@ -6,6 +6,7 @@ import {
 import { LAYER } from '@ponswars/ui-tokens';
 import { lazy, Suspense, useEffect, useMemo, type JSX } from 'react';
 import { liveEndpoints } from './live/endpoints.js';
+import { Landing } from './landing/Landing.js';
 import { PreviewBanner } from './live/PreviewBanner.js';
 import { fetchBattleResult } from './live/round-client.js';
 import { useLiveWorld } from './live/useLiveWorld.js';
@@ -452,7 +453,10 @@ export function App(): JSX.Element {
       <Suspense fallback={<WorldLoading />}>
         <WorldCanvas />
       </Suspense>
-      <Hud onNavigate={navigate} />
+      {/* The HUD belongs to the world, and the landing is what comes before
+          entering it. Showing both puts a round countdown and a set of world
+          controls behind a page explaining what a round is. */}
+      {route.kind === 'LANDING' ? null : <Hud onNavigate={navigate} />}
       <div
         style={{
           position: 'fixed',
@@ -469,7 +473,9 @@ export function App(): JSX.Element {
       >
         <PreviewBanner status={status} />
       </div>
-      {isPresentation(route) ? (
+      {route.kind === 'LANDING' ? <Landing onNavigate={navigate} /> : null}
+
+      {isPresentation(route) && route.kind !== 'LANDING' ? (
         <Presentations
           route={route}
           navigate={navigate}
