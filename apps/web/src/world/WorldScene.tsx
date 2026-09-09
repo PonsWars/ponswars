@@ -12,7 +12,15 @@ import {
   type ReshuffleFrame,
 } from '@ponswars/world-runtime';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type JSX } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+} from 'react';
 import { Object3D } from 'three';
 import type { Group, InstancedMesh, Mesh, PerspectiveCamera, PointLight } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
@@ -428,6 +436,8 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
   const bases = useRef<(Group | null)[]>([]);
   const frontline = useRef<Mesh | null>(null);
   const readReshuffle = useReshuffleReader();
+  const [hovered, setHovered] = useState(false);
+  const gl = useThree((state) => state.gl);
   const position = SECTOR_POSITIONS[index];
   const held = battle?.frontline ?? 0.5;
   // Where the marker is standing, as opposed to where the server last said the
@@ -485,6 +495,20 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
     }
   });
 
+  // A sector is the one thing in the world a click does something to, and on a
+  // desktop the cursor is how that is advertised. Written from an effect rather
+  // than from the handlers so the canvas cannot be left holding a pointer
+  // cursor if the sector unmounts — an LOD change or a reshuffle is enough.
+  useEffect(() => {
+    if (!hovered) {
+      return;
+    }
+    gl.domElement.style.cursor = 'pointer';
+    return () => {
+      gl.domElement.style.cursor = 'auto';
+    };
+  }, [hovered, gl]);
+
   if (position === undefined || detail === 'CULLED') {
     return null;
   }
@@ -522,6 +546,13 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
           event.stopPropagation();
           onSelect(index);
         }}
+        onPointerOver={(event) => {
+          event.stopPropagation();
+          setHovered(true);
+        }}
+        onPointerOut={() => {
+          setHovered(false);
+        }}
       >
         <cylinderGeometry
           args={[
@@ -532,7 +563,9 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
           ]}
         />
         <meshStandardMaterial
-          color={isFocused ? '#22394a' : '#1a2d3a'}
+          // Lifting under the pointer, a step below the focused tone: the world
+          // should answer a hover before it answers a click (§37.3).
+          color={isFocused ? '#22394a' : hovered ? '#1e3342' : '#1a2d3a'}
           metalness={0.2}
           roughness={0.85}
         />
