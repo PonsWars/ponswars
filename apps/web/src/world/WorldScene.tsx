@@ -12,9 +12,9 @@ import {
   type ReshuffleFrame,
 } from '@ponswars/world-runtime';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useLayoutEffect, useMemo, useRef, type JSX } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type JSX } from 'react';
 import { Object3D } from 'three';
-import type { Group, InstancedMesh, PerspectiveCamera } from 'three';
+import type { Group, InstancedMesh, Mesh, PerspectiveCamera, PointLight } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
 import {
   MARKET_CORE,
@@ -182,15 +182,66 @@ const CORE_SPIRES: readonly { x: number; z: number; width: number; height: numbe
   { x: 66, z: -44, width: 15, height: 84 },
 ];
 
-function MarketCore({ pulse }: { readonly pulse: number }): JSX.Element {
+/**
+ * Reads the reshuffle at whatever instant the caller asks about (§15).
+ *
+ * Every part of the sequence is drawn from a pure function of elapsed time, so
+ * the honest way to animate it is to ask what the world looks like *now*, once
+ * per frame, in the component that moves.
+ *
+ * It was a value passed down as props, and that was a bug this file could not
+ * see: props only change when React re-renders, and nothing here re-renders
+ * per frame — the camera reducer deliberately returns the same object when the
+ * camera has not moved, so a still camera does not re-render the tree sixty
+ * times a second. A reshuffle watched with a still camera therefore advanced
+ * only when something unrelated happened to re-render, which in practice meant
+ * once a second when the next round snapshot arrived. The choreography was
+ * correct and nobody was seeing it.
+ *
+ * A reader rather than a shared mutable frame, because `useFrame` callbacks run
+ * in subscription order and subscription order is mount order — a writer in the
+ * parent would run *after* its children and hand them the previous frame. The
+ * reducer is pure and costs a few multiplications, so every caller computing it
+ * for itself is both cheaper to reason about and exactly consistent.
+ */
+function useReshuffleReader(): () => ReshuffleFrame {
+  const startedAt = useSession((state) => state.reshuffleStartedAt);
+  const clockOffsetMs = useSession((state) => state.clockOffsetMs);
+  const reducedMotion = useSession((state) => state.reducedMotion);
+
+  return useCallback(
+    () =>
+      startedAt === null
+        ? SETTLED_WORLD
+        : reshuffleFrame(
+            nowUtc() - startedAt - clockOffsetMs,
+            reducedMotion ? RESHUFFLE_REDUCED : RESHUFFLE,
+          ),
+    [startedAt, clockOffsetMs, reducedMotion],
+  );
+}
+
+function MarketCore(): JSX.Element {
   const core = useRef<Group>(null);
+  const beacon = useRef<Mesh>(null);
+  const glow = useRef<PointLight>(null);
+  const readReshuffle = useReshuffleReader();
 
   // §38.10: a permanent dark cinematic atmosphere whose lighting shifts by
   // phase, and §36.14 keeps the world subtly alive through slow rotation rather
   // than particles. A steady drift, not a spin.
+  //
+  // The pulse rides along here rather than arriving as a prop, so it moves at
+  // frame rate like the rotation beside it.
   useFrame((_, delta) => {
     if (core.current !== null) {
       core.current.rotation.y += delta * 0.06;
+    }
+    const pulse = readReshuffle().corePulse;
+    beacon.current?.scale.setScalar(1 + pulse * 2.4);
+    if (glow.current !== null) {
+      glow.current.intensity = 340 + pulse * 900;
+      glow.current.distance = 620 + pulse * 700;
     }
   });
 
@@ -223,15 +274,16 @@ function MarketCore({ pulse }: { readonly pulse: number }): JSX.Element {
       {/* The beacon at the summit. One bright point the eye returns to, and
           the thing that swells while the rest of the world is apart (§15 step
           5) — the core is what survives every round. */}
-      <mesh position={[0, 208, 0]} scale={1 + pulse * 2.4}>
+      <mesh ref={beacon} position={[0, 208, 0]}>
         <sphereGeometry args={[5, 12, 12]} />
         <meshBasicMaterial color="#7fe3c4" />
       </mesh>
       <pointLight
+        ref={glow}
         position={[0, 200, 0]}
         color="#5fd3b4"
-        intensity={340 + pulse * 900}
-        distance={620 + pulse * 700}
+        intensity={340}
+        distance={620}
       />
 
       {/* Routing pulses out into the sectors (§38.2). */}
@@ -259,25 +311,47 @@ function MarketCore({ pulse }: { readonly pulse: number }): JSX.Element {
  * alive rather than one full of particles, and a signal moving outward from the
  * core is the difference between a diagram and a place that is running.
  */
-function Routes({
-  battles,
-  extension,
-}: {
-  readonly battles: readonly ClientBattle[];
-  /** How far each route reaches, 0 to 1 (§15 steps 6 and 8). */
-  readonly extension: number;
-}): JSX.Element {
+function Routes({ battles }: { readonly battles: readonly ClientBattle[] }): JSX.Element {
   // `undefined` is in the type because it is in the array: a slot whose ref
   // callback has not run yet holds nothing, and typing it as only `Group | null`
   // would make the guard below look like dead code while still being needed.
   const pulses = useRef<(Group | null | undefined)[]>([]);
+  const rails = useRef<(Mesh | null | undefined)[]>([]);
+  const readReshuffle = useReshuffleReader();
 
   useFrame((state) => {
+    const extension = readReshuffle().route;
+
+    for (const [index, rail] of rails.current.entries()) {
+      const target = SECTOR_POSITIONS[index];
+      if (rail === null || rail === undefined || target === undefined) {
+        continue;
+      }
+      // Grows from the core outward rather than fading, so a route reaching a
+      // sector is something a player watches arrive (§15 step 8). Half the
+      // extension in position and all of it in scale — that is what keeps the
+      // near end pinned to the core.
+      //
+      // Scaled rather than rebuilt. The length used to be a geometry argument,
+      // which meant a new `BoxGeometry` allocated and uploaded for every value
+      // it took: tolerable at the once-a-second it actually redrew at, and five
+      // allocations a frame once it moved at frame rate.
+      rail.position.set(
+        (target.x * extension) / 2,
+        (target.y * extension) / 2 + 2,
+        (target.z * extension) / 2,
+      );
+      rail.scale.z = Math.max(extension, 0.0001);
+      rail.visible = extension > 0.001;
+    }
+
     for (const [index, pulse] of pulses.current.entries()) {
       const target = SECTOR_POSITIONS[index];
       if (pulse === null || pulse === undefined || target === undefined) {
         continue;
       }
+      // A signal travels a finished route, not one still being laid.
+      pulse.visible = extension > 0.999;
       // Staggered, so the five do not leave the core in lockstep — that reads
       // as a machine cycling rather than as traffic.
       const travel = (state.clock.elapsedTime * 0.28 + index * 0.2) % 1;
@@ -302,24 +376,17 @@ function Routes({
               // the sectors sit at fixed angles, and an angle written twice is
               // an angle that can disagree with itself.
               //
-              // It grows from the core outward rather than fading, so a route
-              // reaching a sector is something a player watches arrive (§15
-              // step 8). Half the extension in position, all of it in length —
-              // that is what keeps the near end pinned to the core.
-              position={[
-                (position.x * extension) / 2,
-                (position.y * extension) / 2 + 2,
-                (position.z * extension) / 2,
-              ]}
+              // Built at full length and scaled by the reshuffle each frame;
+              // where it reaches is decided in `useFrame` above.
+              ref={(node) => {
+                rails.current[index] = node;
+              }}
               rotation={[0, Math.atan2(position.x, position.z), 0]}
-              visible={extension > 0.001}
             >
-              <boxGeometry args={[2.5, 1, Math.max(length * extension, 0.001)]} />
+              <boxGeometry args={[2.5, 1, length]} />
               <meshBasicMaterial color="#1b3a48" transparent opacity={0.5} />
             </mesh>
             <group
-              // A signal travels a finished route, not one still being laid.
-              visible={extension > 0.999}
               ref={(node) => {
                 pulses.current[index] = node;
               }}
@@ -341,20 +408,48 @@ interface SectorProps {
   readonly battle: ClientBattle | undefined;
   readonly detail: DetailLevel;
   readonly isFocused: boolean;
-  /** Where the reshuffle stands, so what is temporary moves with it (§15). */
-  readonly reshuffle: ReshuffleFrame;
   readonly onSelect: (index: number) => void;
 }
 
-function Sector({
-  index,
-  battle,
-  detail,
-  isFocused,
-  reshuffle,
-  onSelect,
-}: SectorProps): JSX.Element | null {
+function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JSX.Element | null {
+  const bases = useRef<(Group | null)[]>([]);
+  const frontline = useRef<Mesh | null>(null);
+  const readReshuffle = useReshuffleReader();
   const position = SECTOR_POSITIONS[index];
+  const held = battle?.frontline ?? 0.5;
+
+  // What the reshuffle moves on a sector: the two forward bases folding away
+  // and the frontline collapsing to the centre (§15 steps 3, 4 and 9). Driven
+  // here rather than through props for the reason `useReshuffleReader` gives —
+  // props do not change between renders, and there are no renders between
+  // frames.
+  useFrame(() => {
+    const frame = readReshuffle();
+
+    for (const base of bases.current) {
+      if (base === null) {
+        continue;
+      }
+      // Folds down into its own footing rather than shrinking to a point: the
+      // footing is what was landed, and the mast unfolds from it.
+      base.scale.y = Math.max(frame.forwardBase, 0.0001);
+      base.visible = frame.forwardBase > 0.001;
+    }
+
+    const marker = frontline.current;
+    if (marker !== null) {
+      // Collapses toward the centre as it goes, rather than fading in place:
+      // §15 calls the frontline a connection, and a connection comes apart.
+      marker.position.x = (held - 0.5) * 124 * frame.frontline;
+      marker.scale.set(1, Math.max(frame.frontline, 0.0001), Math.max(frame.frontline, 0.0001));
+      marker.visible = frame.frontline > 0.001;
+      const material = marker.material;
+      if (!Array.isArray(material) && 'opacity' in material) {
+        material.opacity = 0.72 * frame.frontline;
+      }
+    }
+  });
+
   if (position === undefined || detail === 'CULLED') {
     return null;
   }
@@ -431,10 +526,22 @@ function Sector({
           assigned this faction and retracted at reshuffle, which is why it
           stands on the staging platform rather than being part of the island.
           A permanent structure here would make a neutral sector look owned. */}
-      {battle !== undefined && detail === 'FULL' && reshuffle.forwardBase > 0.001 ? (
+      {battle !== undefined && detail === 'FULL' ? (
         <>
-          <ForwardBase side={-1} accent={leftAccent} extension={reshuffle.forwardBase} />
-          <ForwardBase side={1} accent={rightAccent} extension={reshuffle.forwardBase} />
+          <ForwardBase
+            side={-1}
+            accent={leftAccent}
+            innerRef={(node) => {
+              bases.current[0] = node;
+            }}
+          />
+          <ForwardBase
+            side={1}
+            accent={rightAccent}
+            innerRef={(node) => {
+              bases.current[1] = node;
+            }}
+          />
         </>
       ) : null}
 
@@ -452,19 +559,14 @@ function Sector({
         realtime stream — §13 makes the battlefield a visualisation of
         authoritative momentum, never a source of it.
       */}
-      {detail !== 'SILHOUETTE' && battle !== undefined && reshuffle.frontline > 0.001 ? (
-        // Collapses toward the centre as it goes, rather than fading in place:
-        // §15 calls the frontline a connection, and a connection comes apart.
-        <mesh
-          position={[(battle.frontline - 0.5) * 124 * reshuffle.frontline, 22, 0]}
-          scale={[1, reshuffle.frontline, reshuffle.frontline]}
-        >
+      {detail !== 'SILHOUETTE' && battle !== undefined ? (
+        <mesh ref={frontline} position={[0, 22, 0]}>
           {/* Narrow and low enough to read across a district that now has a
               skyline behind it. The first pass was a 28-unit wall in flat
               white, and from the sector camera it hid the battlefield it was
               drawn to explain (§36.2). */}
           <boxGeometry args={[2.4, 19, 108]} />
-          <meshBasicMaterial color="#cfe2ec" transparent opacity={0.72 * reshuffle.frontline} />
+          <meshBasicMaterial color="#cfe2ec" transparent opacity={0.72} />
         </mesh>
       ) : null}
 
@@ -675,17 +777,20 @@ function Debris(): JSX.Element {
 function ForwardBase({
   side,
   accent,
-  extension,
+  innerRef,
 }: {
   readonly side: -1 | 1;
   readonly accent: string;
-  /** Retracted at 0, deployed at 1 (§15 steps 4 and 9). */
-  readonly extension: number;
+  /**
+   * Handed back to the sector, which drives the deployment each frame (§15
+   * steps 4 and 9). It is the sector that knows where the reshuffle stands, and
+   * a base that read it for itself would be a second subscription to the same
+   * clock.
+   */
+  readonly innerRef: (node: Group | null) => void;
 }): JSX.Element {
   return (
-    // Folds down into its own footing rather than shrinking to a point: the
-    // footing is what was landed, and the mast is what unfolds from it.
-    <group position={[side * 92, 11, 0]} scale={[1, Math.max(extension, 0.001), 1]}>
+    <group ref={innerRef} position={[side * 92, 11, 0]}>
       <mesh position={[0, 3, 0]}>
         <cylinderGeometry args={[10, 13, 6, 6]} />
         <meshStandardMaterial color="#111d26" metalness={0.22} roughness={0.6} />
@@ -768,9 +873,6 @@ export function WorldScene(): JSX.Element {
   const camera = useSession((state) => state.camera);
   const battles = useSession((state) => state.battles);
   const quality = useSession((state) => state.quality);
-  const reducedMotion = useSession((state) => state.reducedMotion);
-  const reshuffleStartedAt = useSession((state) => state.reshuffleStartedAt);
-  const clockOffsetMs = useSession((state) => state.clockOffsetMs);
   const focusSector = useSession((state) => state.focusSector);
   const tick = useSession((state) => state.tick);
   const three = useThree();
@@ -816,22 +918,6 @@ export function WorldScene(): JSX.Element {
 
   const zoom = currentZoom({ camera });
 
-  /**
-   * Where the reshuffle stands right now (§15).
-   *
-   * Recomputed every frame from an absolute instant rather than advanced by a
-   * counter, so a dropped frame skips along the same curve instead of leaving
-   * the world half disconnected. `SETTLED_WORLD` when no round has changed,
-   * which is every frame except the few seconds after one does.
-   */
-  const reshuffle =
-    reshuffleStartedAt === null
-      ? SETTLED_WORLD
-      : reshuffleFrame(
-          nowUtc() - reshuffleStartedAt - clockOffsetMs,
-          reducedMotion ? RESHUFFLE_REDUCED : RESHUFFLE,
-        );
-
   const details = useMemo(
     () =>
       SECTOR_POSITIONS.map((sectorPosition, index) =>
@@ -867,8 +953,8 @@ export function WorldScene(): JSX.Element {
 
       <WorldInput />
 
-      <MarketCore pulse={reshuffle.corePulse} />
-      <Routes battles={battles} extension={reshuffle.route} />
+      <MarketCore />
+      <Routes battles={battles} />
 
       {SECTOR_POSITIONS.map((_, index) => (
         <Sector
@@ -877,7 +963,6 @@ export function WorldScene(): JSX.Element {
           battle={battles[index]}
           detail={details[index] ?? 'SILHOUETTE'}
           isFocused={battles[index]?.battleId === camera.focusedBattleId}
-          reshuffle={reshuffle}
           onSelect={(selected) => {
             // A pan that happens to end over a sector is not a click on it.
             // Without this, dragging across the world flies the camera to
