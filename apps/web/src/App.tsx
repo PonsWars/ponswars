@@ -238,6 +238,7 @@ const PLACEHOLDER_PROFILE: ProfileData = {
   card: {
     genesisId: PLACEHOLDER_GENESIS.genesisId,
     name: PLACEHOLDER_GENESIS.cardName,
+    cardType: PLACEHOLDER_GENESIS.cardType,
     rarity: PLACEHOLDER_GENESIS.rarity,
     effect: PLACEHOLDER_GENESIS.effect,
     usesRemaining: 2,

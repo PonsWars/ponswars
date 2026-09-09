@@ -1,6 +1,7 @@
-import { RARITY_USES, type Rarity } from '@ponswars/shared-types';
+import { RARITY_USES, type CardType, type Rarity } from '@ponswars/shared-types';
 import { RARITY_COLOR } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
+import { CARD_ART } from '../art/manifest.js';
 import { captionStyle, humanize, panelStyle, readoutStyle } from '../hud/styles.js';
 
 /**
@@ -20,6 +21,11 @@ export interface GenesisCardView {
   readonly genesisId: string;
   readonly name: string;
   readonly rarity: Rarity;
+  /**
+   * Which card it is, so the profile can show the same face the reveal opened.
+   * `null` for a card with no art in the catalog, which renders as text.
+   */
+  readonly cardType: CardType | null;
   /** The support effect, in the product's words, e.g. `Market Support +2`. */
   readonly effect: string;
   readonly usesRemaining: number;
@@ -75,11 +81,35 @@ export interface ProfileData {
 export function WarRoom({ profile }: { readonly profile: ProfileData }): JSX.Element {
   return (
     <>
-      <Identity profile={profile} />
-      <GenesisCardPanel card={profile.card} />
+      {/* Who you are and what you hold, side by side. §34 asks for a war room
+          rather than a column of interchangeable metric cards, and a stack of
+          full-width panels is the column it is warning about. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
+          gap: 'var(--pw-space-4)',
+          alignItems: 'start',
+        }}
+      >
+        <Identity profile={profile} />
+        <GenesisCardPanel card={profile.card} />
+      </div>
+
       <Lifetime stats={profile.lifetime} />
-      {profile.mostBacked === null ? null : <MostBackedPanel stat={profile.mostBacked} />}
-      {profile.biggestUpset === null ? null : <BiggestUpsetPanel upset={profile.biggestUpset} />}
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gap: 'var(--pw-space-4)',
+          alignItems: 'start',
+        }}
+      >
+        {profile.mostBacked === null ? null : <MostBackedPanel stat={profile.mostBacked} />}
+        {profile.biggestUpset === null ? null : <BiggestUpsetPanel upset={profile.biggestUpset} />}
+      </div>
+
       <History rows={profile.history} />
     </>
   );
@@ -141,6 +171,10 @@ function GenesisCardPanel({ card }: { readonly card: GenesisCardView | null }): 
       }}
     >
       <div style={captionStyle}>GENESIS CARD</div>
+      {/* The face the reveal opened. §34.2 makes the card the centrepiece of
+          this page, and a centrepiece described in words while its art exists
+          in the catalog is a caption standing in for the thing. */}
+      <CardFace card={card} depleted={depleted} />
       <div style={{ ...readoutStyle, fontSize: 26 }}>
         {card.name.toUpperCase()}
         <span style={{ color: RARITY_COLOR[card.rarity], fontSize: 16 }}> — {card.rarity}</span>
@@ -182,6 +216,41 @@ function GenesisCardPanel({ card }: { readonly card: GenesisCardView | null }): 
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The card's art, when the catalog has it.
+ *
+ * A depleted card keeps its face and is dimmed rather than removed: §34.2 says
+ * a spent card *"remains permanently visible as a Genesis artifact"*, and §7
+ * makes Genesis a one-time record rather than a consumable that disappears.
+ */
+function CardFace({
+  card,
+  depleted,
+}: {
+  readonly card: GenesisCardView;
+  readonly depleted: boolean;
+}): JSX.Element | null {
+  const art = card.cardType === null ? undefined : CARD_ART[card.cardType];
+  if (art === undefined) {
+    return null;
+  }
+
+  return (
+    <img
+      src={art}
+      alt=""
+      style={{
+        width: '100%',
+        maxWidth: 240,
+        height: 'auto',
+        justifySelf: 'center',
+        borderRadius: 'var(--pw-radius-sm)',
+        opacity: depleted ? 0.55 : 1,
+      }}
+    />
   );
 }
 
