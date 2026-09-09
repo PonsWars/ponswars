@@ -24,3 +24,60 @@ canvas {
   touch-action: none;
   display: block;
 }
+
+/*
+ * What an interactive thing does when you point at it.
+ *
+ * Every control in this app is styled inline, from the shared objects in
+ * `hud/styles.ts`, and an inline style has no `:hover`. So nothing in the
+ * product answered a pointer: the buttons, the navigation, the battle switcher
+ * and the sector cards were all inert until clicked, which on a desktop reads
+ * as a page that has not finished loading.
+ *
+ * Filter rather than colour. Every one of these carries its own background from
+ * inline styles — dark glass on most, the accent on a call to action — and a
+ * rule that set `background` here would either lose to the inline value or
+ * flatten the one control that is deliberately different. Brightness lifts each
+ * of them by the same amount without knowing what any of them is.
+ *
+ * §114.2's fast class, because this is feedback on a pointer and not a
+ * transition between states.
+ */
+button,
+a[href],
+[role='button'] {
+  transition:
+    filter var(--pw-dur-fast) var(--pw-ease-ui),
+    outline-color var(--pw-dur-fast) var(--pw-ease-ui);
+}
+
+button:hover,
+a[href]:hover,
+[role='button']:hover {
+  filter: brightness(1.22);
+}
+
+button:active,
+a[href]:active,
+[role='button']:active {
+  filter: brightness(0.94);
+}
+
+button:disabled,
+button:disabled:hover {
+  filter: none;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/*
+ * The keyboard's version of the same answer.
+ *
+ * `:focus-visible` rather than `:focus`, so a mouse click does not leave a ring
+ * behind on the thing it just pressed. An outline rather than a border: it is
+ * drawn outside the box, so nothing reflows when it appears.
+ */
+:focus-visible {
+  outline: 2px solid var(--pw-accent);
+  outline-offset: 2px;
+}
