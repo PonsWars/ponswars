@@ -49,7 +49,7 @@ export function Factions({
   return (
     <div style={{ display: 'grid', gap: 'var(--pw-space-5)' }}>
       <Roster selected={ticker} onNavigate={onNavigate} />
-      {ticker === null ? <RosterPrompt /> : <FactionDetail ticker={ticker} />}
+      {ticker === null ? <RosterGrid onNavigate={onNavigate} /> : <FactionDetail ticker={ticker} />}
     </div>
   );
 }
@@ -95,14 +95,75 @@ function Roster({
   );
 }
 
-function RosterPrompt(): JSX.Element {
+/**
+ * All ten, before one is chosen.
+ *
+ * The row of buttons above is how you move between factions once you are
+ * reading one; on its own it left the page as a toolbar over an empty screen,
+ * which told a visitor that the roster is a menu rather than the cast. Every
+ * card carries the faction's own words — the legion name and the identity line
+ * §39 fixes — so the page answers *who are these ten* without anyone clicking.
+ */
+function RosterGrid({ onNavigate }: { readonly onNavigate: (next: Route) => void }): JSX.Element {
   return (
-    <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
-      <div style={{ ...readoutStyle, fontSize: 20 }}>TEN FACTIONS. ONE MARKET.</div>
-      <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.55 }}>
-        Every round pairs them into five battles across five neutral sectors. No faction owns a
-        sector, and the matchups are redrawn each round. Choose one above to read its dossier.
-      </p>
+    <div style={{ display: 'grid', gap: 'var(--pw-space-3)' }}>
+      <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
+        <div style={{ ...readoutStyle, fontSize: 20 }}>TEN FACTIONS. ONE MARKET.</div>
+        <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.55 }}>
+          Every round pairs them into five battles across five neutral sectors. No faction owns a
+          sector, and the matchups are redrawn each round.
+        </p>
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gap: 'var(--pw-space-3)',
+        }}
+      >
+        {ACTIVE_TICKERS.map((ticker) => {
+          const faction = FACTIONS[ticker];
+          const accent = FACTION_ACCENT[ticker];
+          return (
+            <button
+              key={ticker}
+              type="button"
+              onClick={() => {
+                onNavigate({ kind: 'FACTIONS', ticker });
+              }}
+              style={{
+                ...panelStyle,
+                display: 'grid',
+                gap: 'var(--pw-space-2)',
+                alignContent: 'start',
+                textAlign: 'left',
+                cursor: 'pointer',
+                // The one line of faction colour on the card. §36.5 keeps it an
+                // accent, and ten cards each washed in their own colour is a
+                // paint chart rather than a roster.
+                borderLeft: `2px solid ${accent}`,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--pw-space-3)' }}>
+                <FactionEmblem ticker={ticker} size={34} />
+                <div style={{ display: 'grid', gap: 2 }}>
+                  <div style={{ ...readoutStyle, fontSize: 15 }}>{ticker}</div>
+                  <div style={{ ...captionStyle, fontSize: 9, color: 'var(--pw-text-2)' }}>
+                    {faction.name.toUpperCase()}
+                  </div>
+                </div>
+              </div>
+              <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 12.5, lineHeight: 1.5 }}>
+                {faction.identity}
+              </p>
+              <div style={{ ...captionStyle, fontSize: 9, color: accent }}>
+                {faction.momentumSignature}
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
