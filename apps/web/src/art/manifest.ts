@@ -53,7 +53,7 @@ export const FACTION_LEGION: Readonly<Record<ActiveTicker, string>> = {
  * broken image at the moment a player opens a Genesis reveal, which is the one
  * moment §40.6 asks to feel like a reveal.
  */
-export const CARD_ART: Partial<Readonly<Record<CardType, string>>> = {
+export const CARD_ART: Readonly<Partial<Record<CardType, string>>> = {
   REINFORCEMENT: '/art/card-common_reinforcement.webp',
   GOLDEN_ARMY: '/art/card-legendary_golden_army.webp',
   SECRET_STOCK_DROP: '/art/card-secret_stock_drop_0_2_spy.webp',

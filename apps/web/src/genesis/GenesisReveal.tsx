@@ -1,4 +1,5 @@
-import { RARITY_USES, type Rarity } from '@ponswars/shared-types';
+import { RARITY_USES, type CardType, type Rarity } from '@ponswars/shared-types';
+import { CARD_ART } from '../art/manifest.js';
 import { RARITY_COLOR } from '@ponswars/ui-tokens';
 import { useEffect, useState, type JSX } from 'react';
 import { captionStyle, controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
@@ -20,6 +21,15 @@ import { revealPlan, type RevealPlan } from './reveal-sequence.js';
 export interface GenesisOutcome {
   readonly genesisId: string;
   readonly rarity: Rarity;
+  /**
+   * Which card was drawn (§9.2).
+   *
+   * The type rather than the name, because the name is display copy and the
+   * type is what `resolveGenesis` returns and what the catalog, the art and the
+   * charge count are all keyed by. Matching art to a card by its printed name
+   * would break the first time one is reworded.
+   */
+  readonly cardType: CardType;
   readonly cardName: string;
   readonly effect: string;
   /** §8.4: for a Secret, whether the vault reservation is confirmed. */
@@ -99,6 +109,8 @@ export function GenesisReveal({
 }
 
 function RevealedCard({ outcome }: { readonly outcome: GenesisOutcome }): JSX.Element {
+  const art = CARD_ART[outcome.cardType];
+
   return (
     <div
       style={{
@@ -110,6 +122,29 @@ function RevealedCard({ outcome }: { readonly outcome: GenesisOutcome }): JSX.El
         width: '100%',
       }}
     >
+      {/* The card itself, where one was drawn (§40.6).
+          §17 of the visual guide makes the card art the object a player owns,
+          and this is the moment they receive it — a panel of text describing a
+          card is not a reveal. Absent for the cards that have no art yet, which
+          is why `CARD_ART` is partial: a broken image at this moment would be
+          worse than the text alone. */}
+      {art === undefined ? null : (
+        <img
+          src={art}
+          alt=""
+          width={220}
+          style={{
+            width: 'min(220px, 60%)',
+            height: 'auto',
+            borderRadius: 'var(--pw-radius-md)',
+            // A rarity-tinted halo rather than a border: §40.6 wants the reveal
+            // to feel like the card arriving, and a frame around a framed card
+            // reads as a picture of one.
+            boxShadow: `0 0 28px ${RARITY_COLOR[outcome.rarity]}55`,
+          }}
+        />
+      )}
+
       <div style={{ ...readoutStyle, fontSize: 24 }}>{outcome.cardName.toUpperCase()}</div>
       <div style={{ ...captionStyle, color: RARITY_COLOR[outcome.rarity] }}>{outcome.rarity}</div>
       <div style={{ fontSize: 13, color: 'var(--pw-text-2)' }}>{outcome.effect}</div>

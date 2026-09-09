@@ -308,9 +308,13 @@ const PLACEHOLDER_RESULT: FinishedBattle = {
 
 const PLACEHOLDER_GENESIS: GenesisOutcome = {
   genesisId: '008271',
-  rarity: 'RARE',
-  cardName: 'Bull Run',
-  effect: 'Market Support +2',
+  // One of the three cards that has art, so the preview shows the reveal §40.6
+  // describes rather than the text-only version a card without art falls back
+  // to. Rarity, name and support all match the catalog entry for it.
+  rarity: 'LEGENDARY',
+  cardType: 'GOLDEN_ARMY',
+  cardName: 'Golden Army',
+  effect: 'General Support +50',
   secretReservationSecured: true,
 };
 
