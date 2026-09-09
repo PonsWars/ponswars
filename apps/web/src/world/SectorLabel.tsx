@@ -1,5 +1,6 @@
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import { Html } from '@react-three/drei';
+import { FactionEmblem } from '../art/FactionEmblem.js';
 import type { JSX } from 'react';
 import { captionStyle, panelStyle } from '../hud/styles.js';
 import type { ClientBattle } from '../state/session.js';
@@ -113,9 +114,14 @@ export function SectorLabel({
   );
 }
 
-/** A faction, coloured by its accent (§38.5) since emblems do not exist yet. */
+/** A faction: its emblem and its ticker, in its accent (§36.7, §38.5). */
 function Faction({ ticker }: { readonly ticker: ClientBattle['left'] }): JSX.Element {
-  return <span style={{ color: FACTION_ACCENT[ticker] }}>{ticker}</span>;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: -3 }}>
+      <FactionEmblem ticker={ticker} size={15} />
+      <span style={{ color: FACTION_ACCENT[ticker] }}>{ticker}</span>
+    </span>
+  );
 }
 
 /**
