@@ -418,7 +418,10 @@ export function App(): JSX.Element {
     setMyBattle('preview-b2');
     setWallet(PLACEHOLDER_WALLET);
     setRound(placeholderRound());
-    setCard({ name: 'Bull Run', rarity: 'RARE', usesRemaining: 7 });
+    // The same card the Genesis preview reveals, with a charge spent. A demo
+    // that opened Golden Army and then showed a different card in the profile
+    // would teach the reader that the two are unrelated.
+    setCard({ name: 'Golden Army', rarity: 'LEGENDARY', usesRemaining: 2 });
   }, [status.live, setBattles, setMyBattle, setWallet, setRound, setCard]);
 
   useEffect(() => {

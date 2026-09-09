@@ -48,13 +48,21 @@ export function Presentations({
   switch (route.kind) {
     case 'PROFILE':
       return (
-        <Overlay title="COMMANDER PROFILE" onClose={close}>
+        <Overlay
+          title="COMMANDER PROFILE"
+          nav={<NavBar current={route} onNavigate={navigate} />}
+          onClose={close}
+        >
           <WarRoom profile={profile} />
         </Overlay>
       );
     case 'REWARDS':
       return (
-        <Overlay title="REWARDS" onClose={close}>
+        <Overlay
+          title="REWARDS"
+          nav={<NavBar current={route} onNavigate={navigate} />}
+          onClose={close}
+        >
           <RewardsPresentation view={reward} pool={pool} />
         </Overlay>
       );
