@@ -75,9 +75,45 @@ export function BattleIntel({
       <Signal caption="VOLUME" value={intel.volumePulse} align={align} />
       <Signal caption="PONS ACTIVITY" value={intel.ponsActivity} align={align} />
       <Signal caption="STABILITY" value={intel.momentumStability} align={align} />
+
+      {/* Who is actually standing on that half of the island (§39, §36.8).
+          The delivered sector screen carries an army preview beside the intel,
+          and it is the part that makes a side a faction rather than a colour —
+          the names come from the roster §39 locks, so this panel and the
+          faction dossier cannot describe different armies.
+
+          Deliberately not the momentum signature: §12 scores every battle on
+          the same four weights, and a signature listed beside a unit roster
+          reads as a stat line. It belongs on the dossier that explains it. */}
+      <div
+        style={{
+          marginTop: 'var(--pw-space-2)',
+          paddingTop: 'var(--pw-space-2)',
+          borderTop: '1px solid var(--pw-border-1)',
+        }}
+      >
+        <div style={{ ...captionStyle, fontSize: 9, marginBottom: 2 }}>ORDER OF BATTLE</div>
+        {PREVIEW_SLOTS.map(([slot, caption]) => (
+          <Signal key={slot} caption={caption} value={FACTIONS[ticker].units[slot]} align={align} />
+        ))}
+      </div>
     </div>
   );
 }
+
+/**
+ * The three slots the preview shows.
+ *
+ * Not all five. §42.1 would rather show less UI than more, these panels flank a
+ * world that has to stay the thing being looked at, and the forward base is
+ * already standing in the sector below — naming it in a list beside the world
+ * that is drawing it is the second copy §65.1 warns about.
+ */
+const PREVIEW_SLOTS: readonly (readonly ['infantry' | 'elite' | 'heavy', string])[] = [
+  ['infantry', 'INFANTRY'],
+  ['elite', 'ELITE'],
+  ['heavy', 'HEAVY'],
+];
 
 function Signal({
   caption,
