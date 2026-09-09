@@ -4,7 +4,7 @@ import { FactionEmblem } from '../art/FactionEmblem.js';
 import type { JSX } from 'react';
 import { captionStyle, panelStyle } from '../hud/styles.js';
 import { useNarrowViewport } from '../hud/useNarrowViewport.js';
-import type { ClientBattle } from '../state/session.js';
+import { useSession, type ClientBattle } from '../state/session.js';
 import { SECTOR_SKYLINE_HEIGHT } from './layout.js';
 
 /**
@@ -44,6 +44,11 @@ export function SectorLabel({
   readonly onFocus: () => void;
 }): JSX.Element {
   const narrow = useNarrowViewport();
+  // Behind a page rather than in front of it. On a presented surface (§81.2)
+  // the world is the backdrop, and a label at full strength competes with the
+  // body copy it lands next to — the labels are how you navigate the world, and
+  // nobody is navigating it from the about page.
+  const presenting = useSession((state) => state.camera.mode) === 'PROFILE_PRESENTATION';
 
   return (
     <Html
@@ -54,7 +59,12 @@ export function SectorLabel({
       center
       // The world is the hero: the label must not swallow a drag meant for the
       // camera, so only the button inside it takes pointer events (§37.3).
-      style={{ pointerEvents: 'none', userSelect: 'none' }}
+      style={{
+        pointerEvents: 'none',
+        userSelect: 'none',
+        opacity: presenting ? 0.42 : 1,
+        transition: 'opacity var(--pw-dur-panel) var(--pw-ease-ui)',
+      }}
       // No `occlude`. drei's blending mode renders an occlusion pass that
       // blanked the entire canvas here — the world went black with no error, on
       // a machine where the scene had rendered a moment before. A label that
@@ -67,7 +77,7 @@ export function SectorLabel({
         onClick={onFocus}
         style={{
           ...panelStyle,
-          pointerEvents: 'auto',
+          pointerEvents: presenting ? 'none' : 'auto',
           cursor: 'pointer',
           display: 'grid',
           gridTemplateColumns: 'auto 1fr',
