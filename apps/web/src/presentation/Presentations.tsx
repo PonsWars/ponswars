@@ -1,3 +1,4 @@
+import { About } from '../about/About.js';
 import { useState, type JSX } from 'react';
 import type { ActiveTicker, ConfidenceLabel, FinalizedBattleResult } from '@ponswars/shared-types';
 import { GenesisReveal, type GenesisOutcome } from '../genesis/GenesisReveal.js';
@@ -54,6 +55,12 @@ export function Presentations({
       return (
         <Overlay title="REWARDS" onClose={close}>
           <RewardsPresentation view={reward} pool={pool} />
+        </Overlay>
+      );
+    case 'ABOUT':
+      return (
+        <Overlay title="ABOUT" onClose={close}>
+          <About onNavigate={navigate} />
         </Overlay>
       );
     case 'RESULT':

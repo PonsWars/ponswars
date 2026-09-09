@@ -32,6 +32,15 @@ export function PresentationLinks({
         type="button"
         style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
         onClick={() => {
+          onNavigate({ kind: 'ABOUT' });
+        }}
+      >
+        ABOUT
+      </button>
+      <button
+        type="button"
+        style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
+        onClick={() => {
           onNavigate({ kind: 'PROFILE' });
         }}
       >

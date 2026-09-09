@@ -24,7 +24,7 @@ export interface WorldRoute {
 
 /** A presentation layered over the world. */
 export interface PresentationRoute {
-  readonly kind: 'PROFILE' | 'REWARDS' | 'GENESIS';
+  readonly kind: 'PROFILE' | 'REWARDS' | 'GENESIS' | 'ABOUT';
 }
 
 /**
@@ -91,6 +91,8 @@ export function parseRoute(pathname: string): Route {
       const named = ACTIVE_TICKERS.find((ticker) => ticker === second?.toUpperCase());
       return { kind: 'FACTIONS', ticker: named ?? null };
     }
+    case 'about':
+      return { kind: 'ABOUT' };
     case 'profile':
       return { kind: 'PROFILE' };
     case 'rewards':
@@ -119,6 +121,8 @@ export function pathFor(route: Route): string {
       return '/rewards';
     case 'GENESIS':
       return '/genesis';
+    case 'ABOUT':
+      return '/about';
     case 'LANDING':
       return '/';
     case 'FACTIONS':

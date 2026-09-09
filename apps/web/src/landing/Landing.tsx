@@ -123,7 +123,7 @@ function Hero({
         <button
           type="button"
           onClick={() => {
-            onNavigate({ kind: 'REWARDS' });
+            onNavigate({ kind: 'ABOUT' });
           }}
           style={{
             ...controlStyle,
@@ -132,7 +132,7 @@ function Hero({
             padding: 'var(--pw-space-3) var(--pw-space-5)',
           }}
         >
-          REWARDS
+          HOW IT WORKS
         </button>
       </div>
 
@@ -276,6 +276,15 @@ function Pillars({ onNavigate }: { readonly onNavigate: (next: Route) => void })
           Powered by live market data, onchain activity, and a global community. This is more than a
           game — it is a new frontier for market play.
         </p>
+        <button
+          type="button"
+          onClick={() => {
+            onNavigate({ kind: 'ABOUT' });
+          }}
+          style={{ ...controlStyle, fontSize: 11, justifySelf: 'start' }}
+        >
+          LEARN MORE →
+        </button>
       </article>
     </section>
   );
