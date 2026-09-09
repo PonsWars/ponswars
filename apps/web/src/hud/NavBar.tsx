@@ -54,6 +54,12 @@ export function NavBar({
         gap: 'var(--pw-space-4)',
         padding: 'var(--pw-space-2) var(--pw-space-3)',
         flexWrap: 'wrap',
+        // The bar is laid out inside rows that distribute their children to
+        // opposite edges. Without a ceiling it takes its intrinsic width — on a
+        // 375-pixel screen that pushed four destinations and the wallet off the
+        // right of the viewport, where nothing could reach them.
+        maxWidth: '100%',
+        minWidth: 0,
       }}
     >
       <a
@@ -69,13 +75,30 @@ export function NavBar({
           alignItems: 'center',
           gap: 'var(--pw-space-2)',
           textDecoration: 'none',
+          flex: 'none',
         }}
       >
         <PonsWarsMark size={22} />
         <PonsWarsWordmark />
       </a>
 
-      <div style={{ display: 'flex', gap: 'var(--pw-space-1)', flexWrap: 'wrap' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 'var(--pw-space-1)',
+          // One row that scrolls, rather than a block that wraps into a column.
+          // Seven destinations wrapped at phone width turn the bar into a
+          // menu the height of the screen, over the world it is supposed to
+          // float on.
+          flexWrap: 'nowrap',
+          overflowX: 'auto',
+          minWidth: 0,
+          // The row owns horizontal scrolling; every other gesture stays with
+          // the world beneath it (§37.3).
+          touchAction: 'pan-x',
+          scrollbarWidth: 'none',
+        }}
+      >
         {DESTINATIONS.map((destination) => {
           const here = destination.route.kind === current.kind;
           return (
@@ -99,6 +122,8 @@ export function NavBar({
                 // floats over the world reads as a button that does nothing.
                 borderBottom: `2px solid ${here ? 'var(--pw-accent)' : 'transparent'}`,
                 color: here ? 'var(--pw-text-1)' : 'var(--pw-text-3)',
+                // A scrolling row must not compress its own items to fit.
+                flex: 'none',
               }}
             >
               {destination.label}
@@ -108,7 +133,9 @@ export function NavBar({
       </div>
 
       {children === undefined ? null : (
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>{children}</div>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', flex: 'none' }}>
+          {children}
+        </div>
       )}
     </nav>
   );

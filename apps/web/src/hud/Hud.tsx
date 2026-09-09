@@ -66,7 +66,19 @@ export function Hud({ onNavigate }: { readonly onNavigate: (next: Route) => void
         transition: 'opacity var(--pw-dur-panel) var(--pw-ease-ui), visibility var(--pw-dur-panel)',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--pw-space-3)' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 'var(--pw-space-3)',
+          // At phone width the two sides do not fit side by side, and a flex
+          // row that cannot fit its children overflows the viewport rather than
+          // shrinking. Wrapping puts the navigation under the round state
+          // instead of off the edge of the screen.
+          flexWrap: 'wrap',
+          minWidth: 0,
+        }}
+      >
         <Live>
           {budget.roundState ? <RoundStatus /> : null}
           {budget.countdown ? <Countdown /> : null}
@@ -144,6 +156,12 @@ function Live({ children }: { readonly children: ReactNode }): JSX.Element {
         display: 'flex',
         gap: 'var(--pw-space-3)',
         alignItems: 'flex-start',
+        // A flex item's default minimum is its content, so a group wider than
+        // the screen pushes past the edge instead of letting what is inside it
+        // scroll. Both of these are needed: the ceiling, and permission to go
+        // under it.
+        minWidth: 0,
+        maxWidth: '100%',
       }}
     >
       {children}
