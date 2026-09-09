@@ -81,3 +81,44 @@ button:disabled:hover {
   outline: 2px solid var(--pw-accent);
   outline-offset: 2px;
 }
+
+/*
+ * Scrollbars, on the surfaces that have them.
+ *
+ * The presented pages scroll, and a stock scrollbar on this palette is a bright
+ * grey rail down the edge of a dark page — the loudest thing on the about page
+ * was the browser's own chrome. Thin, dim, and only visible against the content
+ * it belongs to.
+ *
+ * Both syntaxes: the standard properties for Firefox, the WebKit pseudo
+ * elements for Chrome and Safari. Neither is redundant yet.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--pw-border-2) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--pw-border-1);
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--pw-border-2);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
