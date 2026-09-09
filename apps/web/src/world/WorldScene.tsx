@@ -126,6 +126,76 @@ function MarketCore(): JSX.Element {
   );
 }
 
+/**
+ * The lines from the Market Core out to the five sectors (§38.2, §15).
+ *
+ * §38.2 describes the core as routing out into the sectors and §15 makes those
+ * routes something a player watches connect and disconnect across a reshuffle.
+ * Until now the core had two rings around it and nothing joined it to anything:
+ * five islands in a circle read as five islands, not as one world with a centre.
+ *
+ * A pulse travels each route on a loop. §36.14 asks for a world kept subtly
+ * alive rather than one full of particles, and a signal moving outward from the
+ * core is the difference between a diagram and a place that is running.
+ */
+function Routes({ battles }: { readonly battles: readonly ClientBattle[] }): JSX.Element {
+  // `undefined` is in the type because it is in the array: a slot whose ref
+  // callback has not run yet holds nothing, and typing it as only `Group | null`
+  // would make the guard below look like dead code while still being needed.
+  const pulses = useRef<(Group | null | undefined)[]>([]);
+
+  useFrame((state) => {
+    for (const [index, pulse] of pulses.current.entries()) {
+      const target = SECTOR_POSITIONS[index];
+      if (pulse === null || pulse === undefined || target === undefined) {
+        continue;
+      }
+      // Staggered, so the five do not leave the core in lockstep — that reads
+      // as a machine cycling rather than as traffic.
+      const travel = (state.clock.elapsedTime * 0.28 + index * 0.2) % 1;
+      pulse.position.set(target.x * travel, target.y * travel + 4, target.z * travel);
+      // Fading in and out at both ends, so a pulse arrives rather than
+      // disappearing at the edge of the platform.
+      const fade = Math.sin(travel * Math.PI);
+      pulse.scale.setScalar(0.6 + fade * 0.9);
+    }
+  });
+
+  return (
+    <group>
+      {SECTOR_POSITIONS.map((position, index) => {
+        const accent =
+          battles[index] === undefined ? '#2a4553' : FACTION_ACCENT[battles[index].left];
+        const length = Math.hypot(position.x, position.z);
+        return (
+          <group key={index}>
+            <mesh
+              // Laid along the route rather than rotated into place by hand:
+              // the sectors sit at fixed angles, and an angle written twice is
+              // an angle that can disagree with itself.
+              position={[position.x / 2, position.y / 2 + 2, position.z / 2]}
+              rotation={[0, Math.atan2(position.x, position.z), 0]}
+            >
+              <boxGeometry args={[2.5, 1, length]} />
+              <meshBasicMaterial color="#1b3a48" transparent opacity={0.5} />
+            </mesh>
+            <group
+              ref={(node) => {
+                pulses.current[index] = node;
+              }}
+            >
+              <mesh>
+                <sphereGeometry args={[4.5, 10, 10]} />
+                <meshBasicMaterial color={accent} transparent opacity={0.85} />
+              </mesh>
+            </group>
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
 interface SectorProps {
   readonly index: number;
   readonly battle: ClientBattle | undefined;
@@ -176,6 +246,18 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
       {/* Two staging areas with a contested centre between them (§38.3). */}
       <StagingArea side={-1} accent={leftAccent} detail={detail} />
       <StagingArea side={1} accent={rightAccent} detail={detail} />
+
+      {/* Each side's forward base (§38.5).
+          Temporary by definition: deployed into whichever sector the round
+          assigned this faction and retracted at reshuffle, which is why it
+          stands on the staging platform rather than being part of the island.
+          A permanent structure here would make a neutral sector look owned. */}
+      {battle !== undefined && detail === 'FULL' ? (
+        <>
+          <ForwardBase side={-1} accent={leftAccent} />
+          <ForwardBase side={1} accent={rightAccent} />
+        </>
+      ) : null}
 
       {/* A beacon per sector, so a live war is findable from the global view
           (§38.6). Dim while nothing is focused, brighter when it is. */}
@@ -258,6 +340,38 @@ function StagingArea({
             </mesh>
           ))
         : null}
+    </group>
+  );
+}
+
+/**
+ * A forward operating base (§38.5).
+ *
+ * A mast on a footing, at the outer edge of its own staging ground. Deliberately
+ * light: it is the one thing on the platform that is *not* permanent, and a
+ * heavy fortress would read as the faction having settled there.
+ */
+function ForwardBase({
+  side,
+  accent,
+}: {
+  readonly side: -1 | 1;
+  readonly accent: string;
+}): JSX.Element {
+  return (
+    <group position={[side * 92, 11, 0]}>
+      <mesh position={[0, 3, 0]}>
+        <cylinderGeometry args={[10, 13, 6, 6]} />
+        <meshStandardMaterial color="#0f1a22" metalness={0.6} roughness={0.5} />
+      </mesh>
+      <mesh position={[0, 20, 0]}>
+        <cylinderGeometry args={[1.4, 1.4, 28, 6]} />
+        <meshStandardMaterial color="#1c2c37" metalness={0.8} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, 35, 0]}>
+        <octahedronGeometry args={[4, 0]} />
+        <meshBasicMaterial color={accent} />
+      </mesh>
     </group>
   );
 }
@@ -396,6 +510,7 @@ export function WorldScene(): JSX.Element {
       <WorldInput />
 
       <MarketCore />
+      <Routes battles={battles} />
 
       {SECTOR_POSITIONS.map((_, index) => (
         <Sector
