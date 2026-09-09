@@ -6,6 +6,7 @@ import {
 import { LAYER } from '@ponswars/ui-tokens';
 import { lazy, Suspense, useEffect, useMemo, type JSX } from 'react';
 import { liveEndpoints } from './live/endpoints.js';
+import { Factions } from './factions/Factions.js';
 import { Landing } from './landing/Landing.js';
 import { PreviewBanner } from './live/PreviewBanner.js';
 import { fetchBattleResult } from './live/round-client.js';
@@ -16,7 +17,8 @@ import { Presentations, type FinishedBattle } from './presentation/Presentations
 import type { ProfileData } from './profile/WarRoom.js';
 import { activeWindowView } from './rewards/reward-view.js';
 import type { PoolStatus } from './rewards/RewardsHub.js';
-import { isPresentation } from './routing/route.js';
+import { Overlay } from './presentation/Overlay.js';
+import { isPresentation, WORLD_ROUTE } from './routing/route.js';
 import { useRoute } from './routing/useRoute.js';
 import { nowUtc, useSession, type ClientBattle, type ClientRound } from './state/session.js';
 
@@ -475,7 +477,18 @@ export function App(): JSX.Element {
       </div>
       {route.kind === 'LANDING' ? <Landing onNavigate={navigate} /> : null}
 
-      {isPresentation(route) && route.kind !== 'LANDING' ? (
+      {route.kind === 'FACTIONS' ? (
+        <Overlay
+          title="FACTIONS"
+          onClose={() => {
+            navigate(WORLD_ROUTE);
+          }}
+        >
+          <Factions ticker={route.ticker} onNavigate={navigate} />
+        </Overlay>
+      ) : null}
+
+      {isPresentation(route) && route.kind !== 'LANDING' && route.kind !== 'FACTIONS' ? (
         <Presentations
           route={route}
           navigate={navigate}

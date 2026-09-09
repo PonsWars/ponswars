@@ -23,6 +23,15 @@ export function PresentationLinks({
         type="button"
         style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
         onClick={() => {
+          onNavigate({ kind: 'FACTIONS', ticker: null });
+        }}
+      >
+        FACTIONS
+      </button>
+      <button
+        type="button"
+        style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
+        onClick={() => {
           onNavigate({ kind: 'PROFILE' });
         }}
       >

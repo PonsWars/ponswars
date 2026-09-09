@@ -1,3 +1,5 @@
+import { ACTIVE_TICKERS, type ActiveTicker } from '@ponswars/shared-types';
+
 /**
  * Shareable routes over one persistent world (§80.4).
  *
@@ -38,6 +40,17 @@ export interface LandingRoute {
 }
 
 /**
+ * The roster, or one faction's dossier (§39).
+ *
+ * `null` is the roster rather than a missing value: §4.1 fixes ten factions and
+ * the list of them is a page in its own right, not a failed lookup of one.
+ */
+export interface FactionsRoute {
+  readonly kind: 'FACTIONS';
+  readonly ticker: ActiveTicker | null;
+}
+
+/**
  * A finished battle, shown over the world (§27.8).
  *
  * Carries a battle id because a result is about one battle, and because a
@@ -50,7 +63,7 @@ export interface ResultRoute {
   readonly battleId: string | null;
 }
 
-export type Route = WorldRoute | LandingRoute | PresentationRoute | ResultRoute;
+export type Route = WorldRoute | LandingRoute | FactionsRoute | PresentationRoute | ResultRoute;
 
 export const WORLD_ROUTE: WorldRoute = { kind: 'WORLD', battleId: null };
 
@@ -72,6 +85,12 @@ export function parseRoute(pathname: string): Route {
     // it, so entering is an overlay lifting rather than a page load (§37.9).
     case undefined:
       return { kind: 'LANDING' };
+    case 'factions': {
+      // An unknown ticker falls back to the roster rather than to a not-found:
+      // §37.1's rule that a stale deep link lands somewhere real holds here too.
+      const named = ACTIVE_TICKERS.find((ticker) => ticker === second?.toUpperCase());
+      return { kind: 'FACTIONS', ticker: named ?? null };
+    }
     case 'profile':
       return { kind: 'PROFILE' };
     case 'rewards':
@@ -102,6 +121,8 @@ export function pathFor(route: Route): string {
       return '/genesis';
     case 'LANDING':
       return '/';
+    case 'FACTIONS':
+      return route.ticker === null ? '/factions' : `/factions/${route.ticker.toLowerCase()}`;
     case 'RESULT':
       return route.battleId === null ? '/result' : `/result/${route.battleId}`;
     case 'WORLD':
@@ -118,6 +139,6 @@ export function pathFor(route: Route): string {
  */
 export function isPresentation(
   route: Route,
-): route is LandingRoute | PresentationRoute | ResultRoute {
+): route is LandingRoute | FactionsRoute | PresentationRoute | ResultRoute {
   return route.kind !== 'WORLD';
 }
