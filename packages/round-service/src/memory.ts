@@ -68,6 +68,13 @@ export class MemoryRoundStore implements RoundStorePort {
     this.latest = finalization.state;
     return Promise.resolve();
   }
+
+  loadLatest(): Promise<RoundEngineState | null> {
+    // Whatever was written last, unchanged. This store is a `Map` with a nicer
+    // name: it proves the port's shape and cannot prove anything about
+    // durability, which is the whole reason a real adapter exists.
+    return Promise.resolve(this.latest);
+  }
 }
 
 /** Returns whatever picks it was seeded with. */

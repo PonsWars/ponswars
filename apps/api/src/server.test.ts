@@ -11,7 +11,13 @@ import {
   type ConfidenceCalibration,
   type ConfidenceLookback,
 } from '@ponswars/battle-math';
-import { apiErrorSchema, battleResultSchema, currentRoundSchema } from '@ponswars/schemas';
+import {
+  apiErrorSchema,
+  battleResultSchema,
+  currentRoundSchema,
+  rosterSchema,
+  serviceStatusSchema,
+} from '@ponswars/schemas';
 import {
   ACTIVE_TICKERS,
   milliseconds,
@@ -705,5 +711,46 @@ describe('GET /v1/battles/:battleId/result', () => {
       Object.values(breakdown).reduce((sum, value) => sum + value, 0);
 
     expect(total(body.leftScore) + total(body.rightScore)).toBe(100 * 1_000_000);
+  });
+});
+
+describe('GET /v1/roster', () => {
+  it('lists the ten active factions and the reserves separately', async () => {
+    // §4.1 fixes the ten; §4.2 makes a reserve a *pre-round* replacement, never
+    // a mid-battle swap (§4.4). One flat list would make them look
+    // interchangeable, which is the distinction that matters most.
+    const response = await app.inject({ method: 'GET', url: '/v1/roster' });
+    const body = rosterSchema.parse(response.json());
+
+    expect(body.active).toHaveLength(10);
+    expect(body.reserve.length).toBeGreaterThan(0);
+    expect(body.active.some((ticker) => body.reserve.includes(ticker))).toBe(false);
+  });
+
+  it('needs no wallet', async () => {
+    expect((await app.inject({ method: 'GET', url: '/v1/roster' })).statusCode).toBe(200);
+  });
+});
+
+describe('GET /v1/status', () => {
+  it('reports the round it is serving and the protocol it speaks', async () => {
+    // The version is here so a client can tell a server it does not understand
+    // from one that is down — §70.7's receiver rejects an unknown version, and
+    // finding out before subscribing is better than after.
+    const body = serviceStatusSchema.parse(
+      (await app.inject({ method: 'GET', url: '/v1/status' })).json(),
+    );
+
+    expect(body.status).toBe('ok');
+    expect(body.round?.roundId).toBe(ROUND_ID);
+    expect(body.protocolVersion).toBeGreaterThan(0);
+  });
+
+  it('carries nothing operational', async () => {
+    // A public status endpoint that reported queue depths or worker counts
+    // would be an operational surface on a public URL. The schema is strict, so
+    // this stays a decision rather than a habit.
+    const keys = Object.keys((await app.inject({ method: 'GET', url: '/v1/status' })).json());
+    expect(keys.sort()).toEqual(['protocolVersion', 'round', 'status']);
   });
 });

@@ -365,3 +365,138 @@ describe('saving a finalization', () => {
     expect(Number(results.rows[0]?.count)).toBe(0);
   });
 });
+
+describe('recovering from a restart', () => {
+  it('has nothing to restore before a round is written', async () => {
+    expect(await store.loadLatest()).toBeNull();
+  });
+
+  it('restores a round that has not started ticking', async () => {
+    const round = openRound();
+    await store.saveState(round);
+
+    const restored = await store.loadLatest();
+
+    expect(restored?.roundId).toBe(round.roundId);
+    expect(restored?.state).toBe('PICK_OPEN');
+    expect(restored?.battles).toHaveLength(5);
+    expect(restored?.clock).toEqual(round.clock);
+  });
+
+  it('restores the confidence snapshot whole', async () => {
+    // §11 prices an upset from the label and §27.5 draws the four sub-signals.
+    // A restore that recovered only the label would resume a round whose intel
+    // panel was empty and whose awards still depended on it.
+    const round = openRound();
+    await store.saveState(round);
+
+    const restored = await store.loadLatest();
+    const original = new Map(round.battles.map((b) => [b.setup.battleId, b.setup]));
+
+    for (const battle of restored?.battles ?? []) {
+      expect(battle.setup.leftIntel).toEqual(original.get(battle.setup.battleId)?.leftIntel);
+      expect(battle.setup.rightIntel).toEqual(original.get(battle.setup.battleId)?.rightIntel);
+    }
+  });
+
+  it('resumes a live battle exactly where it stopped', async () => {
+    // The property §25 exists for. Score alone is not enough: a process that
+    // came back with a fresh momentum window would read the next tick's
+    // velocity against zero, and §13.3 would call an ordinary lead a comeback.
+    const round = openRound();
+    let live = lockRound(round, at(60_000), []);
+    for (const battle of live.battles) {
+      live = tickBattle(
+        live,
+        battle.setup.battleId,
+        tick(120_000, { left: side({ windowReturn: 1_500_000n }) }),
+        CONFIG,
+      );
+    }
+    for (const battle of live.battles) {
+      live = tickBattle(
+        live,
+        battle.setup.battleId,
+        tick(180_000, { left: side({ windowReturn: 900_000n }) }),
+        CONFIG,
+      );
+    }
+    await store.saveState(live);
+
+    const restored = await store.loadLatest();
+    const before = live.battles[0];
+    const after = restored?.battles.find((b) => b.setup.battleId === before?.setup.battleId);
+
+    expect(after?.tickSequence).toBe(before?.tickSequence);
+    expect(after?.leftScoreScaled).toBe(before?.leftScoreScaled);
+    expect(after?.rightScoreScaled).toBe(before?.rightScoreScaled);
+    expect(after?.momentum).toEqual(before?.momentum);
+    expect(after?.evidenceHash).toBe(before?.evidenceHash);
+    expect(after?.lastTickAt).toBe(before?.lastTickAt);
+  });
+
+  it('restores the last observation each side was scored from', async () => {
+    // §12.6 scores from the last accepted observation, so a restart that lost
+    // it would resume from an empty window and score the next tick against
+    // nothing.
+    const round = openRound();
+    let live = lockRound(round, at(60_000), []);
+    const inputs = side({ windowReturn: 1_234_567n, relativeVolume: 2_345_678n });
+    for (const battle of live.battles) {
+      live = tickBattle(live, battle.setup.battleId, tick(120_000, { left: inputs }), CONFIG);
+    }
+    await store.saveState(live);
+
+    const restored = await store.loadLatest();
+
+    expect(restored?.battles[0]?.lastLeft).toEqual(inputs);
+  });
+
+  it('keeps scaled integers exact across the round trip', async () => {
+    // §66.4: a bigint written as a JSON number would round past 2^53 and a
+    // replayed battle would diverge from the one that was fought. The value
+    // below is chosen to be past that boundary.
+    const round = openRound();
+    let live = lockRound(round, at(60_000), []);
+    const huge = side({ windowReturn: 9_007_199_254_740_993n });
+    for (const battle of live.battles) {
+      live = tickBattle(live, battle.setup.battleId, tick(120_000, { left: huge }), CONFIG);
+    }
+    await store.saveState(live);
+
+    const restored = await store.loadLatest();
+
+    expect(restored?.battles[0]?.lastLeft?.windowReturn).toBe(9_007_199_254_740_993n);
+  });
+
+  it('checkpoints once per tick however often the state is saved', async () => {
+    // The loop saves after every tick and after every transition. A transition
+    // that scored nothing must not leave a second checkpoint at a sequence that
+    // already has one, or the evidence trail would claim ticks that never
+    // happened (§26).
+    const round = openRound();
+    let live = lockRound(round, at(60_000), []);
+    for (const battle of live.battles) {
+      live = tickBattle(live, battle.setup.battleId, tick(120_000), CONFIG);
+    }
+    await store.saveState(live);
+    await store.saveState(live);
+    await store.saveState(live);
+
+    const rows = await pg.query<{ count: string }>(
+      'SELECT count(*) AS count FROM battle_tick_evidence',
+    );
+    expect(Number(rows.rows[0]?.count)).toBe(5);
+  });
+
+  it('restores a finalized round as finalized', async () => {
+    // A restart must not resume a round that already paid out. §22 makes the
+    // decision to open the next round a transition the caller takes, so the
+    // store's job is only to say truthfully what the last one was.
+    const round = openRound();
+    await store.saveState(round);
+    await store.saveFinalization(finishedRound(round, 3));
+
+    expect((await store.loadLatest())?.state).toBe('FINALIZED');
+  });
+});

@@ -8,11 +8,15 @@ import {
   cardDecisionRequestSchema,
   battleResultSchema,
   currentRoundSchema,
+  rosterSchema,
+  serviceStatusSchema,
   myPickSchema,
   pickRequestSchema,
   pickResponseSchema,
 } from '@ponswars/schemas';
 import {
+  ACTIVE_TICKERS,
+  RESERVE_TICKERS,
   battleId as toBattleId,
   clientRequestId as toClientRequestId,
   roundId as toRoundId,
@@ -20,6 +24,7 @@ import {
   type UtcTimestamp,
   type WalletAddress,
 } from '@ponswars/shared-types';
+import { PROTOCOL_VERSION } from '@ponswars/realtime';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import {
   battleNotInRound,
@@ -152,6 +157,35 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
   const send = (reply: FastifyReply, failure: ErrorResponse): FastifyReply =>
     reply.code(failure.status).send(failure.body);
+
+  /**
+   * `GET /v1/roster` (§47.1, §4.1, §4.2).
+   *
+   * Constant, and served rather than compiled into every client. §4.1 fixes the
+   * ten and §4.2 the reserves; a client with its own copy would keep showing an
+   * old roster after a swap, and the swap is the whole reason the reserve list
+   * exists.
+   */
+  app.get('/v1/roster', () =>
+    rosterSchema.parse({ active: [...ACTIVE_TICKERS], reserve: [...RESERVE_TICKERS] }),
+  );
+
+  /**
+   * `GET /v1/status` (§47.1).
+   *
+   * The protocol version travels with it so a client can tell a server it does
+   * not understand from one that is merely down — §70.7 has the receiver reject
+   * an unknown version, and this is where a client can find out before it
+   * subscribes rather than after.
+   */
+  app.get('/v1/status', () => {
+    const round = deps.currentRound();
+    return serviceStatusSchema.parse({
+      status: 'ok',
+      protocolVersion: PROTOCOL_VERSION,
+      round: round === null ? null : { roundId: round.roundId, state: round.state },
+    });
+  });
 
   app.get('/v1/health', () => {
     const round = deps.currentRound();

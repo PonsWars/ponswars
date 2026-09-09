@@ -97,6 +97,22 @@ export interface PublisherPort {
 export interface RoundStorePort {
   saveState(state: RoundEngineState): Promise<void>;
   saveFinalization(finalization: RoundFinalization): Promise<void>;
+  /**
+   * The most recent round as it was last checkpointed, or `null` for a store
+   * that has never held one.
+   *
+   * §25 requires the engine to recover from a process restart, and a port that
+   * could only write could not do that — a service coming back up had no way to
+   * learn that a round was halfway through its battles. The checkpoint carries
+   * the whole engine state: scores, momentum memory, sequence and the running
+   * evidence digest, because resuming with a fresh momentum window or a broken
+   * digest is a different battle that happens to have the same score.
+   *
+   * A finalized round is still the most recent one. The caller decides whether
+   * to resume it or open the next; §22 makes that a transition rather than
+   * something the store guesses at.
+   */
+  loadLatest(): Promise<RoundEngineState | null>;
 }
 
 /** Everything the loop needs, in one bag. */

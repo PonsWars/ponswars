@@ -44,6 +44,9 @@ importers:
       '@ponswars/battle-engine':
         specifier: workspace:*
         version: link:../../packages/battle-engine
+      '@ponswars/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
       '@ponswars/round-service':
         specifier: workspace:*
         version: link:../../packages/round-service

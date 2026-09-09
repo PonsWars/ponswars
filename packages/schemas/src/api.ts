@@ -14,6 +14,7 @@ import {
   roundStateSchema,
   tiebreakStepSchema,
   sectorIdSchema,
+  tickerSchema,
   utcTimestampSchema,
   victoryLabelSchema,
   walletAddressSchema,
@@ -68,6 +69,37 @@ export const pickResponseSchema = z
     recorded: z.boolean(),
     replayed: z.boolean(),
     changed: z.boolean().optional(),
+  })
+  .strict();
+
+/**
+ * What `GET /v1/roster` answers with (§47.1, §4.1, §4.2).
+ *
+ * Both lists, because the distinction is the point: a reserve replaces an
+ * active asset *before* a round when its data is unhealthy, and is never
+ * swapped in mid-battle — that path is a void (§4.4). A single flat list would
+ * make the two look interchangeable.
+ */
+export const rosterSchema = z
+  .object({
+    active: z.array(activeTickerSchema).length(10),
+    reserve: z.array(tickerSchema),
+  })
+  .strict();
+
+/**
+ * What `GET /v1/status` answers with (§47.1).
+ *
+ * Deliberately thin. A status endpoint that reported queue depths and worker
+ * counts would be an operational surface on a public URL; this says whether the
+ * service is serving and which round it is serving, which is what a client or a
+ * health check needs.
+ */
+export const serviceStatusSchema = z
+  .object({
+    status: z.literal('ok'),
+    protocolVersion: z.int().positive(),
+    round: z.object({ roundId: roundIdSchema, state: roundStateSchema }).strict().nullable(),
   })
   .strict();
 
