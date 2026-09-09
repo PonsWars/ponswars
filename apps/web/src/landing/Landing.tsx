@@ -48,26 +48,60 @@ export function Landing({
         inset: 0,
         zIndex: LAYER.hud + 1,
         overflowY: 'auto',
-        // The world shows through. §2.1 keeps it the hero even here — the
-        // gradient darkens enough to read against without hiding it.
-        background:
-          'linear-gradient(to bottom, rgba(5,8,11,0.94) 0%, rgba(5,8,11,0.82) 45%, rgba(5,8,11,0.96) 100%)',
       }}
     >
+      {/*
+        The hero darkens from the left, not from the top.
+
+        The right half of the delivered mockup is the world, and the world is
+        already rendering behind this — §37.9 never unmounts it. A veil at 0.94
+        across the whole width covered it with a flat black rectangle and then
+        described it in words. Fading the veil out toward the right turns the
+        same overlay into the mockup's layout: copy on the left, the actual
+        place on the right, and entering it is the overlay lifting rather than
+        a page load (§2.1).
+      */}
       <div
         style={{
-          maxWidth: 1180,
-          margin: '0 auto',
-          padding: 'var(--pw-space-6) var(--pw-space-5)',
-          display: 'grid',
-          gap: 'var(--pw-space-6)',
+          background:
+            'linear-gradient(100deg, rgba(5,8,11,0.97) 0%, rgba(5,8,11,0.94) 34%, rgba(5,8,11,0.62) 56%, rgba(5,8,11,0.12) 78%, rgba(5,8,11,0.04) 100%)',
         }}
       >
-        <NavBar current={{ kind: 'LANDING' }} onNavigate={onNavigate} />
-        <Hero onEnter={enter} onNavigate={onNavigate} />
-        <RoundStrip battles={battles} round={round} clockOffsetMs={clockOffsetMs} />
-        <Pillars onNavigate={onNavigate} />
-        <Facts />
+        <div
+          style={{
+            maxWidth: 1180,
+            margin: '0 auto',
+            padding: 'var(--pw-space-6) var(--pw-space-5) var(--pw-space-7)',
+            display: 'grid',
+            gap: 'var(--pw-space-6)',
+          }}
+        >
+          <NavBar current={{ kind: 'LANDING' }} onNavigate={onNavigate} />
+          <Hero onEnter={enter} onNavigate={onNavigate} />
+        </div>
+      </div>
+
+      {/* Below the fold the veil closes again: this is reading, and reading
+          over a moving world is the one thing §2.1 does not ask for. */}
+      <div
+        style={{
+          background:
+            'linear-gradient(to bottom, rgba(5,8,11,0.86) 0%, rgba(5,8,11,0.97) 12%, rgba(5,8,11,0.99) 100%)',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1180,
+            margin: '0 auto',
+            padding: 'var(--pw-space-5)',
+            display: 'grid',
+            gap: 'var(--pw-space-6)',
+          }}
+        >
+          <RoundStrip battles={battles} round={round} clockOffsetMs={clockOffsetMs} />
+          <Pillars onNavigate={onNavigate} />
+          <Facts />
+        </div>
       </div>
     </div>
   );
@@ -81,82 +115,194 @@ function Hero({
   readonly onNavigate: (next: Route) => void;
 }): JSX.Element {
   return (
-    <header style={{ display: 'grid', gap: 'var(--pw-space-4)', paddingTop: 'var(--pw-space-5)' }}>
-      <div style={{ ...captionStyle, color: 'var(--pw-text-3)' }}>
-        SAME MARKETS. A MORE INTERESTING UNIVERSE.
-      </div>
+    <header
+      style={{
+        display: 'grid',
+        gap: 'var(--pw-space-4)',
+        paddingTop: 'var(--pw-space-5)',
+        // Tall enough that the world has room to be seen beside the copy.
+        minHeight: '56vh',
+        alignContent: 'start',
+      }}
+    >
+      {/* Held to a column on the left. Copy running the full width would put
+          text over the part of the frame the world occupies, which is the half
+          of the mockup that is not words. */}
+      <div style={{ maxWidth: 560, display: 'grid', gap: 'var(--pw-space-4)' }}>
+        <div style={{ ...captionStyle, color: 'var(--pw-text-3)' }}>
+          SAME MARKETS. A MORE INTERESTING UNIVERSE.
+        </div>
 
-      <h1
-        style={{
-          margin: 0,
-          fontFamily: 'var(--pw-font-display)',
-          fontSize: 'clamp(34px, 6vw, 66px)',
-          lineHeight: 1.04,
-          letterSpacing: '-0.01em',
-          color: 'var(--pw-text-1)',
-        }}
-      >
-        REAL MARKETS.
-        <br />
-        <span style={{ color: 'var(--pw-accent)' }}>HIGHER STAKES.</span>
-      </h1>
-
-      <p style={{ margin: 0, maxWidth: 460, color: 'var(--pw-text-2)', lineHeight: 1.55 }}>
-        PonsWars turns global markets into a living battlefield. Back your conviction, deploy your
-        strategy, and be part of something bigger.
-      </p>
-
-      <div style={{ display: 'flex', gap: 'var(--pw-space-3)', flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          onClick={onEnter}
+        <h1
           style={{
-            ...controlStyle,
-            background: 'var(--pw-accent)',
-            borderColor: 'var(--pw-accent)',
-            color: '#06120a',
+            margin: 0,
             fontFamily: 'var(--pw-font-display)',
-            letterSpacing: '0.08em',
-            padding: 'var(--pw-space-3) var(--pw-space-5)',
+            fontSize: 'clamp(34px, 6vw, 66px)',
+            lineHeight: 1.04,
+            letterSpacing: '-0.01em',
+            color: 'var(--pw-text-1)',
           }}
         >
-          ENTER WAR WORLD →
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            onNavigate({ kind: 'ABOUT' });
-          }}
+          REAL MARKETS.
+          <br />
+          <span style={{ color: 'var(--pw-accent)' }}>HIGHER STAKES.</span>
+        </h1>
+
+        <p style={{ margin: 0, maxWidth: 460, color: 'var(--pw-text-2)', lineHeight: 1.55 }}>
+          PonsWars turns global markets into a living battlefield. Back your conviction, deploy your
+          strategy, and be part of something bigger.
+        </p>
+
+        <div style={{ display: 'flex', gap: 'var(--pw-space-3)', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={onEnter}
+            style={{
+              ...controlStyle,
+              background: 'var(--pw-accent)',
+              borderColor: 'var(--pw-accent)',
+              color: '#06120a',
+              fontFamily: 'var(--pw-font-display)',
+              letterSpacing: '0.08em',
+              padding: 'var(--pw-space-3) var(--pw-space-5)',
+            }}
+          >
+            ENTER WAR WORLD →
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onNavigate({ kind: 'ABOUT' });
+            }}
+            style={{
+              ...controlStyle,
+              fontFamily: 'var(--pw-font-display)',
+              letterSpacing: '0.08em',
+              padding: 'var(--pw-space-3) var(--pw-space-5)',
+            }}
+          >
+            HOW IT WORKS
+          </button>
+        </div>
+
+        {/* What the game is, in four lines. The mockup carries these under the
+          buttons, and each one is a claim the engine can stand behind: the
+          fourth says onchain rewards rather than the mockup's trading figure,
+          which §7.9 marks as a placeholder. */}
+        <div
           style={{
-            ...controlStyle,
-            fontFamily: 'var(--pw-font-display)',
-            letterSpacing: '0.08em',
-            padding: 'var(--pw-space-3) var(--pw-space-5)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(124px, 1fr))',
+            gap: 'var(--pw-space-3)',
+            marginTop: 'var(--pw-space-2)',
           }}
         >
-          HOW IT WORKS
-        </button>
-      </div>
+          {HERO_POINTS.map((point) => (
+            <div key={point.title} style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
+              <HeroIcon device={point.device} />
+              <div style={{ ...readoutStyle, fontSize: 11 }}>{point.title}</div>
+              <div style={{ ...captionStyle, fontSize: 9, color: 'var(--pw-text-3)' }}>
+                {point.body}
+              </div>
+            </div>
+          ))}
+        </div>
 
-      {/* The ten factions, as their emblems. The mockup floats these over the
+        {/* The ten factions, as their emblems. The mockup floats these over the
           hero art as banners; without that art they earn their own row, which
           also makes the roster the first concrete thing a visitor sees. */}
-      <div
+        <div
+          style={{
+            display: 'flex',
+            gap: 'var(--pw-space-3)',
+            flexWrap: 'wrap',
+            marginTop: 'var(--pw-space-3)',
+          }}
+        >
+          {ACTIVE_TICKERS.map((ticker) => (
+            <div key={ticker} style={{ display: 'grid', justifyItems: 'center', gap: 4 }}>
+              <FactionEmblem ticker={ticker} size={26} />
+              <span style={{ ...captionStyle, fontSize: 9 }}>{ticker}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Sitting over the world itself, at the far side of the frame — the one
+          piece of the hero that belongs to the picture rather than to the copy,
+          and a second way in for a visitor who has already read enough. */}
+      <button
+        type="button"
+        onClick={onEnter}
         style={{
-          display: 'flex',
-          gap: 'var(--pw-space-3)',
-          flexWrap: 'wrap',
-          marginTop: 'var(--pw-space-3)',
+          ...panelStyle,
+          justifySelf: 'end',
+          marginTop: 'var(--pw-space-5)',
+          display: 'grid',
+          gap: 2,
+          textAlign: 'left',
+          cursor: 'pointer',
+          pointerEvents: 'auto',
         }}
       >
-        {ACTIVE_TICKERS.map((ticker) => (
-          <div key={ticker} style={{ display: 'grid', justifyItems: 'center', gap: 4 }}>
-            <FactionEmblem ticker={ticker} size={26} />
-            <span style={{ ...captionStyle, fontSize: 9 }}>{ticker}</span>
-          </div>
-        ))}
-      </div>
+        <span style={{ ...readoutStyle, fontSize: 13 }}>GLOBAL BATTLEFIELD →</span>
+        <span style={{ ...captionStyle, fontSize: 9 }}>
+          {ACTIVE_TICKERS.length} FACTIONS. ONE MARKET.
+        </span>
+      </button>
     </header>
+  );
+}
+
+/** The four claims under the hero buttons, in the mockup's own order. */
+const HERO_POINTS: readonly {
+  readonly title: string;
+  readonly body: string;
+  readonly device: string;
+}[] = [
+  {
+    title: 'REAL MARKET DATA',
+    body: 'Live. Onchain. Transparent.',
+    // A rising trace: the one thing every battle is scored from.
+    device: 'M10 40 L20 30 L26 34 L38 16 M32 16 L38 16 L38 22',
+  },
+  {
+    title: 'SPECTATOR STRATEGY',
+    body: 'Pick. Support. Watch.',
+    device: 'M24 14 A14 14 0 0 1 24 42 A14 14 0 0 1 24 14 M24 22 A6 6 0 0 1 24 34 A6 6 0 0 1 24 22',
+  },
+  {
+    title: 'GENESIS CARDS',
+    body: 'Rare. Powerful. Yours.',
+    device: 'M14 12 L30 12 L34 16 L34 40 L18 40 L14 36 Z M20 18 L28 18 M20 24 L28 24',
+  },
+  {
+    title: 'ONCHAIN REWARDS',
+    body: 'Settled, not promised.',
+    device:
+      'M24 10 L36 17 L36 31 L24 38 L12 31 L12 17 Z M24 20 L30 23.5 L30 30 L24 33 L18 30 L18 23.5 Z',
+  },
+];
+
+/**
+ * One hero icon.
+ *
+ * Line work in the same idiom as the faction emblems and the house mark — one
+ * stroke weight, one colour, drawn on the same 48-unit field — so the row reads
+ * as part of this identity rather than as a borrowed icon set.
+ */
+function HeroIcon({ device }: { readonly device: string }): JSX.Element {
+  return (
+    <svg width={22} height={22} viewBox="0 0 48 48" aria-hidden focusable="false">
+      <path
+        d={device}
+        fill="none"
+        stroke="var(--pw-accent)"
+        strokeWidth={2.4}
+        strokeLinecap="square"
+        strokeLinejoin="miter"
+      />
+    </svg>
   );
 }
 
@@ -238,7 +384,16 @@ function Pillars({ onNavigate }: { readonly onNavigate: (next: Route) => void })
         gap: 'var(--pw-space-4)',
       }}
     >
-      <article style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
+      <article
+        style={{
+          ...panelStyle,
+          display: 'grid',
+          gap: 'var(--pw-space-2)',
+          // Otherwise the shortest card spreads its two lines over the height
+          // of the tallest one, and the row reads as three broken cards.
+          alignContent: 'start',
+        }}
+      >
         <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>
           TEN FACTIONS. INFINITE STORIES.
         </h2>
@@ -248,7 +403,16 @@ function Pillars({ onNavigate }: { readonly onNavigate: (next: Route) => void })
         </p>
       </article>
 
-      <article style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
+      <article
+        style={{
+          ...panelStyle,
+          display: 'grid',
+          gap: 'var(--pw-space-2)',
+          // Otherwise the shortest card spreads its two lines over the height
+          // of the tallest one, and the row reads as three broken cards.
+          alignContent: 'start',
+        }}
+      >
         {card === undefined ? null : (
           <img
             src={card}
@@ -272,7 +436,16 @@ function Pillars({ onNavigate }: { readonly onNavigate: (next: Route) => void })
         </button>
       </article>
 
-      <article style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
+      <article
+        style={{
+          ...panelStyle,
+          display: 'grid',
+          gap: 'var(--pw-space-2)',
+          // Otherwise the shortest card spreads its two lines over the height
+          // of the tallest one, and the row reads as three broken cards.
+          alignContent: 'start',
+        }}
+      >
         <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>REAL MARKETS. REAL IMPACT.</h2>
         <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.5 }}>
           Powered by live market data, onchain activity, and a global community. This is more than a
