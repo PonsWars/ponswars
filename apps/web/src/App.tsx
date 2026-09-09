@@ -215,17 +215,33 @@ function placeholderRound(): ClientRound {
  * at; none of the numbers is derived on the client, which is the property that
  * has to survive when the real sources are wired (§34, §35).
  */
+const PLACEHOLDER_GENESIS: GenesisOutcome = {
+  genesisId: '008271',
+  // One of the three cards that has art, so the preview shows the reveal §40.6
+  // describes rather than the text-only version a card without art falls back
+  // to. Rarity, name and support all match the catalog entry for it.
+  rarity: 'LEGENDARY',
+  cardType: 'GOLDEN_ARMY',
+  cardName: 'Golden Army',
+  effect: 'General Support +50',
+  secretReservationSecured: true,
+};
+
 const PLACEHOLDER_PROFILE: ProfileData = {
   addressFragment: PLACEHOLDER_WALLET.addressFragment,
   warBalance: PLACEHOLDER_WALLET.warBalance,
   warHolder: true,
+  // The card the Genesis preview reveals, with one charge spent — same id, same
+  // name, same rarity, same effect. It was a different card under the same
+  // Genesis number, which taught anyone who opened both screens that the
+  // reveal and the profile are unrelated.
   card: {
-    genesisId: '008271',
-    name: 'Bull Run',
-    rarity: 'RARE',
-    effect: 'Market Support +2',
-    usesRemaining: 7,
-    secretTrophy: false,
+    genesisId: PLACEHOLDER_GENESIS.genesisId,
+    name: PLACEHOLDER_GENESIS.cardName,
+    rarity: PLACEHOLDER_GENESIS.rarity,
+    effect: PLACEHOLDER_GENESIS.effect,
+    usesRemaining: 2,
+    secretTrophy: PLACEHOLDER_GENESIS.secretReservationSecured,
   },
   lifetime: {
     battles: 128,
@@ -244,7 +260,7 @@ const PLACEHOLDER_PROFILE: ProfileData = {
       backed: 'GME',
       outcome: 'MAJOR_UPSET',
       warPoints: 14,
-      cardName: 'Bull Run',
+      cardName: PLACEHOLDER_GENESIS.cardName,
     },
     {
       roundId: '#717',
@@ -310,22 +326,11 @@ const PLACEHOLDER_RESULT: FinishedBattle = {
   cardDeployed: true,
 };
 
-const PLACEHOLDER_GENESIS: GenesisOutcome = {
-  genesisId: '008271',
-  // One of the three cards that has art, so the preview shows the reveal §40.6
-  // describes rather than the text-only version a card without art falls back
-  // to. Rarity, name and support all match the catalog entry for it.
-  rarity: 'LEGENDARY',
-  cardType: 'GOLDEN_ARMY',
-  cardName: 'Golden Army',
-  effect: 'General Support +50',
-  secretReservationSecured: true,
-};
-
 export function App(): JSX.Element {
   const { route, navigate } = useRoute();
   const battles = useSession((state) => state.battles);
   const focusSector = useSession((state) => state.focusSector);
+  const presentWorld = useSession((state) => state.presentWorld);
   const setBattles = useSession((state) => state.setBattles);
   const setMyBattle = useSession((state) => state.setMyBattle);
   const setWallet = useSession((state) => state.setWallet);
@@ -425,6 +430,14 @@ export function App(): JSX.Element {
   }, [status.live, setBattles, setMyBattle, setWallet, setRound, setCard]);
 
   useEffect(() => {
+    // Every route but the world is a page presented over it (§81.2). The
+    // camera reframes so the world sits beside the page instead of behind it,
+    // and returns to the global anchor on the way back in. It is one place the
+    // whole time — §37.9 — so this is a move, never a load.
+    presentWorld(route.kind !== 'WORLD', nowUtc());
+  }, [route.kind, presentWorld]);
+
+  useEffect(() => {
     // A shared `/war/:battleId` link arrives focused on that battle (§80.4).
     // The camera flies rather than cutting, so a deep link lands the visitor in
     // the world the same way navigating there would have.
@@ -459,10 +472,13 @@ export function App(): JSX.Element {
       <Suspense fallback={<WorldLoading />}>
         <WorldCanvas />
       </Suspense>
-      {/* The HUD belongs to the world, and the landing is what comes before
-          entering it. Showing both puts a round countdown and a set of world
-          controls behind a page explaining what a round is. */}
-      {route.kind === 'LANDING' ? null : <Hud onNavigate={navigate} />}
+      {/* The HUD belongs to the world, and every other route is a page over it.
+          Showing both put a round countdown and a set of world controls behind
+          a page explaining what a round is — and, because the HUD carries a
+          navigation bar of its own, a second bar underneath the overlay's,
+          marking `WORLD` as the current page while the visitor was reading the
+          about page. */}
+      {route.kind === 'WORLD' ? <Hud onNavigate={navigate} /> : null}
       <div
         style={{
           position: 'fixed',

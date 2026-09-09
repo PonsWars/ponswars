@@ -78,7 +78,11 @@ export function Presentations({
       );
     case 'RESULT':
       return (
-        <Overlay title="BATTLE RESULT" onClose={close}>
+        <Overlay
+          title="BATTLE RESULT"
+          nav={<NavBar current={route} onNavigate={navigate} />}
+          onClose={close}
+        >
           {result === null ? (
             // §22: a result exists only after finalization. Before that there is
             // nothing honest to show, and inventing a placeholder scoreline on
@@ -104,7 +108,14 @@ export function Presentations({
       );
     case 'GENESIS':
       return (
-        <Overlay title="GENESIS" onClose={close}>
+        // The reveal keeps its own pacing (§40.6) and the bar sits above it
+        // rather than in it — a ceremony a visitor cannot navigate away from is
+        // a trap, and §80.4 puts the same bar on every surface.
+        <Overlay
+          title="GENESIS"
+          nav={<NavBar current={route} onNavigate={navigate} />}
+          onClose={close}
+        >
           {genesis === null ? (
             // §42.14: say what is actually true rather than showing an empty
             // ceremony. A wallet with no Genesis claim has nothing to reveal.
