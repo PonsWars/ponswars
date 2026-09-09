@@ -11,7 +11,7 @@ import { PickControls } from './PickControls.js';
 import { Countdown, RoundStatus } from './RoundStatus.js';
 import { panelStyle } from './styles.js';
 import { useNarrowViewport } from './useNarrowViewport.js';
-import { PresentationLinks } from './PresentationLinks.js';
+import { NavBar } from './NavBar.js';
 import { NextRotation, WorldGuide } from './WorldGuide.js';
 import { WalletSummary } from './WalletSummary.js';
 
@@ -72,8 +72,14 @@ export function Hud({ onNavigate }: { readonly onNavigate: (next: Route) => void
           {budget.countdown ? <Countdown /> : null}
         </Live>
         <Live>
-          {budget.walletSummary ? <PresentationLinks onNavigate={onNavigate} /> : null}
-          {budget.walletSummary ? <WalletSummary /> : null}
+          {/* One bar, the same one every other surface uses (§80.4). Only at
+              the global view: §37.6 ties density to zoom, and a player inside a
+              battlefield is mid-decision. */}
+          {budget.walletSummary ? (
+            <NavBar current={{ kind: 'WORLD', battleId: null }} onNavigate={onNavigate}>
+              <WalletSummary />
+            </NavBar>
+          ) : null}
           {budget.warMomentum && focused !== undefined ? (
             <LiveBattle battle={focused} showDeployedCard={budget.deployedCard} />
           ) : null}

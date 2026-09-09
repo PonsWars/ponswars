@@ -17,10 +17,19 @@ import { controlStyle } from '../hud/styles.js';
 export function Overlay({
   title,
   onClose,
+  nav,
   children,
 }: {
   readonly title: string;
   readonly onClose: () => void;
+  /**
+   * The navigation bar, for presentations a visitor browses between.
+   *
+   * Optional, because not every presentation is one. A Genesis reveal and a
+   * result are moments with one way out; putting a row of destinations across
+   * the top of them would invite a player to leave the thing they opened.
+   */
+  readonly nav?: ReactNode;
   readonly children: ReactNode;
 }): JSX.Element {
   const panel = useRef<HTMLDivElement>(null);
@@ -63,12 +72,21 @@ export function Overlay({
         paddingBottom: 'max(var(--pw-space-4), env(safe-area-inset-bottom))',
       }}
     >
+      {nav === undefined ? null : (
+        <div style={{ maxWidth: 960, width: '100%', margin: '0 auto var(--pw-space-4)' }}>
+          {nav}
+        </div>
+      )}
+
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           gap: 'var(--pw-space-4)',
+          maxWidth: 960,
+          width: '100%',
+          margin: '0 auto',
           marginBottom: 'var(--pw-space-4)',
         }}
       >

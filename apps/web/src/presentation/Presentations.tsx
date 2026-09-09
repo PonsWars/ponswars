@@ -1,4 +1,5 @@
 import { About } from '../about/About.js';
+import { NavBar } from '../hud/NavBar.js';
 import { useState, type JSX } from 'react';
 import type { ActiveTicker, ConfidenceLabel, FinalizedBattleResult } from '@ponswars/shared-types';
 import { GenesisReveal, type GenesisOutcome } from '../genesis/GenesisReveal.js';
@@ -59,7 +60,11 @@ export function Presentations({
       );
     case 'ABOUT':
       return (
-        <Overlay title="ABOUT" onClose={close}>
+        <Overlay
+          title="ABOUT"
+          nav={<NavBar current={route} onNavigate={navigate} />}
+          onClose={close}
+        >
           <About onNavigate={navigate} />
         </Overlay>
       );

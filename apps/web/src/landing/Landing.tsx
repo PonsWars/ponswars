@@ -3,6 +3,7 @@ import { LAYER } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
 import { FactionEmblem } from '../art/FactionEmblem.js';
 import { CARD_ART } from '../art/manifest.js';
+import { NavBar } from '../hud/NavBar.js';
 import { formatCountdown, roundView } from '../hud/round-phase.js';
 import { captionStyle, controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
 import type { Route } from '../routing/route.js';
@@ -62,6 +63,7 @@ export function Landing({
           gap: 'var(--pw-space-6)',
         }}
       >
+        <NavBar current={{ kind: 'LANDING' }} onNavigate={onNavigate} />
         <Hero onEnter={enter} onNavigate={onNavigate} />
         <RoundStrip battles={battles} round={round} clockOffsetMs={clockOffsetMs} />
         <Pillars onNavigate={onNavigate} />

@@ -17,6 +17,7 @@ import { Presentations, type FinishedBattle } from './presentation/Presentations
 import type { ProfileData } from './profile/WarRoom.js';
 import { activeWindowView } from './rewards/reward-view.js';
 import type { PoolStatus } from './rewards/RewardsHub.js';
+import { NavBar } from './hud/NavBar.js';
 import { Overlay } from './presentation/Overlay.js';
 import { isPresentation, WORLD_ROUTE } from './routing/route.js';
 import { useRoute } from './routing/useRoute.js';
@@ -480,6 +481,7 @@ export function App(): JSX.Element {
       {route.kind === 'FACTIONS' ? (
         <Overlay
           title="FACTIONS"
+          nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={() => {
             navigate(WORLD_ROUTE);
           }}
