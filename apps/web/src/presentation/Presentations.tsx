@@ -1,5 +1,6 @@
 import { About } from '../about/About.js';
 import { NavBar } from '../hud/NavBar.js';
+import { controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
 import { useState, type JSX } from 'react';
 import type { ActiveTicker, ConfidenceLabel, FinalizedBattleResult } from '@ponswars/shared-types';
 import { GenesisReveal, type GenesisOutcome } from '../genesis/GenesisReveal.js';
@@ -87,8 +88,15 @@ export function Presentations({
             // §22: a result exists only after finalization. Before that there is
             // nothing honest to show, and inventing a placeholder scoreline on
             // the one screen that carries real numbers would be the worst place
-            // in the product to do it.
-            <div style={{ color: 'var(--pw-text-3)', fontSize: 13 }}>NO FINALIZED BATTLE YET</div>
+            // in the product to do it. §110.5 still asks the copy to say what
+            // happened and what to do — a bare line reads as a page that failed
+            // to load rather than as a battle that has not finished.
+            <EmptyState
+              headline="NOTHING HAS FINISHED YET"
+              body="A result is published when a battle finalizes, with the full working behind it. Watch a round in the world and this page fills in when the bell goes."
+              action="WATCH THE WORLD →"
+              onAction={close}
+            />
           ) : (
             <ResultScreen
               result={result.result}
@@ -119,9 +127,12 @@ export function Presentations({
           {genesis === null ? (
             // §42.14: say what is actually true rather than showing an empty
             // ceremony. A wallet with no Genesis claim has nothing to reveal.
-            <div style={{ color: 'var(--pw-text-3)', fontSize: 13 }}>
-              NO GENESIS CLAIM ON THIS WALLET
-            </div>
+            <EmptyState
+              headline="NO GENESIS CLAIM ON THIS WALLET"
+              body="Genesis Cards are revealed once, to the wallet that holds the claim. Nothing here is hidden from you — there is nothing on this wallet to open."
+              action="BACK TO THE WORLD →"
+              onAction={close}
+            />
           ) : (
             <GenesisReveal outcome={genesis} onDone={close} />
           )}
@@ -179,5 +190,35 @@ function RewardsPresentation({
         advance(claim === 'FAILED' ? 'READY_TO_CLAIM' : 'CONFIRM_IN_WALLET');
       }}
     />
+  );
+}
+
+/**
+ * What a presentation shows when there is honestly nothing to show.
+ *
+ * §110.5 asks error and empty copy to say what happened and what to do next.
+ * A single grey line saying `NO FINALIZED BATTLE YET` says the first badly and
+ * the second not at all — on a full-width page it reads as something that
+ * failed to load rather than as a round that has not finished yet.
+ */
+function EmptyState({
+  headline,
+  body,
+  action,
+  onAction,
+}: {
+  readonly headline: string;
+  readonly body: string;
+  readonly action: string;
+  readonly onAction: () => void;
+}): JSX.Element {
+  return (
+    <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-3)', maxWidth: 560 }}>
+      <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>{headline}</h2>
+      <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.55 }}>{body}</p>
+      <button type="button" onClick={onAction} style={{ ...controlStyle, justifySelf: 'start' }}>
+        {action}
+      </button>
+    </div>
   );
 }
