@@ -236,6 +236,17 @@ gateway (`apps/gateway`) and a single-process stack that runs the whole loop
 vendor and the database. §102 forbids picking either and shipping it as policy,
 and each is one constructor argument away from being replaced.
 
+The store now has a PostgreSQL adapter behind it (`@ponswars/store-postgres`).
+PostgreSQL itself was never the open question — `database/migrations` is
+PostgreSQL DDL with its enums, partial indexes and check constraints, and the
+registry leaves the managed _provider_ open, which is a hosting decision. Its
+tests run the real migrations against real PostgreSQL through `PGlite`, so the
+schema's own constraints take part: `battle_results` requires the four
+components to sum to a hundred points and each weight to its §12 share, and a
+column mapped to the wrong parameter is refused by the database rather than
+stored. They need no Docker daemon, because a test that only runs when one is
+running is a test that mostly does not run.
+
 Battle Confidence (§10) is computed rather than supplied. Price trend, volume
 pulse, Pons activity and momentum stability are weighted 40/25/20/15 over the
 fifteen minutes before Pick Phase, and the label comes from exactly the four
@@ -349,15 +360,15 @@ suppression anywhere in the repository, and no skipped test.
 Everything remaining in §60's execution order waits on a decision rather than on
 implementation. Listed so the blocking decision is visible rather than buried:
 
-| Step                                     | Blocked on                                                                                                                               |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| A market-data adapter                    | The vendor — a licensing and commercial decision before an engineering one (§102). The port and a synthetic stand-in behind it are built |
-| A database adapter                       | The database (§102). The schema in `database/migrations` and the store port are built; the in-memory store is deliberately not a default |
-| 17 · historical calibration              | The market-data vendor. The replay harness is built and takes recorded ticks from any source                                             |
-| 18 · load testing                        | A hosting decision. There is now a running transport to put load on                                                                      |
-| 19 · contract security review            | An independent auditor. Not something this repository can do to itself                                                                   |
-| 20 · infrastructure, backups, monitoring | Hosting. The runbooks that do not depend on it are written                                                                               |
-| 21–23 · freeze, deploy, activation       | Steps 1 and 2 of §60: the `$WAR` launch and treasury parameters, and the legal review of the Genesis and Secret structure                |
+| Step                                     | Blocked on                                                                                                                                            |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A market-data adapter                    | The vendor — a licensing and commercial decision before an engineering one (§102). The port and a synthetic stand-in behind it are built              |
+| A managed PostgreSQL provider            | Hosting (§102). The adapter, the schema and the migrations exist and are tested against real PostgreSQL; which service runs it is a deployment choice |
+| 17 · historical calibration              | The market-data vendor. The replay harness is built and takes recorded ticks from any source                                                          |
+| 18 · load testing                        | A hosting decision. There is now a running transport to put load on                                                                                   |
+| 19 · contract security review            | An independent auditor. Not something this repository can do to itself                                                                                |
+| 20 · infrastructure, backups, monitoring | Hosting. The runbooks that do not depend on it are written                                                                                            |
+| 21–23 · freeze, deploy, activation       | Steps 1 and 2 of §60: the `$WAR` launch and treasury parameters, and the legal review of the Genesis and Secret structure                             |
 
 Each of those is a product or business decision, and §102 is explicit that an
 `OPEN` value must not be invented and shipped as policy. The cores every one of

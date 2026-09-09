@@ -41,6 +41,9 @@
       "path": "./packages/round-service/tsconfig.build.json"
     },
     {
+      "path": "./packages/store-postgres/tsconfig.build.json"
+    },
+    {
       "path": "./apps/api/tsconfig.build.json"
     },
     {
