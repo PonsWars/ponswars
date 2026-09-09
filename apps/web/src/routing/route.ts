@@ -22,10 +22,23 @@ export interface WorldRoute {
 
 /** A presentation layered over the world. */
 export interface PresentationRoute {
-  readonly kind: 'PROFILE' | 'REWARDS' | 'GENESIS' | 'RESULT';
+  readonly kind: 'PROFILE' | 'REWARDS' | 'GENESIS';
 }
 
-export type Route = WorldRoute | PresentationRoute;
+/**
+ * A finished battle, shown over the world (§27.8).
+ *
+ * Carries a battle id because a result is about one battle, and because a
+ * result is the thing a player most wants to send someone — the same reason
+ * `/war/:battleId` exists. `null` falls back to whatever the client last saw
+ * finish, so a bare `/result` is still somewhere rather than nowhere.
+ */
+export interface ResultRoute {
+  readonly kind: 'RESULT';
+  readonly battleId: string | null;
+}
+
+export type Route = WorldRoute | PresentationRoute | ResultRoute;
 
 export const WORLD_ROUTE: WorldRoute = { kind: 'WORLD', battleId: null };
 
@@ -49,7 +62,7 @@ export function parseRoute(pathname: string): Route {
     case 'genesis':
       return { kind: 'GENESIS' };
     case 'result':
-      return { kind: 'RESULT' };
+      return { kind: 'RESULT', battleId: second ?? null };
     case 'war':
       // `/war` with no id is still the world, just unfocused. A URL truncated
       // in a chat client should not become a dead end.
@@ -69,7 +82,7 @@ export function pathFor(route: Route): string {
     case 'GENESIS':
       return '/genesis';
     case 'RESULT':
-      return '/result';
+      return route.battleId === null ? '/result' : `/result/${route.battleId}`;
     case 'WORLD':
       return route.battleId === null ? '/' : `/war/${route.battleId}`;
   }
@@ -82,6 +95,6 @@ export function pathFor(route: Route): string {
  * overlay is on top of it, which is what the camera uses to choose
  * `PROFILE_PRESENTATION` (§81.2).
  */
-export function isPresentation(route: Route): route is PresentationRoute {
+export function isPresentation(route: Route): route is PresentationRoute | ResultRoute {
   return route.kind !== 'WORLD';
 }

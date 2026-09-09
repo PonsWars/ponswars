@@ -121,6 +121,25 @@ export function alreadyPicked(correlationId: string): ErrorResponse {
 }
 
 /**
+ * No result for that battle (§47.1, §12.6).
+ *
+ * One code for two situations on purpose: a battle that does not exist and a
+ * battle still running both have no result to give, and distinguishing them
+ * would let anyone enumerate battle ids. §12.6 hides the live score, and a
+ * "still running" answer is a small piece of the same information.
+ */
+export function resultNotFound(battleId: string, correlationId: string): ErrorResponse {
+  return error(
+    404,
+    'RESULT_NOT_FOUND',
+    `No finalized result for battle ${battleId}.`,
+    true,
+    'A result appears when the battle finalizes, at the end of its round.',
+    correlationId,
+  );
+}
+
+/**
  * A card decision arrived for a round this wallet has not picked in (§47.6).
  *
  * §40.7 puts the card after the side, so there is nothing to arm. Naming that

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   activeTickerSchema,
   battleIdSchema,
+  battleScoreBreakdownSchema,
   canonicalClockSchema,
   cardSupportTierSchema,
   confidenceSnapshotSchema,
@@ -14,6 +15,7 @@ import {
   sectorIdSchema,
   unitIntervalSchema,
   utcTimestampSchema,
+  tiebreakStepSchema,
   victoryLabelSchema,
   visualEventCueSchema,
   voidReasonSchema,
@@ -157,14 +159,6 @@ export const picksLockedPayloadSchema = z
   })
   .strict();
 
-/** One side's final component breakdown, revealed only after finalization. */
-const scoreBreakdownSchema = z.object({
-  priceMomentum: z.number().nonnegative(),
-  relativeVolume: z.number().nonnegative(),
-  ponsPower: z.number().nonnegative(),
-  holderCardSupport: z.number().nonnegative(),
-});
-
 /**
  * `ROUND_FINALIZED` (§48.3).
  *
@@ -177,12 +171,25 @@ export const roundFinalizedPayloadSchema = z.object({
     z
       .object({
         battleId: battleIdSchema,
+        roundId: roundIdSchema,
         left: activeTickerSchema,
         right: activeTickerSchema,
         winner: activeTickerSchema,
-        leftScore: scoreBreakdownSchema,
-        rightScore: scoreBreakdownSchema,
+        leftScore: battleScoreBreakdownSchema,
+        rightScore: battleScoreBreakdownSchema,
         victoryLabel: victoryLabelSchema,
+        /** Present only when the totals tied and a step decided it (§12.7). */
+        tiebreakStep: tiebreakStepSchema.optional(),
+        /**
+         * Provenance, so a result can be argued with rather than believed.
+         *
+         * §26 promises a published result is reproducible, and §27.8 shows the
+         * working. Omitting the engine version from the event that reveals the
+         * result would leave the one screen built to show it fetching for the
+         * detail that makes the rest meaningful.
+         */
+        scoringEngineVersion: z.string().min(1),
+        finalizedAt: utcTimestampSchema,
         evidenceHash: z.string().min(1),
       })
       .refine((result) => result.winner === result.left || result.winner === result.right, {
@@ -230,6 +237,19 @@ export const PUBLIC_EVENT_PAYLOADS = {
 } as const;
 
 export type PublicEventName = keyof typeof PUBLIC_EVENT_PAYLOADS;
+
+/**
+ * The payload types, so a consumer can name one without depending on zod.
+ *
+ * Inferred from the schemas rather than written twice — §65.1 allows one
+ * canonical definition per concept, and a hand-written mirror of a schema is a
+ * second one that drifts silently.
+ */
+export type RoundOpenedPayload = z.infer<typeof roundOpenedPayloadSchema>;
+export type BattleStateUpdatePayload = z.infer<typeof battleStateUpdatePayloadSchema>;
+export type PicksLockedPayload = z.infer<typeof picksLockedPayloadSchema>;
+export type RoundFinalizedPayload = z.infer<typeof roundFinalizedPayloadSchema>;
+export type BattleVoidPayload = z.infer<typeof battleVoidPayloadSchema>;
 
 export const PUBLIC_EVENT_NAMES = Object.keys(PUBLIC_EVENT_PAYLOADS) as readonly PublicEventName[];
 

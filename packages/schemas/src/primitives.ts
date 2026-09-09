@@ -10,6 +10,7 @@ import {
   PUBLIC_FEED_HEALTH,
   RESERVE_TICKERS,
   ROUND_STATES,
+  TIEBREAK_ORDER,
   VICTORY_LABELS,
   VISUAL_EVENT_CUES,
   VOID_REASON_CATEGORIES,
@@ -65,6 +66,7 @@ export const confidenceSnapshotSchema = z
   .strict();
 export const momentumStateSchema = enumOf(MOMENTUM_STATES);
 export const victoryLabelSchema = enumOf(VICTORY_LABELS);
+export const tiebreakStepSchema = enumOf(TIEBREAK_ORDER);
 export const cardDecisionSchema = enumOf(CARD_DECISIONS);
 export const cardSupportTierSchema = enumOf(CARD_SUPPORT_TIERS);
 export const publicFeedHealthSchema = enumOf(PUBLIC_FEED_HEALTH);
@@ -149,3 +151,21 @@ export const canonicalClockSchema = z
     message: 'the scoring window opens exactly at lock (§12.1)',
     path: ['battleStartAt'],
   });
+
+/**
+ * One side's four component scores (§12, §27.8).
+ *
+ * **Every value is scaled by `BATTLE_POINT_SCALE`.** A component reading
+ * `23_800_000` is 23.8 points, and both sides' components together always sum
+ * to a hundred points scaled. The scale is the reason this is one definition
+ * rather than two: a second copy is a second place for someone to assume tenths
+ * and render a 48.4 as `4840954.0`, which has happened here once already.
+ */
+export const battleScoreBreakdownSchema = z
+  .object({
+    priceMomentum: z.number().nonnegative(),
+    relativeVolume: z.number().nonnegative(),
+    ponsPower: z.number().nonnegative(),
+    holderCardSupport: z.number().nonnegative(),
+  })
+  .strict();

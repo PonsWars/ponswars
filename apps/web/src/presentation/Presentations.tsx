@@ -6,7 +6,12 @@ import { RewardsHub, type PoolStatus } from '../rewards/RewardsHub.js';
 import { canTransitionClaim, type ClaimState, type RewardView } from '../rewards/reward-view.js';
 import { ResultScreen } from '../result/ResultScreen.js';
 import { playerResultView } from '../result/result-view.js';
-import { WORLD_ROUTE, type PresentationRoute, type Route } from '../routing/route.js';
+import {
+  WORLD_ROUTE,
+  type PresentationRoute,
+  type ResultRoute,
+  type Route,
+} from '../routing/route.js';
 import { Overlay } from './Overlay.js';
 
 /**
@@ -26,7 +31,7 @@ export function Presentations({
   genesis,
   result,
 }: {
-  readonly route: PresentationRoute;
+  readonly route: PresentationRoute | ResultRoute;
   readonly navigate: (next: Route) => void;
   readonly profile: ProfileData;
   readonly reward: RewardView;

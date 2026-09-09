@@ -1,5 +1,10 @@
-import { currentRoundSchema } from '@ponswars/schemas';
-import { utcTimestamp } from '@ponswars/shared-types';
+import { battleResultSchema, currentRoundSchema } from '@ponswars/schemas';
+import {
+  battleId as toBattleId,
+  roundId as toRoundId,
+  utcTimestamp,
+  type FinalizedBattleResult,
+} from '@ponswars/shared-types';
 import type { ClientBattle, ClientRound } from '../state/session.js';
 import type { LiveEndpoints } from './endpoints.js';
 
@@ -141,5 +146,57 @@ export function toSnapshot(body: ReturnType<typeof currentRoundSchema.parse>): R
       backing: null,
     })),
     serverTime: body.clock.serverTime,
+  };
+}
+
+/**
+ * A finalized battle result (§47.1, §27.8).
+ *
+ * The same fact the `ROUND_FINALIZED` event carries — §25 makes a result
+ * immutable once it exists, so the two cannot disagree. This is how a client
+ * that was not connected when the battle ended can still show it, which is the
+ * common case: the result screen is reached *after* the round it describes.
+ *
+ * `null` means no result yet, which the server answers identically for a battle
+ * that is still running and one that does not exist (§12.6).
+ */
+export async function fetchBattleResult(
+  endpoints: LiveEndpoints,
+  battleId: string,
+  signal?: AbortSignal,
+  fetchImpl: typeof fetch = fetch,
+): Promise<FinalizedBattleResult | null> {
+  let response: Response;
+  try {
+    response = await fetchImpl(`${endpoints.api}/v1/battles/${battleId}/result`, {
+      signal: signal ?? null,
+      headers: { accept: 'application/json' },
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) {
+    return null;
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return null;
+  }
+
+  const parsed = battleResultSchema.safeParse(body);
+  if (!parsed.success) {
+    return null;
+  }
+
+  const { battleId: id, roundId, finalizedAt, tiebreakStep, ...rest } = parsed.data;
+  return {
+    ...rest,
+    battleId: toBattleId(id),
+    roundId: toRoundId(roundId),
+    finalizedAt: utcTimestamp(finalizedAt),
+    ...(tiebreakStep === undefined ? {} : { tiebreakStep }),
   };
 }

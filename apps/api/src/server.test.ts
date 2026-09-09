@@ -11,12 +11,13 @@ import {
   type ConfidenceCalibration,
   type ConfidenceLookback,
 } from '@ponswars/battle-math';
-import { apiErrorSchema, currentRoundSchema } from '@ponswars/schemas';
+import { apiErrorSchema, battleResultSchema, currentRoundSchema } from '@ponswars/schemas';
 import {
   ACTIVE_TICKERS,
   milliseconds,
   roundId as toRoundId,
   utcTimestamp,
+  type FinalizedBattleResult,
   walletAddress,
   type UtcTimestamp,
 } from '@ponswars/shared-types';
@@ -91,6 +92,9 @@ function openRound(): RoundEngineState {
 
 const ALLOWED_ORIGIN = 'https://play.example.test';
 
+/** Finalized results the server can answer for, seeded per test. */
+let finalized: Map<string, FinalizedBattleResult>;
+
 let round: RoundEngineState;
 let picks: PickStore;
 let now: UtcTimestamp;
@@ -98,6 +102,7 @@ let app: FastifyInstance;
 
 beforeEach(() => {
   round = openRound();
+  finalized = new Map();
   picks = new PickStore();
   now = utcTimestamp(EPOCH + 30_000);
   app = buildServer({
@@ -105,6 +110,7 @@ beforeEach(() => {
     picks,
     config: CONFIG,
     allowedOrigins: [ALLOWED_ORIGIN],
+    finalizedResult: (battleId) => finalized.get(battleId) ?? null,
     now: () => now,
     // Any bearer token is treated as that wallet. Signature verification is
     // §45.2 and belongs to the auth service; these tests are about the routes.
@@ -616,5 +622,88 @@ describe('PUT /v1/rounds/:roundId/card-decision', () => {
 
     expect(response.statusCode).toBe(409);
     expect(apiErrorSchema.parse(response.json()).code).toBe('PICKS_CLOSED');
+  });
+});
+
+describe('GET /v1/battles/:battleId/result', () => {
+  /** A finalized result shaped exactly as the engine produces one. */
+  const resultFor = (battleId: string): FinalizedBattleResult =>
+    ({
+      battleId,
+      roundId: ROUND_ID,
+      left: 'NVDA',
+      right: 'AAPL',
+      winner: 'NVDA',
+      leftScore: {
+        priceMomentum: 24_342_750,
+        relativeVolume: 16_852_475,
+        ponsPower: 11_627_240,
+        holderCardSupport: 5_000_000,
+      },
+      rightScore: {
+        priceMomentum: 20_657_250,
+        relativeVolume: 8_147_525,
+        ponsPower: 8_372_760,
+        holderCardSupport: 5_000_000,
+      },
+      victoryLabel: 'VICTORY',
+      scoringEngineVersion: 'scoring-v1',
+      finalizedAt: utcTimestamp(EPOCH + 600_000),
+      evidenceHash: `0x${'ab'.repeat(24)}`,
+    }) as FinalizedBattleResult;
+
+  it('answers with the finalized result', async () => {
+    // A client that learns results only from a live event cannot show one after
+    // a reload, and the result screen is reached after the battle has ended.
+    const battleId = round.battles[0]?.setup.battleId ?? '';
+    finalized.set(battleId, resultFor(battleId));
+
+    const response = await app.inject({ method: 'GET', url: `/v1/battles/${battleId}/result` });
+
+    expect(response.statusCode).toBe(200);
+    const body = battleResultSchema.parse(response.json());
+    expect(body.winner).toBe('NVDA');
+    expect(body.evidenceHash).toBe(`0x${'ab'.repeat(24)}`);
+  });
+
+  it('needs no wallet', async () => {
+    // §5: a result is public, and spectating is the normal case.
+    const battleId = round.battles[0]?.setup.battleId ?? '';
+    finalized.set(battleId, resultFor(battleId));
+
+    expect(
+      (await app.inject({ method: 'GET', url: `/v1/battles/${battleId}/result` })).statusCode,
+    ).toBe(200);
+  });
+
+  it('gives a running battle the same answer as an unknown one', async () => {
+    // §12.6 hides the exact score while a battle is live, and "still running"
+    // is a small piece of the same information — distinguishing the two would
+    // also let anyone enumerate battle ids.
+    const live = await app.inject({
+      method: 'GET',
+      url: `/v1/battles/${round.battles[0]?.setup.battleId ?? ''}/result`,
+    });
+    const unknown = await app.inject({ method: 'GET', url: '/v1/battles/nope/result' });
+
+    expect(live.statusCode).toBe(404);
+    expect(unknown.statusCode).toBe(404);
+    expect(apiErrorSchema.parse(live.json()).code).toBe(apiErrorSchema.parse(unknown.json()).code);
+  });
+
+  it('carries scores at engine scale, summing to one hundred points', async () => {
+    // The scale that has been wrong here before: a component reading 24_342_750
+    // is 24.3 points. Both halves together are always a hundred, and a response
+    // where they were not would mean the two sides were scored separately.
+    const battleId = round.battles[0]?.setup.battleId ?? '';
+    finalized.set(battleId, resultFor(battleId));
+
+    const body = battleResultSchema.parse(
+      (await app.inject({ method: 'GET', url: `/v1/battles/${battleId}/result` })).json(),
+    );
+    const total = (breakdown: Record<string, number>): number =>
+      Object.values(breakdown).reduce((sum, value) => sum + value, 0);
+
+    expect(total(body.leftScore) + total(body.rightScore)).toBe(100 * 1_000_000);
   });
 });

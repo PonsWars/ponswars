@@ -6,6 +6,7 @@ import {
 } from '@ponswars/battle-engine';
 import {
   cardDecisionRequestSchema,
+  battleResultSchema,
   currentRoundSchema,
   myPickSchema,
   pickRequestSchema,
@@ -15,6 +16,7 @@ import {
   battleId as toBattleId,
   clientRequestId as toClientRequestId,
   roundId as toRoundId,
+  type FinalizedBattleResult,
   type UtcTimestamp,
   type WalletAddress,
 } from '@ponswars/shared-types';
@@ -23,6 +25,7 @@ import {
   battleNotInRound,
   invalidRequest,
   noPickToDecide,
+  resultNotFound,
   picksClosed,
   roundNotFound,
   tickerNotInBattle,
@@ -79,6 +82,14 @@ export interface ServerDeps {
    * different from forgetting.
    */
   readonly allowedOrigins: readonly string[];
+  /**
+   * A finalized result by battle, or `null` if that battle has not finished.
+   *
+   * A lookup rather than a store, because §25 makes a result immutable once it
+   * exists and this endpoint only reads. Where the results are kept is the
+   * store adapter's business (§102) and not this server's.
+   */
+  readonly finalizedResult: (battleId: string) => FinalizedBattleResult | null;
 }
 
 /** Correlation id for one request, so an error can be traced (§110.5). */
@@ -378,6 +389,26 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     }
 
     return reply.code(200).send({ cardDecision: updated.cardDecision });
+  });
+
+  /**
+   * `GET /v1/battles/:battleId/result` (§47.1, §27.8).
+   *
+   * Public, because a result is public. §12.6 hides the exact score only while
+   * the battle is live, and this can only answer once it is not — a battle with
+   * no result yet is not found rather than answered with an empty one.
+   *
+   * It exists because a client that learns results only from a live event
+   * cannot show one after a reload, and the result screen is reached *after*
+   * the battle it describes has ended.
+   */
+  app.get('/v1/battles/:battleId/result', (request, reply) => {
+    const { battleId } = request.params as { battleId: string };
+    const result = deps.finalizedResult(battleId);
+    if (result === null) {
+      return send(reply, resultNotFound(battleId, correlationId()));
+    }
+    return reply.send(battleResultSchema.parse(result));
   });
 
   return app;

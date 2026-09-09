@@ -1,4 +1,10 @@
-import { PUBLIC_EVENT_PAYLOADS } from '@ponswars/schemas';
+import { PUBLIC_EVENT_PAYLOADS, type RoundFinalizedPayload } from '@ponswars/schemas';
+import {
+  battleId as toBattleId,
+  roundId as toRoundId,
+  utcTimestamp,
+  type FinalizedBattleResult,
+} from '@ponswars/shared-types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession, type PickAttempt } from '../state/session.js';
 import { liveEndpoints, type LiveEndpoints } from './endpoints.js';
@@ -229,6 +235,16 @@ function applyEvent(event: string, payload: unknown, resync: () => void): void {
     // describes — the phase, the matchups, the picks, five results. Each of
     // those fetches the authoritative snapshot instead of patching a state
     // machine from the outside (§22, §70.7).
+    if (event === 'ROUND_FINALIZED') {
+      // Kept before the resync, because the resync replaces the round with the
+      // next one. §12.6 reveals the breakdown at finalization and §27.8 shows
+      // it afterwards — a client that only re-fetched would have nothing left
+      // to show the player who just watched the battle end.
+      const parsed = PUBLIC_EVENT_PAYLOADS.ROUND_FINALIZED.safeParse(payload);
+      if (parsed.success) {
+        useSession.getState().setLastResults(parsed.data.results.map(toFinalizedResult));
+      }
+    }
     if (event === 'ROUND_OPENED' || event === 'PICKS_LOCKED' || event === 'ROUND_FINALIZED') {
       resync();
     }
@@ -286,4 +302,31 @@ function describe(failure: PickFailure): { message: string; nextStep: string } {
         nextStep: 'Reload the page; if it keeps happening the client is out of date.',
       };
   }
+}
+
+/**
+ * Turns a parsed result off the wire into the engine's own type.
+ *
+ * Through the checked constructors, not a cast. The schema proves the ids are
+ * strings of the right shape; `battleId` and `roundId` prove they are ids, and
+ * that is the difference between a result and an object that resembles one.
+ *
+ * `tiebreakStep` is spread conditionally because `exactOptionalPropertyTypes`
+ * separates "absent" from "present and undefined" — §12.7 sets it only when the
+ * totals actually tied, and a key holding `undefined` would claim a tiebreak
+ * happened and then decline to say which.
+ */
+function toFinalizedResult(
+  result: RoundFinalizedPayload['results'][number],
+): FinalizedBattleResult {
+  const { battleId, roundId, finalizedAt, tiebreakStep, ...rest } = result;
+  return {
+    ...rest,
+    battleId: toBattleId(battleId),
+    roundId: toRoundId(roundId),
+    finalizedAt: utcTimestamp(finalizedAt),
+    // Destructured out above rather than spread over, because spreading leaves
+    // the optional key in the type even when the value is absent.
+    ...(tiebreakStep === undefined ? {} : { tiebreakStep }),
+  };
 }

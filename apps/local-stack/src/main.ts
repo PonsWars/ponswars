@@ -217,6 +217,13 @@ async function main(): Promise<void> {
     // something to leave failing with a CORS error that names neither.
     allowedOrigins: WEB_ORIGINS,
     currentRound: () => round,
+    // Read straight off the store the loop writes to. §25 makes a result
+    // immutable once it exists, so there is nothing to cache and nothing that
+    // could go stale — a second copy would only be a second thing to be wrong.
+    finalizedResult: (battleId) =>
+      store.finalizations
+        .flatMap((finalization) => finalization.results)
+        .find((result) => result.battleId === battleId) ?? null,
     picks,
     config: CONFIG,
     now,

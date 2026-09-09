@@ -3,6 +3,7 @@ import type {
   CanonicalClock,
   CardDecision,
   ConfidenceSnapshot,
+  FinalizedBattleResult,
   MomentumState,
   PublicFeedHealth,
   RoundState,
@@ -220,6 +221,15 @@ interface SessionState {
   /** The most recent refusal, or `null`. Cleared by the next attempt. */
   readonly pickError: { readonly message: string; readonly nextStep: string } | null;
   /**
+   * The last round's results, keyed by battle (§27.8).
+   *
+   * Kept because §12.6 reveals the breakdown at finalization and the result
+   * screen is reached after the round it describes has ended — a client that
+   * dropped them on the next `ROUND_OPENED` would have nothing to show the
+   * player who just watched a battle finish.
+   */
+  readonly lastResults: Readonly<Record<string, FinalizedBattleResult>>;
+  /**
    * Server time minus local time, in milliseconds (§23.5).
    *
    * Every countdown is projected through this. The device clock is never
@@ -239,6 +249,17 @@ interface SessionState {
   setConnection: (connection: ConnectionState) => void;
   setPickGateway: (gateway: PickGateway | null) => void;
   setPickError: (error: { readonly message: string; readonly nextStep: string } | null) => void;
+  /** Replaces the kept results, as a finalization does for a whole round. */
+  setLastResults: (results: readonly FinalizedBattleResult[]) => void;
+  /**
+   * Adds one result without displacing the others.
+   *
+   * Separate from `setLastResults` because the two mean different things: a
+   * finalization supersedes the previous round, while a result fetched by id
+   * joins what is already known. Using the replacing one here would drop the
+   * other four battles of the round a player is looking at.
+   */
+  rememberResult: (result: FinalizedBattleResult) => void;
   /**
    * Applies the server's answer about this wallet's own pick (§47.5).
    *
@@ -321,6 +342,7 @@ export const useSession = create<SessionState>((set, get) => ({
   connection: 'CONNECTED',
   picks: null,
   pickError: null,
+  lastResults: {},
   clockOffsetMs: 0,
 
   setBattles: (battles) => {
@@ -373,6 +395,16 @@ export const useSession = create<SessionState>((set, get) => ({
 
   setPickError: (pickError) => {
     set({ pickError });
+  },
+
+  setLastResults: (results) => {
+    set({
+      lastResults: Object.fromEntries(results.map((result) => [result.battleId, result])),
+    });
+  },
+
+  rememberResult: (result) => {
+    set({ lastResults: { ...get().lastResults, [result.battleId]: result } });
   },
 
   applyMyBacking: (battleId, backing) => {

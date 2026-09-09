@@ -196,12 +196,15 @@ describe('ROUND_OPENED', () => {
 describe('ROUND_FINALIZED', () => {
   const result = {
     battleId: 'round-0000000001-b0',
+    roundId: 'round-0000000001',
     left: 'NVDA' as const,
     right: 'AAPL' as const,
     winner: 'NVDA' as const,
     leftScore: { priceMomentum: 30, relativeVolume: 12, ponsPower: 9, holderCardSupport: 5 },
     rightScore: { priceMomentum: 15, relativeVolume: 13, ponsPower: 11, holderCardSupport: 5 },
     victoryLabel: 'VICTORY' as const,
+    scoringEngineVersion: 'battle-engine-v1',
+    finalizedAt: T0 + 600_000,
     evidenceHash: 'abc123',
   };
 

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   activeTickerSchema,
   battleIdSchema,
+  battleScoreBreakdownSchema,
   baseUnitsSchema,
   canonicalClockSchema,
   cardDecisionSchema,
@@ -11,7 +12,10 @@ import {
   hash32Schema,
   roundIdSchema,
   roundStateSchema,
+  tiebreakStepSchema,
   sectorIdSchema,
+  utcTimestampSchema,
+  victoryLabelSchema,
   walletAddressSchema,
 } from './primitives.js';
 
@@ -64,6 +68,35 @@ export const pickResponseSchema = z
     recorded: z.boolean(),
     replayed: z.boolean(),
     changed: z.boolean().optional(),
+  })
+  .strict();
+
+/**
+ * What `GET /v1/battles/{battleId}/result` answers with (§47.1, §27.8).
+ *
+ * The same shape the `ROUND_FINALIZED` event carries, because it is the same
+ * fact: §25 makes a result immutable from the moment it exists, so the event
+ * and the fetch cannot disagree without one of them being wrong.
+ *
+ * It exists because a client that only learns results from a live event cannot
+ * show one after a reload — and the result screen is reached *after* the battle
+ * it describes has ended, which is exactly when a player is most likely to
+ * arrive fresh.
+ */
+export const battleResultSchema = z
+  .object({
+    battleId: battleIdSchema,
+    roundId: roundIdSchema,
+    left: activeTickerSchema,
+    right: activeTickerSchema,
+    winner: activeTickerSchema,
+    leftScore: battleScoreBreakdownSchema,
+    rightScore: battleScoreBreakdownSchema,
+    victoryLabel: victoryLabelSchema,
+    tiebreakStep: tiebreakStepSchema.optional(),
+    scoringEngineVersion: z.string().min(1),
+    finalizedAt: utcTimestampSchema,
+    evidenceHash: z.string().min(1),
   })
   .strict();
 

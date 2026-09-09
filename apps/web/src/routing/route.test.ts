@@ -7,7 +7,7 @@ const ALL_ROUTES: readonly Route[] = [
   { kind: 'PROFILE' },
   { kind: 'REWARDS' },
   { kind: 'GENESIS' },
-  { kind: 'RESULT' },
+  { kind: 'RESULT', battleId: null },
 ];
 
 describe('parseRoute', () => {
@@ -41,7 +41,7 @@ describe('parseRoute', () => {
     expect(parseRoute('/profile')).toEqual({ kind: 'PROFILE' });
     expect(parseRoute('/rewards')).toEqual({ kind: 'REWARDS' });
     expect(parseRoute('/genesis')).toEqual({ kind: 'GENESIS' });
-    expect(parseRoute('/result')).toEqual({ kind: 'RESULT' });
+    expect(parseRoute('/result')).toEqual({ kind: 'RESULT', battleId: null });
   });
 });
 
@@ -64,6 +64,6 @@ describe('isPresentation', () => {
     expect(isPresentation({ kind: 'PROFILE' })).toBe(true);
     expect(isPresentation({ kind: 'REWARDS' })).toBe(true);
     expect(isPresentation({ kind: 'GENESIS' })).toBe(true);
-    expect(isPresentation({ kind: 'RESULT' })).toBe(true);
+    expect(isPresentation({ kind: 'RESULT', battleId: null })).toBe(true);
   });
 });

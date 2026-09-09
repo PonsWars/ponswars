@@ -4,8 +4,10 @@ import {
   type FinalizedBattleResult,
 } from '@ponswars/shared-types';
 import { LAYER } from '@ponswars/ui-tokens';
-import { lazy, Suspense, useEffect, type JSX } from 'react';
+import { lazy, Suspense, useEffect, useMemo, type JSX } from 'react';
+import { liveEndpoints } from './live/endpoints.js';
 import { PreviewBanner } from './live/PreviewBanner.js';
+import { fetchBattleResult } from './live/round-client.js';
 import { useLiveWorld } from './live/useLiveWorld.js';
 import type { GenesisOutcome } from './genesis/GenesisReveal.js';
 import { Hud } from './hud/Hud.js';
@@ -326,6 +328,74 @@ export function App(): JSX.Element {
   // Opens the round fetch and the realtime stream, or reports that this build
   // was never told where they are.
   const status = useLiveWorld();
+  const lastResults = useSession((state) => state.lastResults);
+  const myBattleId = useSession((state) => state.myBattleId);
+
+  /**
+   * The battle the result screen shows, from the round that just finished.
+   *
+   * The player's own battle when they had one, and otherwise the first — §27.8
+   * shows a result to whoever is looking, and a spectator has as much right to
+   * see one as a player does (§5). `null` before any round has finalized, which
+   * is what keeps a placeholder from standing in for a result.
+   */
+  const finished = useMemo<FinishedBattle | null>(() => {
+    const ids = Object.keys(lastResults);
+    if (ids.length === 0) {
+      return null;
+    }
+    const named = route.kind === 'RESULT' ? route.battleId : null;
+    const battleId =
+      named !== null && named in lastResults
+        ? named
+        : myBattleId !== null && myBattleId in lastResults
+          ? myBattleId
+          : ids[0];
+    const result = battleId === undefined ? undefined : lastResults[battleId];
+    if (result === undefined) {
+      return null;
+    }
+    const battle = battles.find((candidate) => candidate.battleId === result.battleId);
+    return {
+      result,
+      backed: battle?.backing?.ticker ?? null,
+      // The winner's own pre-battle label, taken from the intel the round
+      // opened with (§10.3). Recomputing it here would be a second answer to a
+      // question the round already settled.
+      winnerConfidence:
+        battle === undefined
+          ? 'EVEN'
+          : result.winner === battle.left
+            ? battle.leftIntel.label
+            : battle.rightIntel.label,
+      cardDeployed: battle?.backing?.cardDeployed ?? false,
+    };
+  }, [lastResults, battles, myBattleId, route]);
+
+  useEffect(() => {
+    // A result named in the URL that this client has not seen finish (§47.1).
+    // The result screen is reached *after* the battle it describes, so arriving
+    // from a shared link is the common case rather than the exception — and a
+    // client that only learned results from a live event would answer it with
+    // "no finalized battle yet", which is true of the client and false of the
+    // world.
+    if (route.kind !== 'RESULT' || route.battleId === null || route.battleId in lastResults) {
+      return;
+    }
+    const endpoints = liveEndpoints(import.meta.env);
+    if (endpoints === null) {
+      return;
+    }
+    const controller = new AbortController();
+    void fetchBattleResult(endpoints, route.battleId, controller.signal).then((result) => {
+      if (result !== null) {
+        useSession.getState().rememberResult(result);
+      }
+    });
+    return () => {
+      controller.abort();
+    };
+  }, [route, lastResults]);
 
   useEffect(() => {
     // Only when there is nothing real to show. A configured build that fell
@@ -407,7 +477,7 @@ export function App(): JSX.Element {
           })}
           pool={PLACEHOLDER_POOL}
           genesis={PLACEHOLDER_GENESIS}
-          result={PLACEHOLDER_RESULT}
+          result={status.live ? finished : PLACEHOLDER_RESULT}
         />
       ) : null}
     </>
