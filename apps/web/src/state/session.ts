@@ -44,6 +44,7 @@ import {
   cinematicPose,
   GLOBAL_ANCHOR,
   poseForMode,
+  PRESENTATION_ANCHOR,
   sectorPose,
   WORLD_BOUNDARY_RADIUS,
 } from '../world/layout.js';
@@ -294,6 +295,8 @@ interface SessionState {
   playCinematic: (index: number, at: UtcTimestamp) => void;
   focusMyWar: (at: UtcTimestamp) => void;
   resetView: (at: UtcTimestamp) => void;
+  /** Frames the world for a page presented over it, and back again (§81.2). */
+  presentWorld: (presenting: boolean, at: UtcTimestamp) => void;
 
   /** Drag (§37.3 left drag, §37.4 one-finger drag). */
   startDrag: (sample: PointerSample) => void;
@@ -577,6 +580,39 @@ export const useSession = create<SessionState>((set, get) => ({
 
   resetView: (at) => {
     const { camera, cameraConfig } = get();
+    set({ camera: resetView(camera, at, cameraConfig) });
+  },
+
+  presentWorld: (presenting, at) => {
+    const { camera, cameraConfig } = get();
+
+    // Only from and to the free global view. A visitor who followed a shared
+    // link into a sector and then opened the about page should come back to
+    // the sector they were watching, not be reset to the anchor — §37.9 keeps
+    // the world persistent, and the camera is part of what persists.
+    if (presenting) {
+      if (camera.mode !== 'GLOBAL_FREE') {
+        return;
+      }
+      set({
+        camera: flyTo(
+          camera,
+          {
+            to: PRESENTATION_ANCHOR,
+            mode: 'PROFILE_PRESENTATION',
+            at,
+            duration: cameraConfig.durations.spatialTransition,
+            battleId: null,
+          },
+          cameraConfig,
+        ),
+      });
+      return;
+    }
+
+    if (camera.mode !== 'PROFILE_PRESENTATION') {
+      return;
+    }
     set({ camera: resetView(camera, at, cameraConfig) });
   },
 }));

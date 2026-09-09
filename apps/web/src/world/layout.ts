@@ -60,6 +60,32 @@ export const GLOBAL_ANCHOR: CameraPose = {
   target: MARKET_CORE,
 };
 
+/**
+ * The anchor a page presented *over* the world is framed against (§81.2).
+ *
+ * `PROFILE_PRESENTATION` is the mode for a surface layered on the world rather
+ * than one inside it — the landing, the about page, the war room. Every one of
+ * those puts a column of copy down the left of the frame, and against the
+ * global anchor the world sits dead centre: the copy lands on top of the thing
+ * it is describing.
+ *
+ * Same place, different framing. The camera stands where it always does and
+ * looks left of the core, which slides the world to the right of the frame and
+ * leaves the left side to the page. §2.1 keeps the world the hero even on the
+ * pages that are not it, and a world hidden behind a panel is not the hero of
+ * anything.
+ */
+export const PRESENTATION_ANCHOR: CameraPose = {
+  // Further out than the global anchor, not just turned: a yaw alone swings the
+  // near sectors off the edge of the frame, and a world with two islands
+  // cropped by the window is a worse hero than a small one.
+  position: vec3(0, 800, 1_260),
+  // Left of the core and above it: aiming left moves the world right, aiming
+  // high moves it down, and the two together clear the top-left corner where
+  // the navigation bar and the headline sit.
+  target: vec3(-230, 130, 0),
+};
+
 function sectorAt(index: number): Vec3 {
   const position = SECTOR_POSITIONS[index];
   if (position === undefined) {
@@ -131,9 +157,10 @@ export function poseForMode(mode: CameraMode, sectorIndex: number | null): Camer
   switch (mode) {
     case 'GLOBAL_FREE':
     case 'GLOBAL_FOCUS':
-    case 'PROFILE_PRESENTATION':
     case 'RESETTING':
       return GLOBAL_ANCHOR;
+    case 'PROFILE_PRESENTATION':
+      return PRESENTATION_ANCHOR;
     case 'SECTOR_FOCUS':
       return sectorIndex === null ? null : sectorPose(sectorIndex);
     case 'BATTLE_TACTICAL':

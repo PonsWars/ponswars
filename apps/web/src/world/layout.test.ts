@@ -6,6 +6,8 @@ import {
   cinematicPose,
   GLOBAL_ANCHOR,
   MARKET_CORE,
+  poseForMode,
+  PRESENTATION_ANCHOR,
   SECTOR_ORBIT_RADIUS,
   SECTOR_POSITIONS,
   sectorPose,
@@ -114,6 +116,35 @@ describe('the global anchor', () => {
 
   it('sits inside the boundary', () => {
     expect(distance(GLOBAL_ANCHOR.position, MARKET_CORE)).toBeLessThan(WORLD_BOUNDARY_RADIUS);
+  });
+});
+
+describe('the presentation anchor', () => {
+  it('still sees the whole world', () => {
+    // It is a reframing, not a different place: a page presented over the
+    // world that reframed to something a sector had fallen out of would be
+    // showing a smaller world than the one behind it (§37.2 level one).
+    for (const position of SECTOR_POSITIONS) {
+      expect(distance(PRESENTATION_ANCHOR.position, position)).toBeLessThan(2_000);
+    }
+  });
+
+  it('looks left of the core, so the world sits right of the page', () => {
+    // The whole reason it exists. Aiming at or right of the core would put the
+    // world back under the column of copy every presented page carries down
+    // its left side, which is the thing this anchor is here to stop.
+    expect(PRESENTATION_ANCHOR.target.x).toBeLessThan(MARKET_CORE.x);
+  });
+
+  it('is the pose the presentation mode resolves to', () => {
+    // §81.2 names the mode; if it resolved to the global anchor the mode would
+    // be a label with no framing behind it, which is what it was.
+    expect(poseForMode('PROFILE_PRESENTATION', null)).toEqual(PRESENTATION_ANCHOR);
+    expect(poseForMode('GLOBAL_FREE', null)).toEqual(GLOBAL_ANCHOR);
+  });
+
+  it('sits inside the boundary', () => {
+    expect(distance(PRESENTATION_ANCHOR.position, MARKET_CORE)).toBeLessThan(WORLD_BOUNDARY_RADIUS);
   });
 });
 
