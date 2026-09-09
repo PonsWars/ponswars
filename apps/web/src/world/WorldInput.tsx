@@ -1,6 +1,6 @@
 import { useThree } from '@react-three/fiber';
 import { useEffect } from 'react';
-import { worldUnitsPerPixel } from '@ponswars/world-runtime';
+import { intendedMode, worldUnitsPerPixel } from '@ponswars/world-runtime';
 import { nowUtc, useSession } from '../state/session.js';
 
 /**
@@ -29,6 +29,26 @@ import { nowUtc, useSession } from '../state/session.js';
  * under any intentional pan.
  */
 const TAP_SLOP_PX = 6;
+
+/**
+ * How much wheel travel makes one zoom notch.
+ *
+ * A mouse wheel reports about this much per detent, so one click of the wheel
+ * is one notch. A trackpad reports a few pixels per event at frame rate, so it
+ * gets the fraction it earned — which is the whole point. Normalising by sign
+ * gave a full notch to every event a trackpad produced, and a two-finger scroll
+ * fired sixty of them a second.
+ */
+const WHEEL_PIXELS_PER_NOTCH = 120;
+
+/**
+ * The most one wheel event may be worth.
+ *
+ * A page-mode delta or a flung trackpad can arrive as thousands of pixels at
+ * once, and the world should not cross three zoom levels because one event was
+ * large.
+ */
+const MAX_NOTCHES_PER_EVENT = 3;
 
 export function WorldInput(): null {
   const startDrag = useSession((state) => state.startDrag);
@@ -160,15 +180,34 @@ export function WorldInput(): null {
     const onWheel = (event: WheelEvent): void => {
       event.preventDefault();
       // Browsers report wheel deltas in pixels, lines or pages depending on the
-      // device. Normalising to a notch by sign keeps a trackpad and a mouse
-      // wheel moving the camera by the same amount per gesture.
-      zoomNotches(Math.sign(event.deltaY));
+      // device, so they are converted to pixels before anything is done with
+      // them. `zoomByNotches` raises the step to the power of the count, which
+      // means a fraction of a notch is a smaller zoom rather than none — that
+      // is what lets a trackpad move the camera continuously.
+      const perLine = 16;
+      const pixels =
+        event.deltaMode === 1
+          ? event.deltaY * perLine
+          : event.deltaMode === 2
+            ? event.deltaY * size.height
+            : event.deltaY;
+      const notches = pixels / WHEEL_PIXELS_PER_NOTCH;
+      zoomNotches(Math.max(-MAX_NOTCHES_PER_EVENT, Math.min(MAX_NOTCHES_PER_EVENT, notches)));
     };
 
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        stepOutward(nowUtc());
+      if (event.key !== 'Escape') {
+        return;
       }
+      // The canvas never unmounts (§37.9), so this listener is live on every
+      // route. `ESC` is the world's orientation rail (§37.7) and pressing it
+      // while reading the about page should not quietly move the camera behind
+      // the page — the presentation framing is how this file knows a surface is
+      // layered over the world (§81.2).
+      if (intendedMode(useSession.getState().camera) === 'PROFILE_PRESENTATION') {
+        return;
+      }
+      stepOutward(nowUtc());
     };
 
     element.addEventListener('pointerdown', onPointerDown);
