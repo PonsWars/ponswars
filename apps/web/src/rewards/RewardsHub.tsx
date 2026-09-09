@@ -53,6 +53,7 @@ export function RewardsHub({
         <FinalizedPanels view={view} claim={claim} onClaim={onClaim} />
       )}
 
+      <RewardsFlow />
       <FairDistributionCap />
     </>
   );
@@ -115,12 +116,15 @@ function ActivePanels({
           <div className="pw-tabular" style={{ ...readoutStyle, fontSize: 22 }}>
             {pool.balance} SPY
           </div>
+          <PoolAllocation />
           <div style={{ fontSize: 12, color: 'var(--pw-text-2)' }}>
             {POOL_DISTRIBUTABLE_BPS / 100}% distributable at snapshot. The final distributable
             amount is determined from the actual wallet balance at snapshot, not from this figure.
           </div>
         </div>
       )}
+
+      <NoEstimateYet />
     </>
   );
 }
@@ -263,6 +267,122 @@ function Field({
       <div className="pw-tabular" style={{ ...readoutStyle, fontSize: 18 }}>
         {value}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The split the pool is divided on, as a bar (§35.3).
+ *
+ * The same two figures the sentence beside it carries. A ratio stated only in
+ * prose is a ratio most readers take on trust; the bar is what makes *most of
+ * it goes out, some of it stays* something you can see before you read.
+ */
+function PoolAllocation(): JSX.Element {
+  const distributable = POOL_DISTRIBUTABLE_BPS / 100;
+
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      <div
+        style={{
+          display: 'flex',
+          height: 8,
+          borderRadius: 2,
+          overflow: 'hidden',
+          border: '1px solid var(--pw-border-1)',
+        }}
+      >
+        <div style={{ width: `${String(distributable)}%`, background: 'var(--pw-accent)' }} />
+        <div style={{ flex: 1, background: 'var(--pw-surface-2)' }} />
+      </div>
+      <div
+        style={{ display: 'flex', justifyContent: 'space-between', ...captionStyle, fontSize: 9 }}
+      >
+        <span>{distributable}% DISTRIBUTABLE AT SNAPSHOT</span>
+        <span style={{ color: 'var(--pw-text-3)' }}>{100 - distributable}% CARRYOVER</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The reward that does not exist yet, said out loud (§35.2).
+ *
+ * §35.2 bans an estimated SPY figure during an active window, and the data
+ * model enforces it: the active variant of `RewardView` has no allocation
+ * field. But a rule kept by omission is invisible — the page simply had no
+ * reward on it, which reads as something that failed to load rather than as a
+ * number that does not exist yet. The delivered hub shows the blank and says
+ * why, which is the same restraint stated as a promise instead of a gap.
+ */
+function NoEstimateYet(): JSX.Element {
+  return (
+    <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
+      <div style={captionStyle}>YOUR REWARD (LIVE WINDOW)</div>
+      <div
+        className="pw-tabular"
+        style={{ ...readoutStyle, fontSize: 26, color: 'var(--pw-text-3)' }}
+      >
+        — — — SPY
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--pw-text-2)', lineHeight: 1.5 }}>
+        Your exact reward is calculated after the snapshot. There are no estimates during an open
+        window — the pool balance and the number of qualified participants both change until it
+        closes, so any figure shown now would be a guess that later reads as a broken promise.
+      </div>
+    </div>
+  );
+}
+
+/** Where the pool comes from and how it reaches a wallet (§35). */
+const FLOW: readonly { readonly title: string; readonly body: string }[] = [
+  { title: 'CREATOR FEES', body: 'The rewards wallet is funded from real trading activity.' },
+  {
+    title: 'SNAPSHOT',
+    body: 'At the window close, the balance and every qualified wallet are read.',
+  },
+  { title: 'CALCULATION', body: 'Each share is the square root of that wallet’s War Points.' },
+  { title: 'YOU CLAIM', body: 'The allocation is published and claimed onchain from this page.' },
+];
+
+/**
+ * The four steps between a trade and a claim (§35).
+ *
+ * A rewards page that shows a pool and a button asks to be trusted about
+ * everything in between. §26's principle — a result you can argue with rather
+ * than only believe — is not only about battles.
+ */
+function RewardsFlow(): JSX.Element {
+  return (
+    <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-3)' }}>
+      <div style={captionStyle}>HOW A REWARD REACHES YOU</div>
+      <ol
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+          gap: 'var(--pw-space-3)',
+          listStyle: 'none',
+          margin: 0,
+          padding: 0,
+        }}
+      >
+        {FLOW.map((step, index) => (
+          <li key={step.title} style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--pw-space-2)' }}>
+              <span
+                className="pw-tabular"
+                style={{ ...readoutStyle, fontSize: 14, color: 'var(--pw-text-3)' }}
+              >
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <span style={{ ...readoutStyle, fontSize: 12 }}>{step.title}</span>
+            </div>
+            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--pw-text-2)' }}>
+              {step.body}
+            </p>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
