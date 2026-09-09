@@ -1,8 +1,17 @@
 import { PUBLIC_EVENT_PAYLOADS } from '@ponswars/schemas';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSession } from '../state/session.js';
+import { useSession, type PickAttempt } from '../state/session.js';
 import { liveEndpoints, type LiveEndpoints } from './endpoints.js';
+import {
+  decideCard,
+  fetchMyPick,
+  submitPick,
+  withdrawPick,
+  type PickFailure,
+  type PickResult,
+} from './pick-client.js';
 import { fetchCurrentRound, type RoundFetchFailure } from './round-client.js';
+import { sessionAuthorization } from './session-token.js';
 import { openLiveSocket, type LiveSocket } from './socket-client.js';
 
 /**
@@ -28,10 +37,15 @@ export function useLiveWorld(): LiveStatus {
   const endpoints = useMemo<LiveEndpoints | null>(() => liveEndpoints(import.meta.env), []);
   const [lastFailure, setLastFailure] = useState<RoundFetchFailure | null>(null);
 
+  const authorization = useMemo(() => sessionAuthorization(import.meta.env), []);
+
   const setRound = useSession((state) => state.setRound);
   const setBattles = useSession((state) => state.setBattles);
   const setConnection = useSession((state) => state.setConnection);
   const setClockOffset = useSession((state) => state.setClockOffset);
+  const setPickGateway = useSession((state) => state.setPickGateway);
+  const setPickError = useSession((state) => state.setPickError);
+  const applyMyBacking = useSession((state) => state.applyMyBacking);
 
   // The socket outlives any single render and must not be re-created by one.
   const socketRef = useRef<LiveSocket | null>(null);
@@ -42,11 +56,21 @@ export function useLiveWorld(): LiveStatus {
     }
 
     const controller = new AbortController();
-    let disposed = false;
+    const lifecycle = { disposed: false };
+    /**
+     * Read through a call so the check is not narrowed away.
+     *
+     * TypeScript narrows this to `false` after the first guard and keeps that
+     * narrowing across an `await`, so a second check compiles as provably dead
+     * code — while at runtime it is the one that matters, because teardown
+     * happens during exactly those awaits. A call is re-evaluated every time,
+     * which is what the code means.
+     */
+    const disposed = (): boolean => lifecycle.disposed;
 
     const resync = async (): Promise<void> => {
       const result = await fetchCurrentRound(endpoints, controller.signal);
-      if (disposed) {
+      if (disposed()) {
         return;
       }
       if (!result.ok) {
@@ -68,6 +92,31 @@ export function useLiveWorld(): LiveStatus {
         snapshot.round.roundId,
         snapshot.battles.map((battle) => battle.battleId),
       );
+
+      // What this wallet backs is a separate, private request (§47.5), and it
+      // is asked after the round because it is about the round that just
+      // arrived. A spectator never asks.
+      if (authorization === null) {
+        return;
+      }
+      const mine = await fetchMyPick(endpoints, authorization, snapshot.round.roundId);
+      if (disposed()) {
+        return;
+      }
+      if (mine.ok) {
+        applyMyBacking(
+          mine.value?.battleId ?? null,
+          mine.value === null
+            ? null
+            : {
+                // The side the server recorded, never inferred from the
+                // battle. Reading `left` here would show the wrong faction to
+                // half the players and look right to the other half.
+                ticker: mine.value.backedTicker,
+                cardDeployed: mine.value.cardDecision === 'USE',
+              },
+        );
+      }
     };
 
     socketRef.current = openLiveSocket({
@@ -85,13 +134,85 @@ export function useLiveWorld(): LiveStatus {
       },
     });
 
+    // The write side, given to the store so the controls read one place.
+    // `null` for a spectator, which is what makes §5's normal case ordinary
+    // rather than a disabled version of the real thing.
+    if (authorization !== null) {
+      const roundId = (): string | null => useSession.getState().round?.roundId ?? null;
+      const report = <T>(result: PickResult<T>): PickAttempt =>
+        result.ok ? { ok: true } : { ok: false, ...describe(result.failure) };
+
+      setPickGateway({
+        back: async (battleId, ticker) => {
+          const id = roundId();
+          if (id === null) {
+            return {
+              ok: false,
+              message: 'No round is loaded yet.',
+              nextStep: 'Wait a moment and try again.',
+            };
+          }
+          const attempt = report(
+            await submitPick(endpoints, authorization, {
+              roundId: id,
+              battleId,
+              backedTicker: ticker,
+              // §40.7 puts the card after the side. A first submission saves it,
+              // and arming is the separate decision that follows — so backing a
+              // stock can never spend a use the player has not offered.
+              cardDecision: 'SAVE',
+              clientRequestId: requestId(),
+            }),
+          );
+          await resync();
+          return attempt;
+        },
+        withdraw: async () => {
+          const id = roundId();
+          if (id === null) {
+            return { ok: true };
+          }
+          const attempt = report(await withdrawPick(endpoints, authorization, id));
+          await resync();
+          return attempt;
+        },
+        decide: async (decision) => {
+          const id = roundId();
+          if (id === null) {
+            return {
+              ok: false,
+              message: 'No round is loaded yet.',
+              nextStep: 'Wait a moment and try again.',
+            };
+          }
+          const attempt = report(
+            await decideCard(endpoints, authorization, id, decision, requestId()),
+          );
+          await resync();
+          return attempt;
+        },
+      });
+    }
+
     return () => {
-      disposed = true;
+      lifecycle.disposed = true;
       controller.abort();
       socketRef.current?.close();
       socketRef.current = null;
+      setPickGateway(null);
+      setPickError(null);
     };
-  }, [endpoints, setRound, setBattles, setConnection, setClockOffset]);
+  }, [
+    endpoints,
+    authorization,
+    setRound,
+    setBattles,
+    setConnection,
+    setClockOffset,
+    setPickGateway,
+    setPickError,
+    applyMyBacking,
+  ]);
 
   return endpoints === null ? { live: false } : { live: true, lastFailure };
 }
@@ -131,4 +252,36 @@ function applyEvent(event: string, payload: unknown, resync: () => void): void {
     // time, which is the one place the snapshot cannot know it.
     round: state.round === null ? null : { ...state.round, feedHealth: update.feedHealth },
   }));
+}
+
+/**
+ * A fresh idempotency key (§66.6).
+ *
+ * One per decision, not one per attempt: a retry of the same decision must
+ * carry the same key, and that reuse belongs to whoever retries. Nothing here
+ * retries, so every call is a new decision.
+ */
+function requestId(): string {
+  return `pw_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Turns a failure into the two sentences §110.5 asks to be shown. */
+function describe(failure: PickFailure): { message: string; nextStep: string } {
+  switch (failure.kind) {
+    case 'REFUSED':
+      // The server already wrote both sentences per condition. Deriving our own
+      // from the status code would lose the difference between a missed lock
+      // and a ticker that is not in the battle.
+      return { message: failure.message, nextStep: failure.nextStep };
+    case 'UNREACHABLE':
+      return {
+        message: 'The server could not be reached.',
+        nextStep: 'Check the connection and try again before the round locks.',
+      };
+    case 'MALFORMED':
+      return {
+        message: 'The server answered with something this client cannot read.',
+        nextStep: 'Reload the page; if it keeps happening the client is out of date.',
+      };
+  }
 }

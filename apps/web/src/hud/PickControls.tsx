@@ -1,7 +1,7 @@
 import type { ActiveTicker, CardDecision } from '@ponswars/shared-types';
 import { FACTION_ACCENT, RARITY_COLOR } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
-import { useSession, type ClientBattle } from '../state/session.js';
+import { useSession, type ClientBattle, type PickAttempt } from '../state/session.js';
 import { cardStateLabel, pickFlowView, type PickFlowView } from './pick-flow.js';
 import { roundView } from './round-phase.js';
 import { captionStyle, controlStyle, panelStyle, readoutStyle } from './styles.js';
@@ -27,6 +27,28 @@ export function PickControls({ battle }: { readonly battle: ClientBattle }): JSX
   const decideCard = useSession((state) => state.decideCard);
   const card = useSession((state) => state.card);
   const round = useSession((state) => state.round);
+  const picks = useSession((state) => state.picks);
+  const setPickError = useSession((state) => state.setPickError);
+  const pickError = useSession((state) => state.pickError);
+
+  /**
+   * Sends a decision, and keeps the local one only if the server took it.
+   *
+   * A client that kept its optimistic state after a refusal would show the
+   * player backing a stock the round never recorded — §22 makes the lock
+   * authoritative, and a refused pick is exactly the case where the two must
+   * not diverge. With no gateway there is nobody to tell, so the local state
+   * stands on its own.
+   */
+  const send = (attempt: () => Promise<PickAttempt>, undo: () => void): void => {
+    setPickError(null);
+    void attempt().then((result) => {
+      if (!result.ok) {
+        undo();
+        setPickError({ message: result.message, nextStep: result.nextStep });
+      }
+    });
+  };
 
   const picksAllowed = round !== null && roundView(round.state, round.clock).picksAllowed;
   const proposed = pendingPick?.battleId === battle.battleId;
@@ -44,26 +66,55 @@ export function PickControls({ battle }: { readonly battle: ClientBattle }): JSX
 
       {flow.stage === 'CHOOSE_SIDE' ? (
         <div style={{ display: 'flex', gap: 'var(--pw-space-2)' }}>
-          <BackButton
-            ticker={battle.left}
-            pending={false}
-            onPick={() => {
-              proposePick({ battleId: battle.battleId, ticker: battle.left });
-            }}
-          />
-          <BackButton
-            ticker={battle.right}
-            pending={false}
-            onPick={() => {
-              proposePick({ battleId: battle.battleId, ticker: battle.right });
-            }}
-          />
+          {[battle.left, battle.right].map((ticker) => (
+            <BackButton
+              key={ticker}
+              ticker={ticker}
+              pending={false}
+              onPick={() => {
+                proposePick({ battleId: battle.battleId, ticker });
+                if (picks !== null) {
+                  send(
+                    () => picks.back(battle.battleId, ticker),
+                    () => {
+                      proposePick(null);
+                    },
+                  );
+                }
+              }}
+            />
+          ))}
         </div>
       ) : null}
 
       {flow.stage === 'CARD_DECISION' || flow.stage === 'COMMITTED' ? (
-        <CardPanel flow={flow} onDecide={decideCard} />
+        <CardPanel
+          flow={flow}
+          onDecide={(decision) => {
+            const previous = cardDecision;
+            decideCard(decision);
+            if (picks !== null && decision !== null) {
+              send(
+                () => picks.decide(decision),
+                () => {
+                  decideCard(previous);
+                },
+              );
+            }
+          }}
+        />
       ) : null}
+
+      {pickError === null ? null : (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{ ...captionStyle, color: 'var(--pw-danger)' }}
+        >
+          <div>{pickError.message}</div>
+          <div style={{ color: 'var(--pw-text-3)' }}>{pickError.nextStep}</div>
+        </div>
+      )}
 
       {flow.mayChangePick ? (
         <button
@@ -71,9 +122,17 @@ export function PickControls({ battle }: { readonly battle: ClientBattle }): JSX
           style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
           onClick={() => {
             // §27.6: a pick may be changed until lock. Clearing returns the
-            // player to CHOOSE_SIDE rather than to a half-committed state.
+            // player to CHOOSE_SIDE rather than to a half-committed state, and
+            // withdraws it on the server so the round does not lock a pick the
+            // player has abandoned (§47.5).
             proposePick(null);
             decideCard(null);
+            if (picks !== null) {
+              send(
+                () => picks.withdraw(),
+                () => undefined,
+              );
+            }
           }}
         >
           CHANGE PICK

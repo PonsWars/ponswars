@@ -158,6 +158,28 @@ export interface ClientRound {
   readonly feedHealth: PublicFeedHealth;
 }
 
+/**
+ * How a decision reaches the server (§47.5, §47.6).
+ *
+ * `null` when there is nobody to tell — a preview build, or a visitor with no
+ * session. That is not a degraded mode: §5 makes spectating the normal case,
+ * and the controls simply offer nothing a spectator cannot do.
+ *
+ * Each call returns the failure rather than throwing, because §110.5 wants the
+ * reason shown. A rejected pick and a dropped connection are different things
+ * to tell a player who is watching a lock approach.
+ */
+export interface PickGateway {
+  back: (battleId: string, ticker: ActiveTicker) => Promise<PickAttempt>;
+  withdraw: () => Promise<PickAttempt>;
+  decide: (decision: CardDecision) => Promise<PickAttempt>;
+}
+
+/** What came back from a write: nothing, or a sentence to show. */
+export type PickAttempt =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly message: string; readonly nextStep: string };
+
 interface SessionState {
   readonly camera: CameraState;
   readonly cameraConfig: CameraConfig;
@@ -193,6 +215,10 @@ interface SessionState {
    */
   readonly cardDecision: CardDecision | null;
   readonly connection: ConnectionState;
+  /** The server side of the pick flow, or `null` for a spectator. */
+  readonly picks: PickGateway | null;
+  /** The most recent refusal, or `null`. Cleared by the next attempt. */
+  readonly pickError: { readonly message: string; readonly nextStep: string } | null;
   /**
    * Server time minus local time, in milliseconds (§23.5).
    *
@@ -211,6 +237,16 @@ interface SessionState {
   setCard: (card: CardHolding | null) => void;
   decideCard: (decision: CardDecision | null) => void;
   setConnection: (connection: ConnectionState) => void;
+  setPickGateway: (gateway: PickGateway | null) => void;
+  setPickError: (error: { readonly message: string; readonly nextStep: string } | null) => void;
+  /**
+   * Applies the server's answer about this wallet's own pick (§47.5).
+   *
+   * Patches `backing` on the one battle rather than replacing the list, so a
+   * pick the player is composing right now survives the round of trips it takes
+   * to confirm the last one.
+   */
+  applyMyBacking: (battleId: string | null, backing: Backing | null) => void;
   setClockOffset: (offsetMs: number) => void;
   /** Composes a pick for the focused battle (§42.5 step 3). */
   proposePick: (pick: PendingPick | null) => void;
@@ -283,6 +319,8 @@ export const useSession = create<SessionState>((set, get) => ({
   card: null,
   cardDecision: null,
   connection: 'CONNECTED',
+  picks: null,
+  pickError: null,
   clockOffsetMs: 0,
 
   setBattles: (battles) => {
@@ -327,6 +365,23 @@ export const useSession = create<SessionState>((set, get) => ({
 
   setConnection: (connection) => {
     set({ connection });
+  },
+
+  setPickGateway: (picks) => {
+    set({ picks });
+  },
+
+  setPickError: (pickError) => {
+    set({ pickError });
+  },
+
+  applyMyBacking: (battleId, backing) => {
+    set({
+      battles: get().battles.map((battle) =>
+        battle.battleId === battleId ? { ...battle, backing } : { ...battle, backing: null },
+      ),
+      myBattleId: backing === null ? null : battleId,
+    });
   },
 
   setClockOffset: (clockOffsetMs) => {
