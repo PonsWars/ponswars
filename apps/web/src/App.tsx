@@ -6,7 +6,6 @@ import {
 import { LAYER } from '@ponswars/ui-tokens';
 import { lazy, Suspense, useEffect, useMemo, type JSX } from 'react';
 import { liveEndpoints } from './live/endpoints.js';
-import { FactionBackdrop } from './art/FactionBackdrop.js';
 import { PreviewBanner } from './live/PreviewBanner.js';
 import { fetchBattleResult } from './live/round-client.js';
 import { useLiveWorld } from './live/useLiveWorld.js';
@@ -18,13 +17,7 @@ import { activeWindowView } from './rewards/reward-view.js';
 import type { PoolStatus } from './rewards/RewardsHub.js';
 import { isPresentation } from './routing/route.js';
 import { useRoute } from './routing/useRoute.js';
-import {
-  currentZoom,
-  nowUtc,
-  useSession,
-  type ClientBattle,
-  type ClientRound,
-} from './state/session.js';
+import { nowUtc, useSession, type ClientBattle, type ClientRound } from './state/session.js';
 
 /**
  * §82.3 stages the load: shell and UI first, then the global world.
@@ -346,12 +339,6 @@ export function App(): JSX.Element {
    * see one as a player does (§5). `null` before any round has finalized, which
    * is what keeps a placeholder from standing in for a result.
    */
-  const camera = useSession((state) => state.camera);
-  const focusedBattle =
-    currentZoom({ camera }) >= 2
-      ? battles.find((candidate) => candidate.battleId === camera.focusedBattleId)
-      : undefined;
-
   const finished = useMemo<FinishedBattle | null>(() => {
     const ids = Object.keys(lastResults);
     if (ids.length === 0) {
@@ -461,14 +448,6 @@ export function App(): JSX.Element {
       <Suspense fallback={<WorldLoading />}>
         <WorldCanvas />
       </Suspense>
-      {/* The two armies, once a player has descended to a sector (§39, §42.4).
-          Not at the global view: five pairs of dossiers would be ten large
-          images and a wall of art where §37.2 level one wants the whole world
-          legible at a glance. */}
-      {focusedBattle === undefined ? null : (
-        <FactionBackdrop left={focusedBattle.left} right={focusedBattle.right} />
-      )}
-
       <Hud onNavigate={navigate} />
       <div
         style={{

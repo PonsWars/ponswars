@@ -15,6 +15,18 @@
  * Not part of `verify.sh`. It needs inputs CI does not have, and a gate that
  * cannot run is worse than one that does not exist — the generated assets are
  * committed, so CI checks the thing that ships.
+ *
+ * **The faction dossiers are not built here, and that is the point.** Eight of
+ * the ten carry the real corporate mark of the company behind the ticker —
+ * Apple, Microsoft, Tesla, Meta, Amazon, Google, AMD, and GameStop's wordmark.
+ * §7.10 of the visual guide is explicit that these are shorthand in concept art
+ * and *"not cleared production assets"*, and a build step that quietly published
+ * them would be the exact mistake that section exists to prevent. Only NVDA and
+ * SPY carry original emblems, and art for two factions out of ten is not a
+ * faction art system.
+ *
+ * The cards are original throughout: PonsWars emblem, PonsWars units, no
+ * third-party mark anywhere. They are built.
  */
 import { mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
@@ -43,10 +55,7 @@ if (source === undefined || !existsSync(source)) {
  * and a card is held at card size; giving both the same width would make one
  * blurry and the other wasteful.
  */
-const GROUPS = [
-  { dir: '03_Factions', prefix: 'faction', width: 1_024, quality: 78 },
-  { dir: '02_Cards', prefix: 'card', width: 720, quality: 82 },
-];
+const GROUPS = [{ dir: '02_Cards', prefix: 'card', width: 720, quality: 82 }];
 
 mkdirSync(out, { recursive: true });
 

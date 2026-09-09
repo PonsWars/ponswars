@@ -1,4 +1,4 @@
-import { ACTIVE_TICKERS, type ActiveTicker, type CardType } from '@ponswars/shared-types';
+import type { ActiveTicker, CardType } from '@ponswars/shared-types';
 
 /**
  * Where the delivered art lives, by what it depicts.
@@ -12,25 +12,17 @@ import { ACTIVE_TICKERS, type ActiveTicker, type CardType } from '@ponswars/shar
  * by `tools/build-art.mjs`. The masters are 2–3 MB PNGs and are not in this
  * repository; these are WebP at the size each image is actually shown.
  *
- * Faction art carries original PonsWars emblems and the unit names §39 locks —
- * not the corporate marks the *UI* mockups use as shorthand, which §7.10 warns
- * are not cleared assets. That distinction is why these can ship and those
- * mockups cannot.
+ * There is no faction art here, and the omission is deliberate. Eight of the
+ * ten delivered faction dossiers carry the real corporate mark of the company
+ * behind the ticker; §7.10 warns those are shorthand in concept art and *"not
+ * cleared production assets"*. Only NVDA and SPY carry original emblems, and
+ * art for two factions out of ten is not a faction art system — so a faction
+ * reads through its accent, its ticker and its legion name until original
+ * emblems exist for all ten.
+ *
+ * The card art has no such problem: original emblem, original units, no
+ * third-party mark anywhere.
  */
-
-/** A faction's dossier: its legion, its sector, its units (§39). */
-export const FACTION_ART: Readonly<Record<ActiveTicker, string>> = {
-  NVDA: '/art/faction-nvda_ai_mech_legion.webp',
-  AAPL: '/art/faction-aapl_titanium_guard.webp',
-  MSFT: '/art/faction-msft_azure_cyber_corps.webp',
-  TSLA: '/art/faction-tsla_mars_vanguard.webp',
-  GME: '/art/faction-gme_retail_rebellion.webp',
-  META: '/art/faction-meta_reality_legion.webp',
-  AMZN: '/art/faction-amzn_fulfillment_army.webp',
-  GOOGL: '/art/faction-googl_intelligence_division.webp',
-  AMD: '/art/faction-amd_red_core_battalion.webp',
-  SPY: '/art/faction-spy_market_federation.webp',
-};
 
 /**
  * The faction's legion name, as its own dossier titles it (§39).
@@ -66,6 +58,3 @@ export const CARD_ART: Partial<Readonly<Record<CardType, string>>> = {
   GOLDEN_ARMY: '/art/card-legendary_golden_army.webp',
   SECRET_STOCK_DROP: '/art/card-secret_stock_drop_0_2_spy.webp',
 };
-
-/** Every faction has art, and this fails the build if one stops having it. */
-export const FACTIONS_WITH_ART: readonly ActiveTicker[] = ACTIVE_TICKERS;
