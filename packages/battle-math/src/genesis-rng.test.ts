@@ -111,32 +111,48 @@ describe('resolveGenesis', () => {
     }
   });
 
-  it('reproduces the locked distribution over a large sample', () => {
-    // Not a proof, but a drifted slot mapping or a biased draw shows up here.
-    const counts: Record<Rarity, number> = {
-      COMMON: 0,
-      UNCOMMON: 0,
-      RARE: 0,
-      EPIC: 0,
-      LEGENDARY: 0,
-      SECRET: 0,
-    };
-    const trials = 200_000;
-    for (let i = 0; i < trials; i += 1) {
-      counts[resolveGenesis(input({ requestId: `s-${String(i)}` }), true).rarity] += 1;
-    }
-    expect(counts.COMMON / trials).toBeGreaterThan(0.49);
-    expect(counts.COMMON / trials).toBeLessThan(0.51);
-    expect(counts.UNCOMMON / trials).toBeGreaterThan(0.27);
-    expect(counts.UNCOMMON / trials).toBeLessThan(0.29);
-    expect(counts.RARE / trials).toBeGreaterThan(0.13);
-    expect(counts.RARE / trials).toBeLessThan(0.15);
-    expect(counts.EPIC / trials).toBeGreaterThan(0.055);
-    expect(counts.EPIC / trials).toBeLessThan(0.065);
-    expect(counts.LEGENDARY / trials).toBeGreaterThan(0.014);
-    expect(counts.LEGENDARY / trials).toBeLessThan(0.024);
-    expect(counts.SECRET).toBeGreaterThan(0);
-  });
+  /**
+   * The one test here with its own time budget.
+   *
+   * Two hundred thousand keyed draws take a couple of seconds alone and longer
+   * when fifty workers share a machine, which put it past Vitest's five-second
+   * default: it passed on its own and failed in a full run. The sample size is
+   * what gives the tolerances below their meaning, so the budget moves rather
+   * than the trials — a test whose result depends on how busy the machine is
+   * reports on the machine rather than on the draw.
+   */
+  const SAMPLE_BUDGET_MS = 30_000;
+
+  it(
+    'reproduces the locked distribution over a large sample',
+    () => {
+      // Not a proof, but a drifted slot mapping or a biased draw shows up here.
+      const counts: Record<Rarity, number> = {
+        COMMON: 0,
+        UNCOMMON: 0,
+        RARE: 0,
+        EPIC: 0,
+        LEGENDARY: 0,
+        SECRET: 0,
+      };
+      const trials = 200_000;
+      for (let i = 0; i < trials; i += 1) {
+        counts[resolveGenesis(input({ requestId: `s-${String(i)}` }), true).rarity] += 1;
+      }
+      expect(counts.COMMON / trials).toBeGreaterThan(0.49);
+      expect(counts.COMMON / trials).toBeLessThan(0.51);
+      expect(counts.UNCOMMON / trials).toBeGreaterThan(0.27);
+      expect(counts.UNCOMMON / trials).toBeLessThan(0.29);
+      expect(counts.RARE / trials).toBeGreaterThan(0.13);
+      expect(counts.RARE / trials).toBeLessThan(0.15);
+      expect(counts.EPIC / trials).toBeGreaterThan(0.055);
+      expect(counts.EPIC / trials).toBeLessThan(0.065);
+      expect(counts.LEGENDARY / trials).toBeGreaterThan(0.014);
+      expect(counts.LEGENDARY / trials).toBeLessThan(0.024);
+      expect(counts.SECRET).toBeGreaterThan(0);
+    },
+    SAMPLE_BUDGET_MS,
+  );
 
   it('spreads evenly across the cards within a rarity', () => {
     // §9.2: a three-card rarity is a third each, a two-card rarity is 50/50.
