@@ -204,12 +204,35 @@ async function main(): Promise<void> {
     store,
   };
 
+  // §25: ask the store what it was doing before opening anything new.
+  //
+  // Against the in-memory store this is always `null`, because a `Map` does not
+  // survive the process that held it — which is exactly the point. The
+  // composition root asks, so that swapping in the PostgreSQL store makes a
+  // restart resume a live round instead of abandoning one and starting another
+  // on top of it. Wiring this only when a durable store arrives would mean
+  // discovering then that nothing ever called it.
+  const resumed = await store.loadLatest();
+  if (resumed !== null && resumed.state !== 'FINALIZED') {
+    process.stdout.write(`${resumed.roundId}  resumed from checkpoint (${resumed.state})
+`);
+  }
+
   // Rounds are contiguous (§3.1): each opens where the last ended, so the
   // schedule never drifts even if a finalization runs late.
   let index = 0;
-  let clock = clockForRound(now(), 0, now());
-  let round = await openRound(index, clock, market, now());
-  await announceRoundOpened(round, sockets.gateway);
+  let clock = resumed?.clock ?? clockForRound(now(), 0, now());
+  let round =
+    resumed !== null && resumed.state !== 'FINALIZED'
+      ? resumed
+      : await openRound(index, clock, market, now());
+
+  // Announced only when it is new. A resumed round was announced when it
+  // opened, and §48.3's ROUND_OPENED means a round has opened rather than that
+  // a server has restarted.
+  if (round !== resumed) {
+    await announceRoundOpened(round, sockets.gateway);
+  }
 
   const api = buildServer({
     // The Vite dev server, on both spellings of localhost — a browser treats
