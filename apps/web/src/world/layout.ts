@@ -1,5 +1,11 @@
 import { BATTLES_PER_ROUND } from '@ponswars/shared-types';
-import { vec3, type CameraMode, type CameraPose, type Vec3 } from '@ponswars/world-runtime';
+import {
+  vec3,
+  type CameraMode,
+  type CameraPose,
+  type LodThresholds,
+  type Vec3,
+} from '@ponswars/world-runtime';
 
 /**
  * The physical layout of the world (§38).
@@ -48,6 +54,53 @@ export const SECTOR_POSITIONS: readonly Vec3[] = Array.from(
     );
   },
 );
+
+/**
+ * LOD distances.
+ *
+ * `OPEN` production tuning (§59.4), and a statement about two views at once.
+ *
+ * From the global anchor the five sectors are 910 to 1 490 units away, so every
+ * one of them is reduced: built, lit and legible, but not carrying a full
+ * district each. From `sectorPose` the sector a player flew to is 414 away and
+ * the far side of the ring is over 1 100 — which is §37.10's required
+ * behaviour, that standing in one sector costs less to draw the opposite one.
+ *
+ * Both earlier settings failed one of those. The first was tuned when a sector
+ * was a disc and two boxes and put every sector at silhouette from the one
+ * position a player starts at: the world degraded before anyone had seen it
+ * undegraded. Raising it fixed that view and quietly broke the other — nothing
+ * was ever reduced from anywhere, so §37.10 was not happening at all.
+ *
+ * It lives beside the poses because it is a statement about them: the sector a
+ * player has flown to must be at full detail from `sectorPose`, and the far
+ * side of the ring must not be. It used to sit in the scene with the tests
+ * carrying a second set of numbers, so moving a pose could silently drop the
+ * approached sector to reduced detail and the test would still pass against
+ * thresholds nothing shipped with.
+ */
+export const LOD_THRESHOLDS: LodThresholds = { full: 700, reduced: 2_000, silhouette: 3_600 };
+
+/**
+ * How big a sector island is.
+ *
+ * The camera and the scene both need this and used to state it separately: the
+ * platform was a `120` in a cylinder argument, and the poses were offsets
+ * chosen by eye against the four boxes that stood on it. When the islands grew
+ * a skyline the battlefield pose ended up *inside* one, looking at the wall of
+ * a building — and nothing failed, because nothing knew the two facts were the
+ * same fact.
+ *
+ * They are one description now. The scene builds to these and the camera keeps
+ * clear of them.
+ */
+export const SECTOR_ISLAND_RADIUS = 120;
+
+/** The height of the plateau's own surface, above the sector origin. */
+export const SECTOR_PLATFORM_TOP = 11;
+
+/** The highest anything on a sector stands, above the sector origin. */
+export const SECTOR_SKYLINE_HEIGHT = 100;
 
 /**
  * The global anchor `RESET VIEW` returns to (§37.7, §81.4).
@@ -104,9 +157,9 @@ function sectorAt(index: number): Vec3 {
  */
 export function sectorPose(index: number): CameraPose {
   const sector = sectorAt(index);
-  const outward = 1 + 190 / SECTOR_ORBIT_RADIUS;
+  const outward = 1 + (SECTOR_ISLAND_RADIUS + 210) / SECTOR_ORBIT_RADIUS;
   return {
-    position: vec3(sector.x * outward, sector.y + 165, sector.z * outward),
+    position: vec3(sector.x * outward, sector.y + 250, sector.z * outward),
     target: sector,
   };
 }
@@ -120,9 +173,15 @@ export function sectorPose(index: number): CameraPose {
  */
 export function battlefieldPose(index: number): CameraPose {
   const sector = sectorAt(index);
-  const outward = 1 + 62 / SECTOR_ORBIT_RADIUS;
+  // Outside the rim, not over it. At 62 units out this stood in the middle of
+  // the island — fine when a sector was a disc with four boxes on it, and a
+  // view of the inside of a tower once it had a skyline.
+  const outward = 1 + (SECTOR_ISLAND_RADIUS + 120) / SECTOR_ORBIT_RADIUS;
   return {
-    position: vec3(sector.x * outward, sector.y + 58, sector.z * outward),
+    // Low enough to be under the skyline in feel and just above it in fact:
+    // both districts have to fit the frame, and a steeper look-down puts the
+    // far one's towers off the top of it.
+    position: vec3(sector.x * outward, sector.y + 110, sector.z * outward),
     target: sector,
   };
 }
@@ -135,9 +194,12 @@ export function battlefieldPose(index: number): CameraPose {
  */
 export function cinematicPose(index: number): CameraPose {
   const sector = sectorAt(index);
-  const outward = 1 + 24 / SECTOR_ORBIT_RADIUS;
+  // Just past the rim and low, so the shot looks along the contested ground
+  // with the two skylines rising on either side. Still outside the island: a
+  // dramatic angle is one thing, a camera inside a building is another.
+  const outward = 1 + (SECTOR_ISLAND_RADIUS + 12) / SECTOR_ORBIT_RADIUS;
   return {
-    position: vec3(sector.x * outward, sector.y + 20, sector.z * outward),
+    position: vec3(sector.x * outward, sector.y + 62, sector.z * outward),
     target: sector,
   };
 }

@@ -9,7 +9,6 @@ import {
   type CameraState,
   type DetailLevel,
   type DistrictShape,
-  type LodThresholds,
   type ReshuffleFrame,
 } from '@ponswars/world-runtime';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -17,7 +16,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type JSX } from 'react';
 import { Object3D } from 'three';
 import type { Group, InstancedMesh, PerspectiveCamera } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
-import { MARKET_CORE, SECTOR_POSITIONS } from './layout.js';
+import {
+  MARKET_CORE,
+  SECTOR_ISLAND_RADIUS,
+  SECTOR_PLATFORM_TOP,
+  LOD_THRESHOLDS,
+  SECTOR_POSITIONS,
+  SECTOR_SKYLINE_HEIGHT,
+} from './layout.js';
 import { RESHUFFLE, RESHUFFLE_REDUCED } from './navigation-config.js';
 import { SectorLabel } from './SectorLabel.js';
 import { WorldInput } from './WorldInput.js';
@@ -37,21 +43,6 @@ import { WorldInput } from './WorldInput.js';
  * now is how the spatial behaviour gets proven before any of that exists.
  */
 
-/**
- * LOD distances.
- *
- * `OPEN` production tuning (§59.4). Sized so the *default* global view — the
- * pose `RESET VIEW` returns to, about 1 200 units out — renders the world in
- * full. The first values were set when a sector was a disc and two boxes, and
- * put every sector at silhouette range from the one camera position a player
- * starts at: the world degraded before anyone had seen it undegraded.
- *
- * Five platforms with a handful of boxes each is not a budget worth defending;
- * §82.2's tiers exist for the cinematic and battlefield levels where far more is
- * on screen.
- */
-const LOD_THRESHOLDS: LodThresholds = { full: 1_500, reduced: 2_400, silhouette: 4_000 };
-
 /** How many segments a sector platform gets at each detail level (§82.2). */
 const SEGMENTS: Readonly<Record<DetailLevel, number>> = {
   FULL: 48,
@@ -68,21 +59,21 @@ const SEGMENTS: Readonly<Record<DetailLevel, number>> = {
  * that matters is this one: a district wider than its own ground overhangs it,
  * and that is the first thing that reads as broken from the sector camera.
  */
+/** The height of a district's own platform, above the sector's ground. */
+const DISTRICT_DECK = 10;
+
 const DISTRICT_SHAPE: DistrictShape = {
   halfWidth: 22,
   halfDepth: 45,
-  // Tall against the platform, not against the frontline: the island is 22
-  // units thick and the sector camera sits 165 above it, so a district that
-  // peaks below about 60 reads as paving rather than as a skyline.
-  peakHeight: 74,
+  // Derived, not chosen. `SECTOR_SKYLINE_HEIGHT` is what the camera poses keep
+  // clear of, and a peak set independently of it is the same fact written in
+  // two places — which is how the battlefield pose ended up inside a building.
+  peakHeight: SECTOR_SKYLINE_HEIGHT - SECTOR_PLATFORM_TOP - DISTRICT_DECK,
   edgeHeight: 26,
   minFootprint: 5,
   maxFootprint: 10,
   spacing: 1.4,
 };
-
-/** The height of a district's own platform, above the sector's ground. */
-const DISTRICT_DECK = 10;
 
 /** How much of a district gets built at each detail level (§82.2). */
 const DISTRICT_DENSITY: Readonly<Record<DetailLevel, number>> = {
@@ -385,7 +376,14 @@ function Sector({
           onSelect(index);
         }}
       >
-        <cylinderGeometry args={[120, 96, 22, SEGMENTS[detail]]} />
+        <cylinderGeometry
+          args={[
+            SECTOR_ISLAND_RADIUS,
+            SECTOR_ISLAND_RADIUS * 0.8,
+            SECTOR_PLATFORM_TOP * 2,
+            SEGMENTS[detail],
+          ]}
+        />
         <meshStandardMaterial
           color={isFocused ? '#22394a' : '#1a2d3a'}
           metalness={0.2}

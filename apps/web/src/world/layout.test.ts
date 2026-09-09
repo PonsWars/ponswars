@@ -1,20 +1,26 @@
 import { BATTLES_PER_ROUND } from '@ponswars/shared-types';
-import { distance, selectDetail, type LodThresholds } from '@ponswars/world-runtime';
+import { distance, selectDetail } from '@ponswars/world-runtime';
 import { describe, expect, it } from 'vitest';
 import {
   battlefieldPose,
   cinematicPose,
   GLOBAL_ANCHOR,
+  LOD_THRESHOLDS,
   MARKET_CORE,
   poseForMode,
   PRESENTATION_ANCHOR,
+  SECTOR_ISLAND_RADIUS,
   SECTOR_ORBIT_RADIUS,
   SECTOR_POSITIONS,
   sectorPose,
+  SECTOR_SKYLINE_HEIGHT,
   WORLD_BOUNDARY_RADIUS,
 } from './layout.js';
 
-const THRESHOLDS: LodThresholds = { full: 320, reduced: 700, silhouette: 2_200 };
+// The thresholds the app ships with, not a second set written for the tests:
+// the point of these assertions is that the poses and the detail selection
+// agree, and they cannot disagree usefully against numbers nothing renders at.
+const THRESHOLDS = LOD_THRESHOLDS;
 
 describe('world layout', () => {
   it('places one sector per battle', () => {
@@ -69,6 +75,39 @@ describe('camera poses', () => {
 
       expect(battlefieldRange).toBeLessThan(sectorRange);
       expect(cinematicRange).toBeLessThan(battlefieldRange);
+    }
+  });
+
+  it('never stands inside the island it is looking at', () => {
+    // The failure this exists for: the districts grew a skyline, the
+    // battlefield pose stayed where it was, and flying to a battle put the
+    // camera in the middle of a building. Every level of §37.2 has to be a
+    // readable view of the sector, and a camera inside the geometry is not a
+    // view of anything.
+    for (let index = 0; index < BATTLES_PER_ROUND; index += 1) {
+      const sector = SECTOR_POSITIONS[index];
+      expect(sector).toBeDefined();
+      for (const pose of [sectorPose(index), battlefieldPose(index), cinematicPose(index)]) {
+        const horizontal = Math.hypot(
+          pose.position.x - (sector?.x ?? 0),
+          pose.position.z - (sector?.z ?? 0),
+        );
+        expect(horizontal).toBeGreaterThan(SECTOR_ISLAND_RADIUS);
+      }
+    }
+  });
+
+  it('clears the skyline or stands well outside it', () => {
+    // Being outside the rim is not enough on its own if the pose sits level
+    // with the tops of the towers at the near edge: the shot fills with the
+    // first building. Each level either looks down over the skyline or stands
+    // back far enough to see past it.
+    for (let index = 0; index < BATTLES_PER_ROUND; index += 1) {
+      const sector = SECTOR_POSITIONS[index];
+      expect(sector).toBeDefined();
+      for (const pose of [sectorPose(index), battlefieldPose(index)]) {
+        expect(pose.position.y - (sector?.y ?? 0)).toBeGreaterThan(SECTOR_SKYLINE_HEIGHT);
+      }
     }
   });
 
