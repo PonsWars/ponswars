@@ -1,15 +1,19 @@
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import {
+  reshuffleFrame,
   selectDetail,
+  SETTLED_WORLD,
   type CameraState,
   type DetailLevel,
   type LodThresholds,
+  type ReshuffleFrame,
 } from '@ponswars/world-runtime';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, type JSX } from 'react';
 import type { Group, PerspectiveCamera } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
 import { MARKET_CORE, SECTOR_POSITIONS } from './layout.js';
+import { RESHUFFLE, RESHUFFLE_REDUCED } from './navigation-config.js';
 import { SectorLabel } from './SectorLabel.js';
 import { WorldInput } from './WorldInput.js';
 
@@ -68,7 +72,7 @@ const CORE_SPIRES: readonly { x: number; z: number; width: number; height: numbe
   { x: 66, z: -44, width: 15, height: 84 },
 ];
 
-function MarketCore(): JSX.Element {
+function MarketCore({ pulse }: { readonly pulse: number }): JSX.Element {
   const core = useRef<Group>(null);
 
   // §38.10: a permanent dark cinematic atmosphere whose lighting shifts by
@@ -106,12 +110,19 @@ function MarketCore(): JSX.Element {
         </mesh>
       ))}
 
-      {/* The beacon at the summit. One bright point the eye returns to. */}
-      <mesh position={[0, 208, 0]}>
+      {/* The beacon at the summit. One bright point the eye returns to, and
+          the thing that swells while the rest of the world is apart (§15 step
+          5) — the core is what survives every round. */}
+      <mesh position={[0, 208, 0]} scale={1 + pulse * 2.4}>
         <sphereGeometry args={[5, 12, 12]} />
         <meshBasicMaterial color="#7fe3c4" />
       </mesh>
-      <pointLight position={[0, 200, 0]} color="#5fd3b4" intensity={340} distance={620} />
+      <pointLight
+        position={[0, 200, 0]}
+        color="#5fd3b4"
+        intensity={340 + pulse * 900}
+        distance={620 + pulse * 700}
+      />
 
       {/* Routing pulses out into the sectors (§38.2). */}
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -26, 0]}>
@@ -138,7 +149,14 @@ function MarketCore(): JSX.Element {
  * alive rather than one full of particles, and a signal moving outward from the
  * core is the difference between a diagram and a place that is running.
  */
-function Routes({ battles }: { readonly battles: readonly ClientBattle[] }): JSX.Element {
+function Routes({
+  battles,
+  extension,
+}: {
+  readonly battles: readonly ClientBattle[];
+  /** How far each route reaches, 0 to 1 (§15 steps 6 and 8). */
+  readonly extension: number;
+}): JSX.Element {
   // `undefined` is in the type because it is in the array: a slot whose ref
   // callback has not run yet holds nothing, and typing it as only `Group | null`
   // would make the guard below look like dead code while still being needed.
@@ -173,13 +191,25 @@ function Routes({ battles }: { readonly battles: readonly ClientBattle[] }): JSX
               // Laid along the route rather than rotated into place by hand:
               // the sectors sit at fixed angles, and an angle written twice is
               // an angle that can disagree with itself.
-              position={[position.x / 2, position.y / 2 + 2, position.z / 2]}
+              //
+              // It grows from the core outward rather than fading, so a route
+              // reaching a sector is something a player watches arrive (§15
+              // step 8). Half the extension in position, all of it in length —
+              // that is what keeps the near end pinned to the core.
+              position={[
+                (position.x * extension) / 2,
+                (position.y * extension) / 2 + 2,
+                (position.z * extension) / 2,
+              ]}
               rotation={[0, Math.atan2(position.x, position.z), 0]}
+              visible={extension > 0.001}
             >
-              <boxGeometry args={[2.5, 1, length]} />
+              <boxGeometry args={[2.5, 1, Math.max(length * extension, 0.001)]} />
               <meshBasicMaterial color="#1b3a48" transparent opacity={0.5} />
             </mesh>
             <group
+              // A signal travels a finished route, not one still being laid.
+              visible={extension > 0.999}
               ref={(node) => {
                 pulses.current[index] = node;
               }}
@@ -201,10 +231,19 @@ interface SectorProps {
   readonly battle: ClientBattle | undefined;
   readonly detail: DetailLevel;
   readonly isFocused: boolean;
+  /** Where the reshuffle stands, so what is temporary moves with it (§15). */
+  readonly reshuffle: ReshuffleFrame;
   readonly onSelect: (index: number) => void;
 }
 
-function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JSX.Element | null {
+function Sector({
+  index,
+  battle,
+  detail,
+  isFocused,
+  reshuffle,
+  onSelect,
+}: SectorProps): JSX.Element | null {
   const position = SECTOR_POSITIONS[index];
   if (position === undefined || detail === 'CULLED') {
     return null;
@@ -252,10 +291,10 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
           assigned this faction and retracted at reshuffle, which is why it
           stands on the staging platform rather than being part of the island.
           A permanent structure here would make a neutral sector look owned. */}
-      {battle !== undefined && detail === 'FULL' ? (
+      {battle !== undefined && detail === 'FULL' && reshuffle.forwardBase > 0.001 ? (
         <>
-          <ForwardBase side={-1} accent={leftAccent} />
-          <ForwardBase side={1} accent={rightAccent} />
+          <ForwardBase side={-1} accent={leftAccent} extension={reshuffle.forwardBase} />
+          <ForwardBase side={1} accent={rightAccent} extension={reshuffle.forwardBase} />
         </>
       ) : null}
 
@@ -273,10 +312,15 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
         realtime stream — §13 makes the battlefield a visualisation of
         authoritative momentum, never a source of it.
       */}
-      {detail !== 'SILHOUETTE' && battle !== undefined ? (
-        <mesh position={[(battle.frontline - 0.5) * 124, 22, 0]}>
+      {detail !== 'SILHOUETTE' && battle !== undefined && reshuffle.frontline > 0.001 ? (
+        // Collapses toward the centre as it goes, rather than fading in place:
+        // §15 calls the frontline a connection, and a connection comes apart.
+        <mesh
+          position={[(battle.frontline - 0.5) * 124 * reshuffle.frontline, 22, 0]}
+          scale={[1, reshuffle.frontline, reshuffle.frontline]}
+        >
           <boxGeometry args={[3, 28, 104]} />
-          <meshBasicMaterial color="#d7e6ee" transparent opacity={0.8} />
+          <meshBasicMaterial color="#d7e6ee" transparent opacity={0.8 * reshuffle.frontline} />
         </mesh>
       ) : null}
 
@@ -354,12 +398,17 @@ function StagingArea({
 function ForwardBase({
   side,
   accent,
+  extension,
 }: {
   readonly side: -1 | 1;
   readonly accent: string;
+  /** Retracted at 0, deployed at 1 (§15 steps 4 and 9). */
+  readonly extension: number;
 }): JSX.Element {
   return (
-    <group position={[side * 92, 11, 0]}>
+    // Folds down into its own footing rather than shrinking to a point: the
+    // footing is what was landed, and the mast is what unfolds from it.
+    <group position={[side * 92, 11, 0]} scale={[1, Math.max(extension, 0.001), 1]}>
       <mesh position={[0, 3, 0]}>
         <cylinderGeometry args={[10, 13, 6, 6]} />
         <meshStandardMaterial color="#0f1a22" metalness={0.6} roughness={0.5} />
@@ -450,6 +499,9 @@ export function WorldScene(): JSX.Element {
   const camera = useSession((state) => state.camera);
   const battles = useSession((state) => state.battles);
   const quality = useSession((state) => state.quality);
+  const reducedMotion = useSession((state) => state.reducedMotion);
+  const reshuffleStartedAt = useSession((state) => state.reshuffleStartedAt);
+  const clockOffsetMs = useSession((state) => state.clockOffsetMs);
   const focusSector = useSession((state) => state.focusSector);
   const tick = useSession((state) => state.tick);
   const three = useThree();
@@ -475,6 +527,22 @@ export function WorldScene(): JSX.Element {
   }, [three.camera, camera.pose]);
 
   const zoom = currentZoom({ camera });
+
+  /**
+   * Where the reshuffle stands right now (§15).
+   *
+   * Recomputed every frame from an absolute instant rather than advanced by a
+   * counter, so a dropped frame skips along the same curve instead of leaving
+   * the world half disconnected. `SETTLED_WORLD` when no round has changed,
+   * which is every frame except the few seconds after one does.
+   */
+  const reshuffle =
+    reshuffleStartedAt === null
+      ? SETTLED_WORLD
+      : reshuffleFrame(
+          nowUtc() - reshuffleStartedAt - clockOffsetMs,
+          reducedMotion ? RESHUFFLE_REDUCED : RESHUFFLE,
+        );
 
   const details = useMemo(
     () =>
@@ -509,8 +577,8 @@ export function WorldScene(): JSX.Element {
 
       <WorldInput />
 
-      <MarketCore />
-      <Routes battles={battles} />
+      <MarketCore pulse={reshuffle.corePulse} />
+      <Routes battles={battles} extension={reshuffle.route} />
 
       {SECTOR_POSITIONS.map((_, index) => (
         <Sector
@@ -519,6 +587,7 @@ export function WorldScene(): JSX.Element {
           battle={battles[index]}
           detail={details[index] ?? 'SILHOUETTE'}
           isFocused={battles[index]?.battleId === camera.focusedBattleId}
+          reshuffle={reshuffle}
           onSelect={(selected) => {
             // A pan that happens to end over a sector is not a click on it.
             // Without this, dragging across the world flies the camera to
