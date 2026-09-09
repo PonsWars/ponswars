@@ -15,6 +15,7 @@ import {
 } from '@ponswars/battle-math';
 import { startSocketServer } from '@ponswars/gateway';
 import {
+  announceRoundOpened,
   MemoryRoundStore,
   stepRound,
   type MarketDataPort,
@@ -208,6 +209,7 @@ async function main(): Promise<void> {
   let index = 0;
   let clock = clockForRound(now(), 0, now());
   let round = await openRound(index, clock, market, now());
+  await announceRoundOpened(round, sockets.gateway);
 
   const api = buildServer({
     // The Vite dev server, on both spellings of localhost — a browser treats
@@ -268,6 +270,7 @@ async function main(): Promise<void> {
       index += 1;
       clock = clockForRound(nextRoundOpensAt(clock), 0, now());
       round = await openRound(index, clock, market, now());
+      await announceRoundOpened(round, sockets.gateway);
       previousState = round.state;
       process.stdout.write(`\n${round.roundId}  opened\n`);
       continue;

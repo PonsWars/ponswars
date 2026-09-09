@@ -220,14 +220,16 @@ export function useLiveWorld(): LiveStatus {
 /**
  * Applies one event to the store.
  *
- * Only `BATTLE_STATE_UPDATE` is applied incrementally. A round that locked or
- * finalized has changed more than any one payload describes — the phase, the
- * picks, five results — so those re-fetch the authoritative snapshot rather
- * than patching a state machine from the outside (§22, §70.7).
+ * Only `BATTLE_STATE_UPDATE` is applied incrementally. Everything else marks a
+ * change too large for one payload to describe.
  */
 function applyEvent(event: string, payload: unknown, resync: () => void): void {
   if (event !== 'BATTLE_STATE_UPDATE') {
-    if (event === 'PICKS_LOCKED' || event === 'ROUND_FINALIZED') {
+    // A round opening, locking or finalizing changes more than any one payload
+    // describes — the phase, the matchups, the picks, five results. Each of
+    // those fetches the authoritative snapshot instead of patching a state
+    // machine from the outside (§22, §70.7).
+    if (event === 'ROUND_OPENED' || event === 'PICKS_LOCKED' || event === 'ROUND_FINALIZED') {
       resync();
     }
     return;
