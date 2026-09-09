@@ -87,6 +87,19 @@ const DISTRICT_DENSITY: Readonly<Record<DetailLevel, number>> = {
 const CRAGS_PER_ISLAND = 8;
 
 /**
+ * The width of the contested ground between the two districts (§38.3).
+ *
+ * The frontline travels across exactly this, so the two are one number. It used
+ * to travel 124 units on a strip of ground 26 wide: at anything but an even
+ * battle the marker stood inside a district, passing through buildings, which
+ * reads as a rendering fault rather than as ground being taken.
+ *
+ * Sized to the gap the districts leave: they are 48 across and centred 62 out,
+ * so their inner edges face each other 76 apart.
+ */
+const CONTESTED_WIDTH = 76;
+
+/**
  * The seed a piece of terrain is generated from.
  *
  * A property of the *place* — which sector, which side — and of nothing else.
@@ -417,13 +430,17 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
   const readReshuffle = useReshuffleReader();
   const position = SECTOR_POSITIONS[index];
   const held = battle?.frontline ?? 0.5;
+  // Where the marker is standing, as opposed to where the server last said the
+  // line is. Starts on the authoritative value so the first frame is not an
+  // animation from the middle of the field.
+  const shown = useRef(held);
 
   // What the reshuffle moves on a sector: the two forward bases folding away
   // and the frontline collapsing to the centre (§15 steps 3, 4 and 9). Driven
   // here rather than through props for the reason `useReshuffleReader` gives —
   // props do not change between renders, and there are no renders between
   // frames.
-  useFrame(() => {
+  useFrame((_, delta) => {
     const frame = readReshuffle();
 
     for (const base of bases.current) {
@@ -438,11 +455,29 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
 
     const marker = frontline.current;
     if (marker !== null) {
+      const showing = frame.frontline > 0.001;
+      if (showing) {
+        // Eased toward the authoritative position rather than snapped to it.
+        // The line arrives about once a second on the realtime stream, and a
+        // marker that teleports each time reads as a readout refreshing rather
+        // than as ground being taken (§13.4, §36.14).
+        //
+        // It only ever *approaches* the server's value and never leads it, so
+        // this is smoothing of an authoritative number and not a prediction of
+        // one — §13 keeps the battlefield a visualisation of momentum, never a
+        // source of it.
+        shown.current += (held - shown.current) * Math.min(1, delta * 4);
+      } else {
+        // Hidden through the reshuffle, and the sector is about to hold a
+        // different battle. Sliding across the field to the new one when it
+        // reappears would animate a fight that never happened.
+        shown.current = held;
+      }
       // Collapses toward the centre as it goes, rather than fading in place:
       // §15 calls the frontline a connection, and a connection comes apart.
-      marker.position.x = (held - 0.5) * 124 * frame.frontline;
+      marker.position.x = (shown.current - 0.5) * CONTESTED_WIDTH * frame.frontline;
       marker.scale.set(1, Math.max(frame.frontline, 0.0001), Math.max(frame.frontline, 0.0001));
-      marker.visible = frame.frontline > 0.001;
+      marker.visible = showing;
       const material = marker.material;
       if (!Array.isArray(material) && 'opacity' in material) {
         material.opacity = 0.72 * frame.frontline;
@@ -461,7 +496,24 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
   const rightAccent = battle === undefined ? '#3a4a55' : FACTION_ACCENT[battle.right];
 
   return (
-    <group position={[position.x, position.y, position.z]}>
+    <group
+      position={[position.x, position.y, position.z]}
+      // Turned to face the camera that flies to it.
+      //
+      // The two districts sit either side of the island's local x axis, and the
+      // sector poses approach along the radius from the Market Core. With the
+      // island unrotated those two directions agreed only by accident: on most
+      // sectors the camera looked *along* the axis between the districts, so
+      // one army stood behind the other and the frontline ran across the view
+      // instead of into it. §36.2 asks for both staging areas readable and the
+      // frontline always understandable, which is a statement about this angle.
+      //
+      // Rotating the local x axis onto the tangent puts the two sides left and
+      // right of the frame on every sector, with the line between them running
+      // away from the camera — which is the arrangement every delivered sector
+      // frame is drawn from.
+      rotation={[0, -(Math.atan2(position.z, position.x) + Math.PI / 2), 0]}
+    >
       {/* The neutral sector platform. No faction owns it (§38.3).
           A solid with depth rather than a disc: these are floating land masses
           (§38.1), and a flat circle reads as a dial on a control panel. */}
@@ -511,7 +563,7 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
               across, and anything standing on it would be in the way of the one
               reading §36.15 asks a player to take in instantly. */}
           <mesh position={[0, 11.2, 0]}>
-            <boxGeometry args={[26, 0.6, 150]} />
+            <boxGeometry args={[CONTESTED_WIDTH, 0.6, 150]} />
             <meshBasicMaterial color="#0b1a22" transparent opacity={0.85} />
           </mesh>
         </>
