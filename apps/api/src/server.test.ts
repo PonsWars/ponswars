@@ -113,6 +113,7 @@ beforeEach(() => {
 });
 
 const AUTH = { authorization: 'Bearer test' };
+const pickUrl = (): string => `/v1/rounds/${ROUND_ID}/pick`;
 
 function pickBody(overrides: Record<string, unknown> = {}) {
   const battle = round.battles[0];
@@ -429,6 +430,23 @@ describe('cross-origin access', () => {
     expect(response.headers['access-control-allow-headers']).toContain('authorization');
   });
 
+  it('advertises every method it actually serves', async () => {
+    // The bug this exists for: the allowed-methods list was written by hand and
+    // went stale the moment `DELETE /pick` was added. The route worked and
+    // `curl` proved it, while every browser was refused at the preflight with a
+    // message naming CORS rather than the route.
+    const response = await app.inject({
+      method: 'OPTIONS',
+      url: pickUrl(),
+      headers: { origin: ALLOWED_ORIGIN, 'access-control-request-method': 'DELETE' },
+    });
+
+    const advertised = String(response.headers['access-control-allow-methods']).split(', ');
+    for (const method of ['GET', 'PUT', 'DELETE', 'OPTIONS']) {
+      expect(advertised).toContain(method);
+    }
+  });
+
   it('gives an unlisted origin no permission, and no error either', async () => {
     // The request still succeeds; the browser is what refuses to hand the body
     // to the page. Answering with an error instead would tell an attacker which
@@ -455,5 +473,148 @@ describe('cross-origin access', () => {
       });
       expect(response.headers['access-control-allow-origin']).not.toBe('*');
     }
+  });
+});
+
+describe('DELETE /v1/rounds/:roundId/pick', () => {
+  it('withdraws a pick during the phase', async () => {
+    await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: pickBody() });
+    expect(picks.count(toRoundId(ROUND_ID))).toBe(1);
+
+    const response = await app.inject({ method: 'DELETE', url: pickUrl(), headers: AUTH });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ withdrawn: true });
+    expect(picks.count(toRoundId(ROUND_ID))).toBe(0);
+  });
+
+  it('succeeds when there was nothing to withdraw', async () => {
+    // §110.5: a client retrying a withdrawal it never saw succeed must not be
+    // told it did something wrong. Both cases are success, and the body says
+    // which one happened.
+    const response = await app.inject({ method: 'DELETE', url: pickUrl(), headers: AUTH });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ withdrawn: false });
+  });
+
+  it('refuses to withdraw after the lock', async () => {
+    // §22 allows mutation only while PICK_OPEN. A wallet that could withdraw
+    // after lock would escape a loss it had already entered.
+    await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: pickBody() });
+    now = utcTimestamp(EPOCH + 60_000);
+
+    const response = await app.inject({ method: 'DELETE', url: pickUrl(), headers: AUTH });
+
+    expect(response.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(response.json()).code).toBe('PICKS_CLOSED');
+    expect(picks.count(toRoundId(ROUND_ID))).toBe(1);
+  });
+
+  it('needs a wallet', async () => {
+    expect((await app.inject({ method: 'DELETE', url: pickUrl() })).statusCode).toBe(401);
+  });
+
+  it('lets the same battle be picked again after a withdrawal', async () => {
+    // The idempotency key goes with the pick. A wallet that picks, withdraws
+    // and picks the same battle again is deciding again, not retrying — holding
+    // the key would silently return the pick that was withdrawn.
+    const body = pickBody();
+    await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: body });
+    await app.inject({ method: 'DELETE', url: pickUrl(), headers: AUTH });
+    const again = await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: body });
+
+    expect(again.statusCode).toBe(201);
+    expect(picks.count(toRoundId(ROUND_ID))).toBe(1);
+  });
+});
+
+describe('PUT /v1/rounds/:roundId/card-decision', () => {
+  const decisionUrl = () => `/v1/rounds/${ROUND_ID}/card-decision`;
+  const decisionBody = (decision: 'USE' | 'SAVE') => ({
+    roundId: ROUND_ID,
+    decision,
+    clientRequestId: 'req-card-1',
+  });
+
+  it('arms a card on an existing pick', async () => {
+    await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: pickBody() });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: decisionUrl(),
+      headers: AUTH,
+      payload: decisionBody('USE'),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ cardDecision: 'USE' });
+  });
+
+  it('changes only the decision, never the battle', async () => {
+    // §40.7 makes these two decisions in sequence, and re-sending the whole
+    // pick to change the second would let a stale battle id overwrite the first.
+    const battle = round.battles[0];
+    await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: pickBody() });
+    await app.inject({
+      method: 'PUT',
+      url: decisionUrl(),
+      headers: AUTH,
+      payload: decisionBody('USE'),
+    });
+
+    const stored = picks.find(toRoundId(ROUND_ID), WALLET);
+    expect(stored?.battleId).toBe(battle?.setup.battleId);
+    expect(stored?.backedTicker).toBe(battle?.setup.left);
+    expect(stored?.cardDecision).toBe('USE');
+  });
+
+  it('arms without spending anything', async () => {
+    // §47.6 and §40.7: USE arms during PICK_OPEN and the use is consumed
+    // atomically at lock. A player who changes their mind before lock has spent
+    // nothing, so the engine must see a deployment only after locking.
+    await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: pickBody() });
+    await app.inject({
+      method: 'PUT',
+      url: decisionUrl(),
+      headers: AUTH,
+      payload: decisionBody('USE'),
+    });
+    await app.inject({
+      method: 'PUT',
+      url: decisionUrl(),
+      headers: AUTH,
+      payload: { ...decisionBody('SAVE'), clientRequestId: 'req-card-2' },
+    });
+
+    const locked = await picks.lockedPicks(toRoundId(ROUND_ID));
+    expect(locked[0]?.cardDeployed).toBe(false);
+  });
+
+  it('refuses a decision with no pick behind it', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: decisionUrl(),
+      headers: AUTH,
+      payload: decisionBody('USE'),
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(response.json()).code).toBe('NO_PICK_TO_DECIDE');
+  });
+
+  it('refuses a decision after the lock', async () => {
+    await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: pickBody() });
+    now = utcTimestamp(EPOCH + 60_000);
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: decisionUrl(),
+      headers: AUTH,
+      payload: decisionBody('USE'),
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(response.json()).code).toBe('PICKS_CLOSED');
   });
 });

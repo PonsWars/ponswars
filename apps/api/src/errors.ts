@@ -121,6 +121,24 @@ export function alreadyPicked(correlationId: string): ErrorResponse {
 }
 
 /**
+ * A card decision arrived for a round this wallet has not picked in (§47.6).
+ *
+ * §40.7 puts the card after the side, so there is nothing to arm. Naming that
+ * is more useful than recording a decision no round will ever read — and the
+ * remedy is one step the player can take.
+ */
+export function noPickToDecide(correlationId: string): ErrorResponse {
+  return error(
+    409,
+    'NO_PICK_TO_DECIDE',
+    'There is no pick in this round for a card to support.',
+    true,
+    'Back a stock first; the card decision comes after.',
+    correlationId,
+  );
+}
+
+/**
  * The request needs a wallet and none was proven (§48.2).
  *
  * Spectating needs no wallet at all (§5), so this only ever applies to writes.

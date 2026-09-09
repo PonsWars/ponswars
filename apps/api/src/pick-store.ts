@@ -92,6 +92,56 @@ export class PickStore implements PickPort {
     );
   }
 
+  /**
+   * Withdraws a wallet's pick (§47.5 `DELETE`).
+   *
+   * Returns whether there was one to withdraw, so the route can tell "removed"
+   * from "there was nothing there" — §110.5 wants an answer that says what
+   * happened, and both of those are success.
+   *
+   * The idempotency key is released with it. A wallet that picks, withdraws and
+   * picks the same battle again is making a new decision, not retrying an old
+   * request, and holding the key would silently return the withdrawn pick.
+   */
+  withdraw(roundId: RoundId, wallet: WalletAddress): boolean {
+    const round = this.byRound.get(roundId);
+    const existing = round?.get(wallet);
+    if (round === undefined || existing === undefined) {
+      return false;
+    }
+    round.delete(wallet);
+    this.applied.delete(existing.clientRequestId);
+    return true;
+  }
+
+  /**
+   * Changes only the card decision on an existing pick (§47.6).
+   *
+   * Separate from `submit` because §40.7 makes these two decisions in sequence —
+   * a side first, then USE or SAVE — and re-sending the whole pick to change the
+   * second would let a stale battle id from the client overwrite the first.
+   *
+   * Returns `null` when the wallet has no pick to decide about. §47.6 arms a
+   * card for a round the wallet is in; there is nothing to arm otherwise.
+   */
+  decideCard(
+    roundId: RoundId,
+    wallet: WalletAddress,
+    cardDecision: CardDecision,
+    at: UtcTimestamp,
+  ): SubmittedPick | null {
+    const existing = this.byRound.get(roundId)?.get(wallet);
+    if (existing === undefined) {
+      return null;
+    }
+    // `receivedAt` moves because the decision is what was received now. The
+    // engine reads only `cardDeployed`, but an operator reading a stored pick
+    // should see when its current contents were decided.
+    const updated: SubmittedPick = { ...existing, cardDecision, receivedAt: at };
+    this.byRound.get(roundId)?.set(wallet, updated);
+    return updated;
+  }
+
   /** How many wallets have picked in a round. For health and metrics. */
   count(roundId: RoundId): number {
     return this.byRound.get(roundId)?.size ?? 0;

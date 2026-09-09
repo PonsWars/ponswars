@@ -48,6 +48,45 @@ export const pickRequestSchema = z
 
 export type PickRequest = z.infer<typeof pickRequestSchema>;
 
+/**
+ * What a pick write answers with (§47.5, §66.2, §66.6).
+ *
+ * `replayed` and `changed` are separate facts and a client shows them
+ * differently: a replay is a retry the server already applied, and a change is
+ * §27.6's permitted second decision. Collapsing them into one boolean would
+ * make a flaky connection look like a player who changed their mind.
+ *
+ * `.strict()`, like every other payload here, so a field added on the server
+ * fails a test rather than reaching a client that ignores it.
+ */
+export const pickResponseSchema = z
+  .object({
+    recorded: z.boolean(),
+    replayed: z.boolean(),
+    changed: z.boolean().optional(),
+  })
+  .strict();
+
+/**
+ * What `GET /v1/rounds/{roundId}/pick` answers with (§47.5).
+ *
+ * `pick: null` means this wallet has not backed anything in this round. It is
+ * a fact, not an absence of one — a client that could not tell "no pick" from
+ * "not asked yet" would show an empty panel to a player who had committed.
+ */
+export const myPickSchema = z
+  .object({
+    pick: z
+      .object({
+        battleId: battleIdSchema,
+        backedTicker: activeTickerSchema,
+        cardDecision: cardDecisionSchema,
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+
 /** `PUT /v1/rounds/{roundId}/card-decision` (§47.6). */
 export const cardDecisionRequestSchema = z
   .object({

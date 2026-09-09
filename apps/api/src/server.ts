@@ -4,7 +4,13 @@ import {
   type EngineConfig,
   type RoundEngineState,
 } from '@ponswars/battle-engine';
-import { currentRoundSchema, pickRequestSchema } from '@ponswars/schemas';
+import {
+  cardDecisionRequestSchema,
+  currentRoundSchema,
+  myPickSchema,
+  pickRequestSchema,
+  pickResponseSchema,
+} from '@ponswars/schemas';
 import {
   battleId as toBattleId,
   clientRequestId as toClientRequestId,
@@ -16,6 +22,7 @@ import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import {
   battleNotInRound,
   invalidRequest,
+  noPickToDecide,
   picksClosed,
   roundNotFound,
   tickerNotInBattle,
@@ -85,6 +92,22 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   const allowed = new Set(deps.allowedOrigins);
 
   /**
+   * Methods this server actually serves, collected as routes register.
+   *
+   * Derived rather than listed. A hand-written list went stale the moment
+   * `DELETE /pick` was added: the route worked, `curl` proved it, and every
+   * browser was refused at the preflight with a message naming CORS rather than
+   * the route. A list that cannot fall behind the routes is the only version of
+   * this worth having.
+   */
+  const methods = new Set<string>(['OPTIONS']);
+  app.addHook('onRoute', (route) => {
+    for (const method of Array.isArray(route.method) ? route.method : [route.method]) {
+      methods.add(method);
+    }
+  });
+
+  /**
    * Cross-origin access (§5, §47).
    *
    * The origin is echoed back rather than answered with `*`, and `Vary: Origin`
@@ -110,7 +133,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
     // Preflight. A PUT carrying JSON and an authorization header triggers one,
     // so a pick cannot be submitted from a browser without answering it.
-    void reply.header('access-control-allow-methods', 'GET, PUT, OPTIONS');
+    void reply.header('access-control-allow-methods', [...methods].sort().join(', '));
     void reply.header('access-control-allow-headers', 'content-type, authorization');
     void reply.header('access-control-max-age', '600');
     void reply.code(204).send();
@@ -221,7 +244,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const existing = deps.picks.find(toRoundId(roundId), wallet);
     if (existing !== null && existing.clientRequestId === pick.clientRequestId) {
       // A retry of the same request. Idempotent by §66.6.
-      return reply.code(200).send({ recorded: true, replayed: true });
+      return reply.code(200).send(pickResponseSchema.parse({ recorded: true, replayed: true }));
     }
 
     const result = deps.picks.submit({
@@ -234,11 +257,16 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       clientRequestId: toClientRequestId(pick.clientRequestId),
     });
 
-    return reply.code(result.replayed ? 200 : 201).send({
-      recorded: true,
-      replayed: result.replayed,
-      changed: existing !== null,
-    });
+    // Parsed on the way out, like the round is. §66.2 asks for explicit schemas
+    // on payloads, and a response nobody validates is the half of the contract
+    // that drifts first.
+    return reply.code(result.replayed ? 200 : 201).send(
+      pickResponseSchema.parse({
+        recorded: true,
+        replayed: result.replayed,
+        changed: existing !== null,
+      }),
+    );
   });
 
   /** `GET /v1/rounds/:roundId/pick` — what this wallet currently backs. */
@@ -252,16 +280,104 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const { roundId } = request.params as { roundId: string };
     const existing = deps.picks.find(toRoundId(roundId), wallet);
     if (existing === null) {
-      return reply.code(200).send({ pick: null });
+      return reply.code(200).send(myPickSchema.parse({ pick: null }));
     }
 
-    return reply.code(200).send({
-      pick: {
-        battleId: existing.battleId,
-        backedTicker: existing.backedTicker,
-        cardDecision: existing.cardDecision,
-      },
-    });
+    return reply.code(200).send(
+      myPickSchema.parse({
+        pick: {
+          battleId: existing.battleId,
+          backedTicker: existing.backedTicker,
+          cardDecision: existing.cardDecision,
+        },
+      }),
+    );
+  });
+
+  /**
+   * `DELETE /v1/rounds/:roundId/pick` (§47.5).
+   *
+   * Withdrawing is a mutation, so it obeys the same lock the submission does:
+   * §22 allows changes only while `PICK_OPEN`, and a wallet that could withdraw
+   * after lock would escape a loss it had already entered.
+   *
+   * Withdrawing a pick that is not there succeeds. §110.5 wants an answer that
+   * says what happened, and "there was nothing to withdraw" is not a failure —
+   * a client retrying a withdrawal it never saw succeed must not be told it did
+   * something wrong.
+   */
+  app.delete('/v1/rounds/:roundId/pick', (request, reply) => {
+    const id = correlationId();
+
+    const wallet = deps.walletOf(request.headers.authorization);
+    if (wallet === null) {
+      return send(reply, unauthenticated(id));
+    }
+
+    const round = deps.currentRound();
+    const { roundId } = request.params as { roundId: string };
+    if (round?.roundId !== roundId) {
+      return send(reply, roundNotFound(roundId, id));
+    }
+
+    const action = nextRoundAction(round, deps.now(), deps.config.finalization.maxWait);
+    if (action.kind !== 'ACCEPT_PICKS') {
+      return send(reply, picksClosed(id));
+    }
+
+    return reply.code(200).send({ withdrawn: deps.picks.withdraw(toRoundId(roundId), wallet) });
+  });
+
+  /**
+   * `PUT /v1/rounds/:roundId/card-decision` (§47.6, §40.7).
+   *
+   * Separate from the pick because the two decisions happen in sequence — a
+   * side first, then USE or SAVE — and re-sending the whole pick to change the
+   * second would let a stale battle id overwrite the first.
+   *
+   * `USE` only *arms* the card. §47.6 consumes the use atomically when the
+   * round enters lock, which is the engine's job at `lockRound`; nothing here
+   * spends anything, so a player who changes their mind before lock has spent
+   * nothing (§40.7).
+   */
+  app.put('/v1/rounds/:roundId/card-decision', (request, reply) => {
+    const id = correlationId();
+
+    const wallet = deps.walletOf(request.headers.authorization);
+    if (wallet === null) {
+      return send(reply, unauthenticated(id));
+    }
+
+    const parsed = cardDecisionRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return send(reply, invalidRequest(parsed.error.issues[0]?.message ?? 'unknown', id));
+    }
+
+    const round = deps.currentRound();
+    const { roundId } = request.params as { roundId: string };
+    if (round?.roundId !== roundId || parsed.data.roundId !== roundId) {
+      return send(reply, roundNotFound(roundId, id));
+    }
+
+    const action = nextRoundAction(round, deps.now(), deps.config.finalization.maxWait);
+    if (action.kind !== 'ACCEPT_PICKS') {
+      return send(reply, picksClosed(id));
+    }
+
+    const updated = deps.picks.decideCard(
+      toRoundId(roundId),
+      wallet,
+      parsed.data.decision,
+      deps.now(),
+    );
+    if (updated === null) {
+      // Nothing to arm. A decision without a pick is not a smaller pick; §40.7
+      // puts the card after the side, and saying so is more useful than
+      // recording a decision the round will never read.
+      return send(reply, noPickToDecide(id));
+    }
+
+    return reply.code(200).send({ cardDecision: updated.cardDecision });
   });
 
   return app;
