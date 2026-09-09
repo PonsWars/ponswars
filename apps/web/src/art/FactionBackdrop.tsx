@@ -57,8 +57,13 @@ function Flank({
   readonly ticker: ActiveTicker;
   readonly side: 'left' | 'right';
 }): JSX.Element {
-  // Masked toward the centre and softened at top and bottom, so the art reads
-  // as the edge of a scene rather than as a photograph pasted on.
+  // Masked toward the centre, so the art reads as the edge of a scene rather
+  // than as a photograph pasted on.
+  //
+  // Never mirrored. The obvious way to face the two armies inward is to flip
+  // one of them, and it puts the dossier's own lettering on backwards — these
+  // are illustrations with banners and signage in them, not symmetrical
+  // silhouettes.
   const fade = side === 'left' ? 'to right' : 'to left';
 
   return (
@@ -68,9 +73,12 @@ function Flank({
         top: 0,
         bottom: 0,
         [side]: 0,
-        width: 'min(42vw, 720px)',
-        maskImage: `linear-gradient(${fade}, black 12%, transparent 92%)`,
-        WebkitMaskImage: `linear-gradient(${fade}, black 12%, transparent 92%)`,
+        width: 'min(34vw, 560px)',
+        // Gone well before the middle. §2.1 keeps the battlefield uncovered, and
+        // the frontline sits at the centre of the screen — art that reached it
+        // would be over the one thing the player is watching.
+        maskImage: `linear-gradient(${fade}, black 8%, transparent 78%)`,
+        WebkitMaskImage: `linear-gradient(${fade}, black 8%, transparent 78%)`,
       }}
     >
       <img
@@ -86,15 +94,26 @@ function Flank({
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          // The dossiers are wide scenes with their army massed toward the
-          // outer edge; anchoring there keeps the troops on screen instead of
-          // the empty sky above them.
-          objectPosition: side === 'left' ? '18% center' : '82% center',
-          opacity: 0.62,
+          // The hero art sits toward the middle of these sheets and the
+          // annotation panels toward the edges, so both flanks pull from the
+          // inner half rather than from their own outer edge.
+          objectPosition: side === 'left' ? '32% 45%' : '58% 45%',
+          opacity: 0.42,
+          // Blurred, and this is the honest compromise rather than a style.
+          //
+          // These are faction *dossiers*: illustrations annotated with unit
+          // callouts, stat panels and reference strips, because that is what was
+          // delivered. Shown sharp they read as documents pinned behind the
+          // battlefield — the eye tries to read `TENSOR WALKER` while a round is
+          // running. A short blur keeps the army, the colour and the scale, and
+          // takes away the invitation to read.
+          //
+          // The right answer is artwork drawn as a backdrop, with the annotations
+          // living in a dossier panel where they are the point.
+          filter: 'blur(2px)',
           // Scene-linked rather than pasted over: the art tints the darkness it
           // sits in instead of sitting on top of it.
           mixBlendMode: 'screen',
-          transform: side === 'right' ? 'scaleX(-1)' : undefined,
         }}
       />
     </div>
