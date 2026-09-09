@@ -1,5 +1,5 @@
 import { milliseconds } from '@ponswars/shared-types';
-import type { NavigationConfig } from '@ponswars/world-runtime';
+import type { NavigationConfig, ReshuffleTiming } from '@ponswars/world-runtime';
 import { SECTOR_ORBIT_RADIUS, WORLD_BOUNDARY_RADIUS } from './layout.js';
 
 /**
@@ -41,4 +41,31 @@ export const NAVIGATION: NavigationConfig = {
    * leaving it running would keep the scene re-rendering forever.
    */
   minDriftSpeed: 0.002,
+};
+
+/**
+ * How long each phase of a reshuffle takes (§15, §59.4).
+ *
+ * `CALIBRATE`: §15 fixes the order and names no durations. Roughly three and a
+ * half seconds in total, which is short enough to sit inside the gap between a
+ * round finalizing and the next opening, and long enough that a player watching
+ * sees the world come apart rather than blink.
+ *
+ * Reduced motion gets its own set rather than a branch in the reducer (§83.3).
+ * The sequence is the same sequence; it simply takes a fraction of the time,
+ * which is what "reduced" means here — not "absent", because a world that
+ * rearranged itself instantly would be a page reload with extra steps.
+ */
+export const RESHUFFLE: ReshuffleTiming = {
+  teardownMs: 1_200,
+  holdMs: 600,
+  connectMs: 900,
+  deployMs: 700,
+};
+
+export const RESHUFFLE_REDUCED: ReshuffleTiming = {
+  teardownMs: 160,
+  holdMs: 80,
+  connectMs: 120,
+  deployMs: 100,
 };
