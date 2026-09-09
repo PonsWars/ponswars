@@ -12,6 +12,7 @@ import { Countdown, RoundStatus } from './RoundStatus.js';
 import { panelStyle } from './styles.js';
 import { useNarrowViewport } from './useNarrowViewport.js';
 import { PresentationLinks } from './PresentationLinks.js';
+import { NextRotation, WorldGuide } from './WorldGuide.js';
 import { WalletSummary } from './WalletSummary.js';
 
 /**
@@ -82,6 +83,27 @@ export function Hud({ onNavigate }: { readonly onNavigate: (next: Route) => void
       <ConnectionBanner />
 
       {narrow ? null : <FlankingIntel budget={budget} battle={focused} />}
+
+      {/* Orientation and schedule, at the global view only (§6.3, §37.6). Both
+          sit above the bottom row so they read as world context rather than as
+          controls — a player scanning for a button should not find these. */}
+      {budget.walletSummary && !narrow ? (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-end',
+            gap: 'var(--pw-space-3)',
+          }}
+        >
+          <Live>
+            <WorldGuide />
+          </Live>
+          <Live>
+            <NextRotation />
+          </Live>
+        </div>
+      ) : null}
 
       <div
         style={{
