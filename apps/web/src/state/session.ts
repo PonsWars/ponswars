@@ -205,6 +205,15 @@ interface SessionState {
   readonly pendingPick: PendingPick | null;
   /** `null` before the first round payload arrives (§42.14 sync state). */
   readonly round: ClientRound | null;
+  /**
+   * When the reshuffle between two rounds began, or `null` (§15).
+   *
+   * Set when the round *changes*, never when the same round is re-fetched — a
+   * resync after a dropped socket would otherwise tear the world down and
+   * rebuild it for a round already in progress. The first round a client ever
+   * sees sets nothing either: there is no previous world to take apart.
+   */
+  readonly reshuffleStartedAt: UtcTimestamp | null;
   /** The wallet's Genesis Card, or `null` when it holds none (§7). */
   readonly card: CardHolding | null;
   /**
@@ -243,7 +252,14 @@ interface SessionState {
   setQuality: (tier: QualityTier) => void;
   setReducedMotion: (reduced: boolean) => void;
   setWallet: (wallet: WalletSummary | null) => void;
-  setRound: (round: ClientRound | null) => void;
+  /**
+   * Applies the authoritative round, and starts a reshuffle if it is a new one.
+   *
+   * The timestamp is passed in rather than read here, for the same reason every
+   * other reducer in this store takes one: §23.5 keeps the client clock out of
+   * anything that decides, and a test needs to place the sequence exactly.
+   */
+  setRound: (round: ClientRound | null, at: UtcTimestamp) => void;
   setCard: (card: CardHolding | null) => void;
   decideCard: (decision: CardDecision | null) => void;
   setConnection: (connection: ConnectionState) => void;
@@ -337,6 +353,7 @@ export const useSession = create<SessionState>((set, get) => ({
   wallet: null,
   pendingPick: null,
   round: null,
+  reshuffleStartedAt: null,
   card: null,
   cardDecision: null,
   connection: 'CONNECTED',
@@ -373,8 +390,10 @@ export const useSession = create<SessionState>((set, get) => ({
     set({ wallet });
   },
 
-  setRound: (round) => {
-    set({ round });
+  setRound: (round, at) => {
+    const previous = get().round;
+    const changed = previous !== null && round !== null && previous.roundId !== round.roundId;
+    set({ round, ...(changed ? { reshuffleStartedAt: at } : {}) });
   },
 
   setCard: (card) => {

@@ -89,7 +89,9 @@ export function useLiveWorld(): LiveStatus {
 
       setLastFailure(null);
       const { snapshot } = result;
-      setRound(snapshot.round);
+      // The round's own server time, not the device's: §15's sequence starts
+      // when the round changed, and §23.5 keeps that instant the server's.
+      setRound(snapshot.round, utcTimestamp(snapshot.serverTime));
       setBattles(snapshot.battles);
       // §23.5: every countdown is projected through this, so a device clock
       // that is minutes out still shows the same lock time as everyone else.

@@ -417,7 +417,7 @@ export function App(): JSX.Element {
     setBattles(PLACEHOLDER_BATTLES);
     setMyBattle('preview-b2');
     setWallet(PLACEHOLDER_WALLET);
-    setRound(placeholderRound());
+    setRound(placeholderRound(), nowUtc());
     // The same card the Genesis preview reveals, with a charge spent. A demo
     // that opened Golden Army and then showed a different card in the profile
     // would teach the reader that the two are unrelated.
