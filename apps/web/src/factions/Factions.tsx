@@ -9,6 +9,7 @@ import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
 import { FactionEmblem } from '../art/FactionEmblem.js';
 import { FactionStandard } from '../art/FactionStandard.js';
+import { FACTION_ART } from '../art/manifest.js';
 import { UnitIcon } from '../art/UnitIcon.js';
 import { captionStyle, controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
 import type { Route } from '../routing/route.js';
@@ -200,29 +201,71 @@ function FactionDetail({ ticker }: { readonly ticker: ActiveTicker }): JSX.Eleme
       <header
         style={{
           ...panelStyle,
-          display: 'grid',
-          gridTemplateColumns: 'auto 1fr',
-          alignItems: 'center',
-          gap: 'var(--pw-space-5)',
+          position: 'relative',
+          overflow: 'hidden',
+          padding: 0,
           borderLeft: `2px solid ${accent}`,
+          minHeight: 260,
+          display: 'flex',
+          alignItems: 'flex-end',
         }}
       >
-        {/* The army's own flag, at the size a flag is read at. Every delivered
-            battlefield frame hangs one of these either side of a sector; a
-            dossier headed by a 56-pixel mark is a directory entry. */}
-        <FactionStandard ticker={ticker} height={220} />
+        {/* This legion, in its own territory.
+            Generated from the roster rather than taken from the delivered
+            dossier — eight of those carry the real corporate mark of the
+            company behind the ticker and §7.10 rules them out. See
+            `docs/operations/generated-art.md`. */}
+        <img
+          src={FACTION_ART[ticker]}
+          alt=""
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            // The plate is the ground the type sits on, not the subject.
+            opacity: 0.55,
+          }}
+        />
+        {/* Dark enough at the bottom to read a paragraph over, clear at the top
+            so the picture is still a picture. §36.7 keeps a faction readable
+            without relying on colour, and that includes readable at all. */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background:
+              'linear-gradient(180deg, rgba(6,11,16,0.15) 0%, rgba(6,11,16,0.72) 52%, rgba(6,11,16,0.94) 100%)',
+          }}
+        />
 
-        <div style={{ display: 'grid', gap: 'var(--pw-space-3)', minWidth: 0 }}>
-          <div>
-            <div style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>{ticker}</div>
-            <h1 style={{ ...readoutStyle, margin: 0, fontSize: 28 }}>
-              {faction.name.toUpperCase()}
-            </h1>
+        <div
+          style={{
+            position: 'relative',
+            display: 'grid',
+            gridTemplateColumns: 'auto 1fr',
+            alignItems: 'end',
+            gap: 'var(--pw-space-5)',
+            padding: 'var(--pw-space-4)',
+            width: '100%',
+          }}
+        >
+          {/* The army's own flag, at the size a flag is read at. */}
+          <FactionStandard ticker={ticker} height={200} />
+
+          <div style={{ display: 'grid', gap: 'var(--pw-space-3)', minWidth: 0 }}>
+            <div>
+              <div style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>{ticker}</div>
+              <h1 style={{ ...readoutStyle, margin: 0, fontSize: 28 }}>
+                {faction.name.toUpperCase()}
+              </h1>
+            </div>
+
+            <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 14, lineHeight: 1.6 }}>
+              {faction.identity}
+            </p>
           </div>
-
-          <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 14, lineHeight: 1.6 }}>
-            {faction.identity}
-          </p>
         </div>
       </header>
 

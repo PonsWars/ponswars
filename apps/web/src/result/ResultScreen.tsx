@@ -1,6 +1,7 @@
 import type { FinalizedBattleResult } from '@ponswars/shared-types';
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import { FactionStandard } from '../art/FactionStandard.js';
+import { FACTION_ART } from '../art/manifest.js';
 import type { JSX } from 'react';
 import { captionStyle, humanize, panelStyle, readoutStyle } from '../hud/styles.js';
 import {
@@ -34,21 +35,66 @@ export function ResultScreen({
 
   return (
     <>
-      <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-3)' }}>
-        <div style={captionStyle}>RESULT</div>
-        <div style={{ ...readoutStyle, fontSize: 28, color: FACTION_ACCENT[view.winner] }}>
-          {view.winner} WINS
-        </div>
-        <div style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>
-          {humanize(view.victoryLabel)}
-        </div>
-        {view.tiebreakStep === null ? null : (
-          // §12.7: the totals tied and a named step decided it. Hiding that
-          // would make the result look closer to arbitrary than it is.
-          <div style={{ ...captionStyle, color: 'var(--pw-warning)' }}>
-            DECIDED BY TIEBREAK — {humanize(view.tiebreakStep)}
+      <div
+        style={{
+          ...panelStyle,
+          position: 'relative',
+          overflow: 'hidden',
+          padding: 0,
+          minHeight: 200,
+          display: 'flex',
+          alignItems: 'flex-end',
+          borderLeft: `2px solid ${FACTION_ACCENT[view.winner]}`,
+        }}
+      >
+        {/* The army that won, in its own territory. The delivered result screen
+            fills the frame with them, and it is the one moment in a round where
+            a faction has earned the whole picture. */}
+        <img
+          src={FACTION_ART[view.winner]}
+          alt=""
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            opacity: 0.6,
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background:
+              'linear-gradient(180deg, rgba(6,11,16,0.2) 0%, rgba(6,11,16,0.78) 55%, rgba(6,11,16,0.95) 100%)',
+          }}
+        />
+
+        <div
+          style={{
+            position: 'relative',
+            display: 'grid',
+            gap: 'var(--pw-space-2)',
+            padding: 'var(--pw-space-4)',
+            width: '100%',
+          }}
+        >
+          <div style={captionStyle}>RESULT</div>
+          <div style={{ ...readoutStyle, fontSize: 32, color: FACTION_ACCENT[view.winner] }}>
+            {view.winner} WINS
           </div>
-        )}
+          <div style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>
+            {humanize(view.victoryLabel)}
+          </div>
+          {view.tiebreakStep === null ? null : (
+            // §12.7: the totals tied and a named step decided it. Hiding that
+            // would make the result look closer to arbitrary than it is.
+            <div style={{ ...captionStyle, color: 'var(--pw-warning)' }}>
+              DECIDED BY TIEBREAK — {humanize(view.tiebreakStep)}
+            </div>
+          )}
+        </div>
       </div>
 
       <HeadToHead view={view} />
