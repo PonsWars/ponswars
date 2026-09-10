@@ -1,33 +1,21 @@
 import { buildServer, PickStore } from '@ponswars/api';
 import {
-  createRound,
   CURRENT_ENGINE_VERSIONS,
-  nextRoundOpensAt,
-  pollDelay,
   type EngineConfig,
   type RoundEngineState,
 } from '@ponswars/battle-engine';
-import {
-  clockForRound,
-  RATIO_SCALE,
-  roundIdFor,
-  type ConfidenceCalibration,
-} from '@ponswars/battle-math';
+import { RATIO_SCALE, type ConfidenceCalibration } from '@ponswars/battle-math';
 import { startSocketServer } from '@ponswars/gateway';
 import {
-  announceRoundOpened,
   MemoryRoundStore,
-  stepRound,
-  type MarketDataPort,
+  runRounds,
+  type DriverEvent,
   type RoundPorts,
 } from '@ponswars/round-service';
 import {
-  ACTIVE_TICKERS,
   milliseconds,
-  roundId as toRoundId,
   utcTimestamp,
   walletAddress,
-  type CanonicalClock,
   type UtcTimestamp,
   type WalletAddress,
 } from '@ponswars/shared-types';
@@ -143,39 +131,6 @@ const now = (): UtcTimestamp => utcTimestamp(Date.now());
 /** A demo wallet for any authenticated request. Real auth is §45.2. */
 const DEMO_WALLET: WalletAddress = walletAddress(`0x${'d'.repeat(40)}`);
 
-/**
- * Opens a round, snapshotting confidence from the fifteen minutes behind it.
- *
- * Async because §10.1 makes confidence an observation rather than a setting.
- * Reading it here, once, is what makes the snapshot belong to the round: a
- * later read would be a different fifteen minutes, and §10.3 freezes it at
- * open.
- */
-async function openRound(
-  index: number,
-  clock: CanonicalClock,
-  market: MarketDataPort,
-  at: UtcTimestamp,
-): Promise<RoundEngineState> {
-  const lookback = Object.fromEntries(
-    await Promise.all(
-      ACTIVE_TICKERS.map(async (ticker) => [ticker, await market.lookback(ticker, at)] as const),
-    ),
-  );
-
-  const round = createRound({
-    roundId: toRoundId(roundIdFor(index)),
-    roundIndex: index,
-    clock,
-    baseSeedHex: `0x${'5c'.repeat(32)}`,
-    recentRounds: [],
-    confidence: { lookback, calibration: CONFIDENCE_CALIBRATION },
-  });
-  // §22 makes opening the phase an explicit transition rather than something
-  // the clock implies, which is why the driver refuses to infer it.
-  return { ...round, state: 'PICK_OPEN' };
-}
-
 async function main(): Promise<void> {
   const picks = new PickStore();
   const store = new MemoryRoundStore();
@@ -204,35 +159,8 @@ async function main(): Promise<void> {
     store,
   };
 
-  // §25: ask the store what it was doing before opening anything new.
-  //
-  // Against the in-memory store this is always `null`, because a `Map` does not
-  // survive the process that held it — which is exactly the point. The
-  // composition root asks, so that swapping in the PostgreSQL store makes a
-  // restart resume a live round instead of abandoning one and starting another
-  // on top of it. Wiring this only when a durable store arrives would mean
-  // discovering then that nothing ever called it.
-  const resumed = await store.loadLatest();
-  if (resumed !== null && resumed.state !== 'FINALIZED') {
-    process.stdout.write(`${resumed.roundId}  resumed from checkpoint (${resumed.state})
-`);
-  }
-
-  // Rounds are contiguous (§3.1): each opens where the last ended, so the
-  // schedule never drifts even if a finalization runs late.
-  let index = 0;
-  let clock = resumed?.clock ?? clockForRound(now(), 0, now());
-  let round =
-    resumed !== null && resumed.state !== 'FINALIZED'
-      ? resumed
-      : await openRound(index, clock, market, now());
-
-  // Announced only when it is new. A resumed round was announced when it
-  // opened, and §48.3's ROUND_OPENED means a round has opened rather than that
-  // a server has restarted.
-  if (round !== resumed) {
-    await announceRoundOpened(round, sockets.gateway);
-  }
+  // The driver holds the round; this is how anything serving it reads it.
+  let round: RoundEngineState | null = null;
 
   const api = buildServer({
     // The Vite dev server, on both spellings of localhost — a browser treats
@@ -275,45 +203,42 @@ async function main(): Promise<void> {
     ].join('\n'),
   );
 
-  let previousState = round.state;
+  // The loop itself lives in `@ponswars/round-service`, because the deployable
+  // server runs the same one. What is local about this stack is which ports it
+  // hands over, not how a round is driven.
+  await runRounds({
+    ports,
+    config: CONFIG,
+    calibration: CONFIDENCE_CALIBRATION,
+    now,
+    tickMs: TICK_MS,
+    baseSeedHex: `0x${'5c'.repeat(32)}`,
+    onRound: (next) => {
+      round = next;
+    },
+    onEvent: (event) => {
+      process.stdout.write(describe(event));
+    },
+  });
+}
 
-  for (;;) {
-    const result = await stepRound(round, now(), ports, CONFIG);
-    round = result.state;
-
-    if (round.state !== previousState) {
-      process.stdout.write(`${round.roundId}  ${previousState} → ${round.state}\n`);
-      previousState = round.state;
-    }
-
-    if (result.finalization !== undefined) {
-      for (const battleResult of result.finalization.results) {
-        process.stdout.write(
-          `  ${battleResult.left} vs ${battleResult.right} → ${battleResult.winner} (${battleResult.victoryLabel})\n`,
-        );
-      }
-      for (const voided of result.finalization.voided) {
-        process.stdout.write(`  ${voided} → VOID\n`);
-      }
-
-      // §3.1: the next round opens where this one ended.
-      index += 1;
-      clock = clockForRound(nextRoundOpensAt(clock), 0, now());
-      round = await openRound(index, clock, market, now());
-      await announceRoundOpened(round, sockets.gateway);
-      previousState = round.state;
-      process.stdout.write(`\n${round.roundId}  opened\n`);
-      continue;
-    }
-
-    // A live battle sleeps the tick cadence; anything else sleeps until the
-    // boundary the driver named, capped so the loop never overshoots one it was
-    // told about.
-    const delay =
-      result.action.kind === 'TICK'
-        ? TICK_MS
-        : Math.max(pollDelay(result.action, now(), milliseconds(1_000)), 100);
-    await new Promise((resolve) => setTimeout(resolve, delay));
+/** One line of console for whatever the driver just did. */
+function describe(event: DriverEvent): string {
+  switch (event.kind) {
+    case 'RESUMED':
+      return `${event.round.roundId}  resumed from checkpoint (${event.round.state})\n`;
+    case 'OPENED':
+      return `\n${event.round.roundId}  opened\n`;
+    case 'STATE':
+      return `${event.round.roundId}  ${event.from} → ${event.round.state}\n`;
+    case 'FINALIZED':
+      return [
+        ...event.finalization.results.map(
+          (result) =>
+            `  ${result.left} vs ${result.right} → ${result.winner} (${result.victoryLabel})\n`,
+        ),
+        ...event.finalization.voided.map((voided) => `  ${voided} → VOID\n`),
+      ].join('');
   }
 }
 
