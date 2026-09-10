@@ -92,7 +92,7 @@ const DECK_Y = 21;
 /** Distance from the sector's centre line to the first rank. */
 const FRONT_RANK = 40;
 /** How much further back each rank behind it stands. */
-const RANK_SPACING = 11;
+const RANK_SPACING = 14;
 /** How wide a rank spreads along the deck. Inside the deck's 96. */
 const RANK_SPREAD = 84;
 
@@ -100,13 +100,14 @@ const RANK_SPREAD = 84;
  * How tall each kind of unit stands, in world units.
  *
  * Read against the things around them: the deck is 48 across, its towers reach
- * about 100, and the frontline marker is 19 high. A trooper at 7 is a person
- * beside a building; a mech at 14 is the machine the district was built to
- * hold. These are the numbers that decide whether an army reads as an army or
- * as debris on a plate, so they are stated here rather than buried in a scale
- * factor per model.
+ * about 100, and the frontline marker is 19 high. Deliberately large — the
+ * sector camera stands well back so that both staging areas and the line
+ * between them are in one frame (§36.2), and at that distance a
+ * correctly-proportioned soldier is four pixels of debris on a plate. These are
+ * the numbers that decide whether an army reads as an army, so they are stated
+ * here rather than buried in a scale factor per model.
  */
-const HEIGHT = { trooper: 7.5, mech: 15, walker: 19 } as const;
+const HEIGHT = { trooper: 11, mech: 22, walker: 27 } as const;
 
 interface Placement {
   readonly x: number;
