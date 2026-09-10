@@ -81,8 +81,12 @@ export default tseslint.config(
         // reaching for a runtime global is a line someone had to add.
         Buffer: 'readonly',
         console: 'readonly',
+        fetch: 'readonly',
         process: 'readonly',
+        setTimeout: 'readonly',
+        structuredClone: 'readonly',
         URL: 'readonly',
+        URLSearchParams: 'readonly',
       },
     },
   },
