@@ -6,12 +6,13 @@ import {
   reshuffleFrame,
   selectDetail,
   SETTLED_WORLD,
+  type Block,
   type CameraState,
   type DetailLevel,
-  type BlockForm,
   type DistrictShape,
   type ReshuffleFrame,
 } from '@ponswars/world-runtime';
+import { useGLTF } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   Suspense,
@@ -23,8 +24,8 @@ import {
   useState,
   type JSX,
 } from 'react';
-import { BackSide, Color, Object3D, ShaderMaterial } from 'three';
-import type { Group, InstancedMesh, Mesh, PerspectiveCamera, PointLight } from 'three';
+import { BackSide, BufferGeometry, Color, Mesh, Object3D, ShaderMaterial } from 'three';
+import type { Group, InstancedMesh, PerspectiveCamera, PointLight } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
 import {
   MARKET_CORE,
@@ -766,35 +767,31 @@ function District({
     [seed, detail],
   );
 
-  // Grouped by how each structure is built, because each form is a different
-  // geometry and an instanced draw carries one. Three groups of masses and
-  // three of crowns, so a crown always matches the wall it rings — a square
-  // band around an octagonal tower reads as a mistake at any distance.
+  // Grouped by which structure each block became, because an instanced draw
+  // carries one geometry. The crowns are grouped the same way and scaled to
+  // the piece they ring — these pieces taper, and a band sized to the base
+  // would float a long way off the wall it belongs to.
   const built = useMemo(() => {
-    const masses = new Map<BlockForm, Placement[]>();
-    const crowns = new Map<BlockForm, Placement[]>();
+    const masses = new Map<Piece, Placement[]>();
+    const crowns = new Map<Piece, Placement[]>();
 
     for (const block of blocks) {
-      const rotation: readonly [number, number, number] = [
-        0,
-        // The cylinder forms put their first vertex on the axis, so a four-sided
-        // one is a diamond until it is turned an eighth of a turn.
-        block.rotation + (block.form === 'BLOCK' ? 0 : Math.PI / 4),
-        0,
-      ];
+      const piece = pieceFor(block);
+      const rotation: readonly [number, number, number] = [0, block.rotation, 0];
 
-      (masses.get(block.form) ?? masses.set(block.form, []).get(block.form) ?? []).push({
+      (masses.get(piece) ?? masses.set(piece, []).get(piece) ?? []).push({
         position: [block.x, DISTRICT_DECK + block.height / 2, block.z],
         scale: [block.width, block.height, block.depth],
         rotation,
       });
 
       if (block.lit) {
-        (crowns.get(block.form) ?? crowns.set(block.form, []).get(block.form) ?? []).push({
+        const ring = PIECE_CROWN[piece];
+        (crowns.get(piece) ?? crowns.set(piece, []).get(piece) ?? []).push({
           // A band just below the roof line, slightly proud of the wall, so it
           // reads as a lit ring on the building rather than as its roof.
           position: [block.x, DISTRICT_DECK + block.height - 3.4, block.z],
-          scale: [block.width * 1.1, 2.6, block.depth * 1.1],
+          scale: [block.width * ring * 1.08, 2.6, block.depth * ring * 1.08],
           rotation,
         });
       }
@@ -829,9 +826,8 @@ function District({
         <meshBasicMaterial color={accent} transparent opacity={0.5} />
       </mesh>
 
-      {BLOCK_FORMS.map((form) => (
-        <InstancedField key={`mass-${form}`} placements={built.masses.get(form) ?? []}>
-          <BlockGeometry key={`mass-geometry-${form}`} form={form} />
+      {PIECES.map((piece) => (
+        <PieceField key={`mass-${piece}`} piece={piece} placements={built.masses.get(piece) ?? []}>
           {/* Barely metallic, and that is not a compromise. A metal has no
               diffuse response at all — it is entirely what it reflects — so in
               a dark void raising metalness makes a surface *darker*, not
@@ -842,21 +838,25 @@ function District({
               The probe gives them a sheen along their lit edges. What lights
               them is the key. */}
           <meshStandardMaterial
-            key={`mass-material-${form}`}
+            key={`mass-material-${piece}`}
             color="#2b4152"
             metalness={0.18}
             roughness={0.52}
             emissive="#0d2634"
             emissiveIntensity={0.34}
           />
-        </InstancedField>
+        </PieceField>
       ))}
 
-      {BLOCK_FORMS.map((form) => (
-        <InstancedField key={`crown-${form}`} placements={built.crowns.get(form) ?? []}>
-          <BlockGeometry key={`crown-geometry-${form}`} form={form} />
+      {PIECES.map((piece) => (
+        <InstancedField key={`crown-${piece}`} placements={built.crowns.get(piece) ?? []}>
+          {/* A plain box, whatever the wall behind it is. The band is read as
+              light rather than as a shape, and matching the silhouette of a
+              terraced tower would cost a second geometry per piece for
+              something nobody looks at directly. */}
+          <boxGeometry key={`crown-geometry-${piece}`} args={[1, 1, 1]} />
           <meshBasicMaterial
-            key={`crown-material-${form}`}
+            key={`crown-material-${piece}`}
             color={accent}
             transparent
             opacity={0.85}
@@ -933,26 +933,112 @@ const CONTESTED_PAVING: readonly Placement[] = [
 /** Where the standards stand along a district's inner edge. */
 const BANNER_POSTS: readonly number[] = [-30, 0, 30];
 
-/** The three forms, in one place so nothing iterates a subset of them. */
-const BLOCK_FORMS: readonly BlockForm[] = ['BLOCK', 'TAPER', 'TOWER'];
+/**
+ * The structures a district is built from (§38.3).
+ *
+ * These were three primitives — a box, a frustum and an eight-sided prism —
+ * and from the global view that reads as a skyline, which is why it lasted.
+ * Up close it reads as what it is. Every delivered sector frame shows a
+ * terraced citadel: a mass that steps inward as it rises, with buttresses down
+ * its faces. A box cannot be that, and no free pack sells it either — the kits
+ * are modern city blocks or interior corridors.
+ *
+ * So they are modelled, procedurally, by `tools/blender/build-district-kit.py`,
+ * which is a script rather than an afternoon in a GUI because a citadel *is* a
+ * loop: extrude, set back, bevel, repeat. Each piece is normalised into a unit
+ * cube, so the placement maths in `island.ts` — which is tested, and knows
+ * nothing about any of this — did not change by a line.
+ */
+const PIECES = ['SLAB', 'TERRACE', 'BLOCK_TOWER', 'SPIRE'] as const;
+
+type Piece = (typeof PIECES)[number];
+
+const PIECE_MODEL: Readonly<Record<Piece, string>> = {
+  SLAB: '/models/district/slab-a.glb',
+  TERRACE: '/models/district/tower-a.glb',
+  BLOCK_TOWER: '/models/district/tower-b.glb',
+  SPIRE: '/models/district/spire-a.glb',
+};
 
 /**
- * The geometry one form is built from, at unit size.
+ * How wide each piece is where its crown sits, as a fraction of its base.
  *
- * A block is a box. A taper is a four-sided frustum, which puts a diagonal in
- * the outline. A tower is an eight-sided prism, which puts a shoulder in it.
- * All three are a unit across and a unit tall, so one placement scales any of
- * them the same way.
+ * The crown is a lit band under the roof line, and these pieces taper — a band
+ * sized to the base would stand a long way off the wall it is supposed to ring.
  */
-function BlockGeometry({ form }: { readonly form: BlockForm }): JSX.Element {
-  switch (form) {
+const PIECE_CROWN: Readonly<Record<Piece, number>> = {
+  SLAB: 0.56,
+  TERRACE: 0.68,
+  BLOCK_TOWER: 0.62,
+  SPIRE: 0.24,
+};
+
+/**
+ * Which structure a generated block becomes.
+ *
+ * `island.ts` rolls three forms and knows nothing about models; this is where
+ * that vocabulary meets the kit. A short `BLOCK` becomes a slab and a tall one
+ * a tower, which is the one place the block's own height changes what it is
+ * rather than only how big it is.
+ */
+function pieceFor(block: Block): Piece {
+  switch (block.form) {
     case 'BLOCK':
-      return <boxGeometry args={[1, 1, 1]} />;
+      return block.height < 34 ? 'SLAB' : 'BLOCK_TOWER';
     case 'TAPER':
-      return <cylinderGeometry args={[0.34, 0.5, 1, 4]} />;
+      return 'TERRACE';
     case 'TOWER':
-      return <cylinderGeometry args={[0.46, 0.5, 1, 8]} />;
+      return 'SPIRE';
   }
+}
+
+/**
+ * One piece's geometry, ready to be instanced.
+ *
+ * Shifted down half a unit on load. The pieces are exported standing on zero
+ * so that Blender's own maths is readable; every placement in this file was
+ * written for centred primitives, and moving the geometry once is cheaper than
+ * moving every placement.
+ */
+function usePieceGeometry(piece: Piece): BufferGeometry | null {
+  const { scene } = useGLTF(PIECE_MODEL[piece]);
+
+  return useMemo(() => {
+    let found: BufferGeometry | null = null;
+    scene.traverse((node: Object3D) => {
+      if (found === null && node instanceof Mesh) {
+        const geometry: unknown = node.geometry;
+        if (geometry instanceof BufferGeometry) {
+          found = geometry.clone();
+          found.translate(0, -0.5, 0);
+        }
+      }
+    });
+    return found;
+  }, [scene]);
+}
+
+function PieceField({
+  piece,
+  placements,
+  children,
+}: {
+  readonly piece: Piece;
+  readonly placements: readonly Placement[];
+  readonly children: JSX.Element;
+}): JSX.Element | null {
+  const geometry = usePieceGeometry(piece);
+
+  if (geometry === null || placements.length === 0) {
+    return null;
+  }
+
+  return (
+    <InstancedField placements={placements}>
+      <primitive key={`geometry-${piece}`} object={geometry} attach="geometry" />
+      {children}
+    </InstancedField>
+  );
 }
 
 /**
