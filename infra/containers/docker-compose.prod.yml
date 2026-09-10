@@ -1,0 +1,112 @@
+# A whole deployment on one host.
+#
+#   cp .env.example .env      # then fill it in; every value is required
+#   docker compose -f infra/containers/docker-compose.prod.yml --profile bundled-database up -d --build
+#
+# See docs/operations/deployment.md. This is the reference composition — the
+# order things start in, what each one needs, and what has to be true before the
+# first round. Managed PostgreSQL and Redis are OPEN production decisions
+# (§59.3), so the database here sits behind a profile: without it, `DATABASE_URL`
+# points wherever a deployment decided, and nothing in this file assumes.
+
+name: ponswars
+
+services:
+  # -----------------------------------------------------------------------
+  # Optional single-host database. `--profile bundled-database` to run it.
+  # A managed instance is the production answer and is not this file's to make.
+  # -----------------------------------------------------------------------
+  postgres:
+    profiles: ['bundled-database']
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      # Deterministic collation, so an ORDER BY behaves the same here as
+      # anywhere else regardless of the host locale.
+      POSTGRES_INITDB_ARGS: '--locale-provider=icu --icu-locale=und-x-icu'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Not published. Nothing outside this network needs to reach the database,
+    # and a port published on a host is a port on the internet more often than
+    # anyone intends.
+
+  # -----------------------------------------------------------------------
+  # Schema, applied once before the server starts (§49).
+  # -----------------------------------------------------------------------
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/containers/server.Dockerfile
+    image: ponswars-server:${PONSWARS_VERSION:-local}
+    restart: 'no'
+    command: ['node', 'dist/migrate.js']
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+  # -----------------------------------------------------------------------
+  # The service: round driver, REST API and realtime gateway (§21.3).
+  # -----------------------------------------------------------------------
+  server:
+    build:
+      context: ../..
+      dockerfile: infra/containers/server.Dockerfile
+    image: ponswars-server:${PONSWARS_VERSION:-local}
+    restart: unless-stopped
+    # Every parameter in the table, and no defaults: startup reports all of
+    # them at once and refuses rather than guessing (§65.2, §102).
+    env_file:
+      - ../../.env
+    ports:
+      - '${API_PORT}:${API_PORT}'
+      - '${GATEWAY_PORT}:${GATEWAY_PORT}'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # Readiness rather than liveness: the process answers `/v1/health` before
+      # it has a round, and a container reported healthy in that window is one
+      # a load balancer sends traffic to too early.
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:${API_PORT}/v1/ready || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    # §25 stops the driver between rounds, and a finalization has writes to
+    # finish. Long enough for the step in flight; not long enough to hang a
+    # deploy.
+    stop_grace_period: 45s
+
+  # -----------------------------------------------------------------------
+  # The client (§80). Static files; the API and gateway URLs are compiled in.
+  # -----------------------------------------------------------------------
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/containers/web.Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:?set VITE_API_URL in .env}
+        VITE_WS_URL: ${VITE_WS_URL:?set VITE_WS_URL in .env}
+    image: ponswars-web:${PONSWARS_VERSION:-local}
+    restart: unless-stopped
+    ports:
+      - '${WEB_PORT:-8080}:8080'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
