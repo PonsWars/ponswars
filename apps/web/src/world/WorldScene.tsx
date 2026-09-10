@@ -243,6 +243,25 @@ function useReshuffleReader(): () => ReshuffleFrame {
   );
 }
 
+/**
+ * The bands of light up the core's spires.
+ *
+ * Derived from `CORE_SPIRES` rather than placed beside it, so a spire that
+ * moves or changes height takes its lights with it. Spaced by height rather
+ * than by count: a short spire with as many bands as a tall one reads as a
+ * different kind of building.
+ */
+const CORE_LIGHTS: readonly Placement[] = CORE_SPIRES.flatMap((spire) => {
+  const bands = Math.max(2, Math.round(spire.height / 34));
+  return Array.from({ length: bands }, (_, index) => ({
+    // Evenly up the shaft, stopping short of the roof so the top edge stays a
+    // silhouette against the sky.
+    position: [spire.x, ((index + 1) / (bands + 0.4)) * spire.height, spire.z] as const,
+    scale: [spire.width * 1.04, 2.4, spire.width * 1.04] as const,
+    rotation: [0, 0, 0] as const,
+  }));
+});
+
 function MarketCore(): JSX.Element {
   const core = useRef<Group>(null);
   const beacon = useRef<Mesh>(null);
@@ -292,6 +311,17 @@ function MarketCore(): JSX.Element {
           />
         </mesh>
       ))}
+
+      {/* Lit bands up every spire.
+          §38.2 makes the core the thing a player orients by, and a landmark is
+          found by its light before it is read by its shape. Unlit, the tallest
+          structure in the world was also the dullest object in it — five
+          islands with glowing decks around a grey silhouette. The colour is the
+          core's own: it belongs to no faction, and §38.3 keeps it that way. */}
+      <InstancedField placements={CORE_LIGHTS}>
+        <boxGeometry key="core-band" args={[1, 1, 1]} />
+        <meshBasicMaterial key="core-band-material" color="#4fd8c0" transparent opacity={0.72} />
+      </InstancedField>
 
       {/* The beacon at the summit. One bright point the eye returns to, and
           the thing that swells while the rest of the world is apart (§15 step
