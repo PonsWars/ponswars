@@ -8,6 +8,8 @@ import {
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
 import { FactionEmblem } from '../art/FactionEmblem.js';
+import { FactionStandard } from '../art/FactionStandard.js';
+import { UnitIcon } from '../art/UnitIcon.js';
 import { captionStyle, controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
 import type { Route } from '../routing/route.js';
 
@@ -178,31 +180,29 @@ function FactionDetail({ ticker }: { readonly ticker: ActiveTicker }): JSX.Eleme
         style={{
           ...panelStyle,
           display: 'grid',
-          gap: 'var(--pw-space-3)',
+          gridTemplateColumns: 'auto 1fr',
+          alignItems: 'center',
+          gap: 'var(--pw-space-5)',
           borderLeft: `2px solid ${accent}`,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--pw-space-3)' }}>
-          <FactionEmblem ticker={ticker} size={56} />
+        {/* The army's own flag, at the size a flag is read at. Every delivered
+            battlefield frame hangs one of these either side of a sector; a
+            dossier headed by a 56-pixel mark is a directory entry. */}
+        <FactionStandard ticker={ticker} height={220} />
+
+        <div style={{ display: 'grid', gap: 'var(--pw-space-3)', minWidth: 0 }}>
           <div>
             <div style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>{ticker}</div>
             <h1 style={{ ...readoutStyle, margin: 0, fontSize: 28 }}>
               {faction.name.toUpperCase()}
             </h1>
           </div>
-        </div>
 
-        <p
-          style={{
-            margin: 0,
-            color: 'var(--pw-text-2)',
-            fontSize: 14,
-            lineHeight: 1.6,
-            maxWidth: 620,
-          }}
-        >
-          {faction.identity}
-        </p>
+          <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 14, lineHeight: 1.6 }}>
+            {faction.identity}
+          </p>
+        </div>
       </header>
 
       <section style={{ display: 'grid', gap: 'var(--pw-space-3)' }}>
@@ -215,9 +215,26 @@ function FactionDetail({ ticker }: { readonly ticker: ActiveTicker }): JSX.Eleme
           }}
         >
           {UNIT_SLOTS.map((slot) => (
-            <div key={slot} style={{ ...panelStyle, display: 'grid', gap: 4 }}>
-              <div style={{ ...captionStyle, fontSize: 9, color: accent }}>{SLOT_LABEL[slot]}</div>
-              <div style={{ ...readoutStyle, fontSize: 15 }}>{faction.units[slot]}</div>
+            <div
+              key={slot}
+              style={{
+                ...panelStyle,
+                display: 'grid',
+                gridTemplateColumns: 'auto 1fr',
+                alignItems: 'center',
+                gap: 'var(--pw-space-3)',
+              }}
+            >
+              {/* The class, drawn once and tinted by whoever fields it (§36.8).
+                  A dossier that names five units and shows none of them is a
+                  table of strings. */}
+              <UnitIcon slot={slot} color={accent} size={30} />
+              <div style={{ display: 'grid', gap: 2 }}>
+                <div style={{ ...captionStyle, fontSize: 9, color: accent }}>
+                  {SLOT_LABEL[slot]}
+                </div>
+                <div style={{ ...readoutStyle, fontSize: 15 }}>{faction.units[slot]}</div>
+              </div>
             </div>
           ))}
         </div>

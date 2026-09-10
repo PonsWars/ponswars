@@ -2,6 +2,7 @@ import { FACTIONS, type ActiveTicker, type ConfidenceSnapshot } from '@ponswars/
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
 import { FactionEmblem } from '../art/FactionEmblem.js';
+import { UnitIcon } from '../art/UnitIcon.js';
 import { captionStyle, humanize, panelStyle } from './styles.js';
 
 /**
@@ -94,7 +95,20 @@ export function BattleIntel({
       >
         <div style={{ ...captionStyle, fontSize: 9, marginBottom: 2 }}>ORDER OF BATTLE</div>
         {PREVIEW_SLOTS.map(([slot, caption]) => (
-          <Signal key={slot} caption={caption} value={FACTIONS[ticker].units[slot]} align={align} />
+          <div
+            key={slot}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--pw-space-2)',
+              flexDirection: align === 'right' ? 'row-reverse' : 'row',
+            }}
+          >
+            <UnitIcon slot={slot} color={accent} size={16} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Signal caption={caption} value={FACTIONS[ticker].units[slot]} align={align} />
+            </div>
+          </div>
         ))}
       </div>
     </div>
