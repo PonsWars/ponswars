@@ -7,6 +7,7 @@ import {
   currentSequence,
   disconnect,
   EMPTY_HUB,
+  identify,
   publish,
   subscribe,
   subscriberCount,
@@ -85,6 +86,66 @@ describe('private channels', () => {
     hub = subscribe(hub, 'c1', walletChannel(ALICE)).state;
     const delivery = publish(hub, 'GENESIS_REVEALED', walletChannel(ALICE), AT, {});
     expect(delivery.recipients).toHaveLength(0);
+  });
+});
+
+describe('proving a wallet after connecting', () => {
+  /**
+   * §48.2 over a browser socket (§45.2).
+   *
+   * A browser cannot put an `Authorization` header on a WebSocket, so it
+   * connects as a spectator and proves its wallet in a frame. Without this
+   * there is no path by which any browser reaches its own channel.
+   */
+
+  it('opens the wallet channel to a connection that proved it', () => {
+    let hub = hubWith({ id: 'c1', wallet: null });
+    expect(subscribe(hub, 'c1', walletChannel(ALICE)).outcome.kind).toBe('DENIED');
+
+    hub = identify(hub, 'c1', ALICE);
+
+    expect(subscribe(hub, 'c1', walletChannel(ALICE)).outcome.kind).toBe('SUBSCRIBED');
+  });
+
+  it('takes the channel away again when the session ends', () => {
+    // The case this reducer exists for rather than a tidier `connect`. A
+    // connection that kept its wallet channel through a sign-out would go on
+    // delivering one player's private events to a session that is no longer
+    // theirs.
+    let hub = hubWith({ id: 'c1', wallet: ALICE });
+    hub = subscribe(hub, 'c1', walletChannel(ALICE)).state;
+
+    hub = identify(hub, 'c1', null);
+
+    expect(channelsOf(hub, 'c1')).toHaveLength(0);
+    expect(publish(hub, 'PICK_CONFIRMED', walletChannel(ALICE), AT, {}).recipients).toHaveLength(0);
+  });
+
+  it('drops the previous wallet’s channel when a different wallet signs in', () => {
+    // Two wallets in one tab. Keeping the first one's channel would be the same
+    // leak as a sign-out that kept it.
+    let hub = hubWith({ id: 'c1', wallet: ALICE });
+    hub = subscribe(hub, 'c1', walletChannel(ALICE)).state;
+
+    hub = identify(hub, 'c1', BOB);
+
+    expect(channelsOf(hub, 'c1')).toEqual([]);
+    expect(subscribe(hub, 'c1', walletChannel(BOB)).outcome.kind).toBe('SUBSCRIBED');
+  });
+
+  it('leaves public subscriptions alone', () => {
+    // Signing in must not interrupt what someone is watching. §5 makes the
+    // world the thing; the wallet is an addition to it.
+    let hub = hubWith({ id: 'c1', wallet: null });
+    hub = subscribe(hub, 'c1', WORLD_CHANNEL).state;
+
+    hub = identify(hub, 'c1', ALICE);
+
+    expect(channelsOf(hub, 'c1')).toEqual([WORLD_CHANNEL]);
+  });
+
+  it('ignores a connection it does not have', () => {
+    expect(identify(EMPTY_HUB, 'nobody', ALICE)).toEqual(EMPTY_HUB);
   });
 });
 

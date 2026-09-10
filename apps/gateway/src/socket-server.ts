@@ -59,6 +59,19 @@ export interface RunningSocketServer {
 export function startSocketServer(options: SocketServerOptions): RunningSocketServer {
   const sockets = new Map<string, WebSocket>();
 
+  /**
+   * The wallet behind a token, and never a thrown error.
+   *
+   * A session store that is unreachable makes a connection a spectator here,
+   * unlike at connection time where it closes the socket. The difference is
+   * what the client is doing: at connect it has just loaded and can retry
+   * cleanly, while here it is a live connection watching a round, and taking
+   * that away is worse than answering "you are watching as a spectator" — which
+   * the client can see and act on.
+   */
+  const resolve = (token: string): Promise<WalletAddress | null> =>
+    token === '' ? Promise.resolve(null) : options.walletOf(`Bearer ${token}`).catch(() => null);
+
   const gateway = new Gateway((connectionId, frame) => {
     const socket = sockets.get(connectionId);
     // `readyState === OPEN` rather than a try/catch: a socket that closed
@@ -97,24 +110,67 @@ export function startSocketServer(options: SocketServerOptions): RunningSocketSe
     const connectionId = randomUUID();
     sockets.set(connectionId, socket);
 
-    // Paused until the wallet is known. Resolving a session is a database read
-    // now (§45.2), and a client that subscribes in its first frame would
-    // otherwise be answered by a gateway that had not opened its connection
-    // yet — a spectator's subscription refused, or worse, a player's accepted
-    // as a spectator's. `pause` stops the socket being read at all, so the
-    // frames simply arrive a few milliseconds later, in order.
-    socket.pause();
-
     let opened = false;
 
-    socket.on('message', (data) => {
-      // A frame cannot arrive before the connection opens — the socket is
-      // paused until then — but it can arrive after the lookup failed and the
-      // socket was resumed to close it cleanly. There is no connection to
-      // receive it into.
-      if (opened) {
-        gateway.receive(connectionId, decodeFrame(data));
+    /**
+     * Frames handled strictly in order, including the ones that wait.
+     *
+     * Two things here are asynchronous now: opening a connection resolves a
+     * session (§45.2), and so does `AUTHENTICATE`. Both change *who* the
+     * connection is, and a `SUBSCRIBE` that overtook either would be decided
+     * against the wrong wallet — a player's own channel refused as a
+     * spectator's, or a signed-out session still holding one.
+     *
+     * A promise chain rather than pausing the socket, because pausing does not
+     * do this: `ws` has already parsed whatever arrived in the same read, and
+     * emits those frames regardless. Two frames sent in one tick — which is
+     * exactly what signing in and subscribing looks like — arrive together.
+     */
+    let queue: Promise<void> = options.walletOf(request.headers.authorization).then(
+      (wallet) => {
+        if (socket.readyState !== socket.OPEN) {
+          // Closed while we were asking. Nothing was opened, so there is
+          // nothing to close.
+          sockets.delete(connectionId);
+          return;
+        }
+        gateway.open(connectionId, wallet);
+        opened = true;
+      },
+      () => {
+        // The session store is unreachable. §5 makes spectating the normal
+        // case, so the tempting thing is to carry on as a spectator — and that
+        // would silently downgrade a player mid-round. Closing says what
+        // happened and lets the client retry.
+        sockets.delete(connectionId);
+        socket.close(1011, 'authentication unavailable');
+      },
+    );
+
+    const handle = async (raw: string): Promise<void> => {
+      // The connection never opened — the lookup failed and the socket is on
+      // its way out. There is nothing to receive this into.
+      if (!opened) {
+        return;
       }
+
+      // `AUTHENTICATE` is the one frame this layer answers itself, because it
+      // is the one that needs a session store. Everything else is a pure state
+      // transition and belongs to the gateway.
+      const token = authenticateToken(raw);
+      if (token === null) {
+        gateway.receive(connectionId, raw);
+        return;
+      }
+      gateway.identify(connectionId, await resolve(token));
+    };
+
+    socket.on('message', (data) => {
+      const raw = decodeFrame(data);
+      // Chained, never awaited here: the handler is synchronous, and the queue
+      // is what carries the order. A failure is swallowed rather than left to
+      // poison every frame behind it.
+      queue = queue.then(() => handle(raw)).catch(() => undefined);
     });
 
     const forget = (): void => {
@@ -127,32 +183,6 @@ export function startSocketServer(options: SocketServerOptions): RunningSocketSe
     // A socket that errors is gone whether or not `close` follows, and leaving
     // it registered would keep sending frames nobody receives.
     socket.on('error', forget);
-
-    void options.walletOf(request.headers.authorization).then(
-      (wallet) => {
-        if (socket.readyState !== socket.OPEN) {
-          // Closed while we were asking. Nothing was opened, so there is
-          // nothing to close.
-          sockets.delete(connectionId);
-          return;
-        }
-        gateway.open(connectionId, wallet);
-        opened = true;
-        socket.resume();
-      },
-      () => {
-        // The session store is unreachable. §5 makes spectating the normal
-        // case, so the tempting thing is to carry on as a spectator — and that
-        // would silently downgrade a player mid-round. Closing says what
-        // happened and lets the client retry.
-        sockets.delete(connectionId);
-        // Resumed first, or the close never completes: a closing handshake ends
-        // when the peer's own close frame is read, and a paused socket reads
-        // nothing. The connection would sit half-closed until a timeout.
-        socket.resume();
-        socket.close(1011, 'authentication unavailable');
-      },
-    );
   });
 
   return {
@@ -193,4 +223,34 @@ export function decodeFrame(data: RawData): string {
     return data.toString('utf8');
   }
   return Buffer.from(data).toString('utf8');
+}
+
+/**
+ * The token from an `AUTHENTICATE` frame, or `null` for anything else.
+ *
+ * A narrow, allocation-cheap look rather than a full parse: every other frame
+ * is parsed once, by the gateway, and this must not become a second place that
+ * decides what a frame means. An empty-string token is a real answer — it is
+ * how a client says it has signed out — which is why absence is `null` and not
+ * an empty string.
+ */
+export function authenticateToken(raw: string): string | null {
+  // Cheap enough to run on every frame, and skips the parse for the ones that
+  // could not possibly be this.
+  if (!raw.includes('AUTHENTICATE')) {
+    return null;
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+  const frame = value as Record<string, unknown>;
+  return frame['type'] === 'AUTHENTICATE' && typeof frame['token'] === 'string'
+    ? frame['token']
+    : null;
 }

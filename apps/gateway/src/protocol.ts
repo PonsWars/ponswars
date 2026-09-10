@@ -3,9 +3,9 @@ import type { Channel } from '@ponswars/realtime';
 /**
  * What a client may send, and what it gets back (§48, §70.1).
  *
- * Four messages in, three out. §37.1 makes PonsWars a place rather than a page,
+ * Four messages in, four out. §37.1 makes PonsWars a place rather than a page,
  * and a place needs very little protocol: say what you want to watch, stop
- * watching, and prove you are still there.
+ * watching, prove you are still there, and say who you are.
  *
  * Parsed defensively because this arrives from the network. A frame that is not
  * one of these is answered rather than ignored — a client sending something the
@@ -16,7 +16,17 @@ export type ClientMessage =
   | { readonly type: 'SUBSCRIBE'; readonly channel: Channel }
   | { readonly type: 'UNSUBSCRIBE'; readonly channel: Channel }
   /** Liveness. The server answers `PONG` so a client can measure the round trip. */
-  | { readonly type: 'PING'; readonly sentAt: number };
+  | { readonly type: 'PING'; readonly sentAt: number }
+  /**
+   * Proves the wallet behind this connection (§48.2, §45.2).
+   *
+   * A frame rather than a handshake header, because a browser cannot set one
+   * on a WebSocket — and not a query parameter either, because that is the one
+   * place a credential is certain to be written to a log. An empty token signs
+   * the connection out, which is the same message a client sends when a player
+   * disconnects their wallet without leaving the page.
+   */
+  | { readonly type: 'AUTHENTICATE'; readonly token: string };
 
 export type ServerMessage =
   /**
@@ -29,6 +39,14 @@ export type ServerMessage =
   | { readonly type: 'SUBSCRIBED'; readonly channel: Channel; readonly sequence: number }
   | { readonly type: 'UNSUBSCRIBED'; readonly channel: Channel }
   | { readonly type: 'PONG'; readonly sentAt: number; readonly serverTime: number }
+  /**
+   * The wallet this connection has proven, or `null` after signing out.
+   *
+   * Answered even when the token was not accepted, with `null`: the client
+   * needs to know what the connection *is*, and "your token did not work" and
+   * "you are a spectator" are the same fact from here.
+   */
+  | { readonly type: 'AUTHENTICATED'; readonly wallet: string | null }
   /**
    * Something was refused, with a reason.
    *
@@ -64,6 +82,13 @@ export function parseClientMessage(raw: string): ClientMessage | { readonly erro
         return { error: `${message['type']} needs a channel.` };
       }
       return { type: message['type'], channel };
+    }
+    case 'AUTHENTICATE': {
+      const token = message['token'];
+      if (typeof token !== 'string') {
+        return { error: 'AUTHENTICATE needs a token.' };
+      }
+      return { type: 'AUTHENTICATE', token };
     }
     case 'PING': {
       const sentAt = message['sentAt'];

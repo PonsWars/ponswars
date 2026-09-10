@@ -68,6 +68,33 @@ function nextFrame(socket: WebSocket): Promise<Record<string, unknown>> {
   });
 }
 
+/**
+ * The next `count` frames, in the order they arrive.
+ *
+ * Needed wherever a test expects more than one: awaiting `nextFrame` twice
+ * attaches the second listener after the first has resolved, so a frame that
+ * arrives in between is simply lost and the test hangs on a frame that already
+ * came. This attaches once and collects.
+ */
+function nextFrames(socket: WebSocket, count: number): Promise<Record<string, unknown>[]> {
+  return new Promise((resolve, reject) => {
+    const received: Record<string, unknown>[] = [];
+    const timer = setTimeout(() => {
+      socket.off('message', onMessage);
+      reject(new Error(`Only ${String(received.length)} of ${String(count)} frames arrived.`));
+    }, 1_000);
+    const onMessage = (data: RawData): void => {
+      received.push(JSON.parse(decodeFrame(data)) as Record<string, unknown>);
+      if (received.length === count) {
+        clearTimeout(timer);
+        socket.off('message', onMessage);
+        resolve(received);
+      }
+    };
+    socket.on('message', onMessage);
+  });
+}
+
 describe('a real connection', () => {
   it('subscribes and is told where the channel stands', async () => {
     const { url } = start(() => null);
@@ -158,6 +185,81 @@ describe('authorisation over the wire', () => {
 
     socket.send(JSON.stringify({ type: 'SUBSCRIBE', channel: WORLD_CHANNEL }));
     expect(await nextFrame(socket)).toMatchObject({ type: 'SUBSCRIBED' });
+  });
+});
+
+describe('proving a wallet in a frame', () => {
+  /**
+   * The only path a browser has (§48.2, §45.2).
+   *
+   * A browser cannot put an `Authorization` header on a WebSocket — the API has
+   * no room for one — so without this every browser client would be a spectator
+   * on the socket forever, and §48.2's private events would be unreachable from
+   * the only client this product has.
+   */
+
+  it('turns a spectator connection into that wallet', async () => {
+    const { url } = start((auth) => (auth === 'Bearer alice-token' ? ALICE : null));
+    const socket = await client(url);
+
+    socket.send(JSON.stringify({ type: 'AUTHENTICATE', token: 'alice-token' }));
+    expect(await nextFrame(socket)).toEqual({ type: 'AUTHENTICATED', wallet: ALICE });
+
+    socket.send(JSON.stringify({ type: 'SUBSCRIBE', channel: walletChannel(ALICE) }));
+    expect(await nextFrame(socket)).toMatchObject({ type: 'SUBSCRIBED' });
+  });
+
+  it('answers a token it does not recognise, as a spectator', async () => {
+    // Not an error frame: "your token did not work" and "you are watching as a
+    // spectator" are the same fact from here, and the client needs the second
+    // one to render.
+    const { url } = start(() => null);
+    const socket = await client(url);
+
+    socket.send(JSON.stringify({ type: 'AUTHENTICATE', token: 'stale' }));
+
+    expect(await nextFrame(socket)).toEqual({ type: 'AUTHENTICATED', wallet: null });
+  });
+
+  it('decides the next frame against the new wallet, not the old one', async () => {
+    // The ordering the queue exists for. A client signs in and subscribes in
+    // the same tick — which is what signing in looks like — and the
+    // subscription must not be judged against the spectator this connection was
+    // a moment ago. Pausing the socket does not achieve this: `ws` has already
+    // parsed both frames out of one read and emits them regardless.
+    const { url } = start((auth) => (auth === 'Bearer alice-token' ? ALICE : null));
+    const socket = await client(url);
+    const answers = nextFrames(socket, 2);
+
+    socket.send(JSON.stringify({ type: 'AUTHENTICATE', token: 'alice-token' }));
+    socket.send(JSON.stringify({ type: 'SUBSCRIBE', channel: walletChannel(ALICE) }));
+
+    expect(await answers).toMatchObject([
+      { type: 'AUTHENTICATED', wallet: ALICE },
+      { type: 'SUBSCRIBED' },
+    ]);
+  });
+
+  it('takes the wallet channel away when the player signs out', async () => {
+    // The case that makes dropping subscriptions on identify necessary rather
+    // than tidy: a connection that kept its wallet channel through a sign-out
+    // would go on delivering one player's private events to a session that is
+    // no longer theirs.
+    const { url, server } = start((auth) => (auth === 'Bearer alice-token' ? ALICE : null));
+    const socket = await client(url);
+
+    socket.send(JSON.stringify({ type: 'AUTHENTICATE', token: 'alice-token' }));
+    await nextFrame(socket);
+    socket.send(JSON.stringify({ type: 'SUBSCRIBE', channel: walletChannel(ALICE) }));
+    await nextFrame(socket);
+
+    socket.send(JSON.stringify({ type: 'AUTHENTICATE', token: '' }));
+    expect(await nextFrame(socket)).toEqual({ type: 'AUTHENTICATED', wallet: null });
+
+    const delivered = nextFrame(socket).catch(() => null);
+    await server.gateway.publish('PICK_CONFIRMED', walletChannel(ALICE), AT, { ok: true });
+
+    expect(await delivered).toBeNull();
   });
 });
 

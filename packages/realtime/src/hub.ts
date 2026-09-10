@@ -54,6 +54,41 @@ export function connect(
 }
 
 /**
+ * Attaches a proven wallet to a connection that is already open (§48.2, §45.2).
+ *
+ * A browser cannot put an `Authorization` header on a WebSocket — the API has
+ * no room for one in the handshake — so a browser client connects as a
+ * spectator and proves its wallet in a frame. Without this there is no path by
+ * which any browser could ever subscribe to its own channel, which would make
+ * §48.2's private events unreachable from the only client this product has.
+ *
+ * Subscriptions the new wallet may not see are dropped rather than kept. The
+ * case that matters is signing out — `wallet` becomes `null` — and a connection
+ * that kept its wallet channel through that would go on delivering one
+ * player's private events to a session that is no longer theirs.
+ */
+export function identify(
+  state: HubState,
+  connectionId: string,
+  wallet: WalletAddress | null,
+): HubState {
+  const connection = state.connections[connectionId];
+  if (connection === undefined) {
+    return state;
+  }
+  return {
+    ...state,
+    connections: {
+      ...state.connections,
+      [connectionId]: {
+        wallet,
+        channels: connection.channels.filter((channel) => maySubscribe(channel, wallet)),
+      },
+    },
+  };
+}
+
+/**
  * Forgets a connection and everything it was listening to.
  *
  * The sequencer is deliberately untouched. Sequences belong to channels, not to

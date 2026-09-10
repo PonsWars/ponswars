@@ -3,6 +3,7 @@ import {
   currentSequence,
   disconnect,
   EMPTY_HUB,
+  identify,
   publish,
   subscribe,
   unsubscribe,
@@ -46,6 +47,24 @@ export class Gateway implements PublisherPort {
 
   close(connectionId: string): void {
     this.hub = disconnect(this.hub, connectionId);
+  }
+
+  /**
+   * A connection proved a wallet, or signed out (§48.2, §45.2).
+   *
+   * Separate from `receive` because resolving a session token is a database
+   * read and everything else here is a pure state transition. The socket
+   * binding does the asking — it is the half that knows what a token is — and
+   * hands the answer here, which keeps this class free of IO exactly as the
+   * hub is free of sockets.
+   *
+   * Answers `AUTHENTICATED` even when the wallet is `null`. A client that
+   * offered a token and heard nothing cannot tell a rejected token from a slow
+   * one.
+   */
+  identify(connectionId: string, wallet: WalletAddress | null): void {
+    this.hub = identify(this.hub, connectionId, wallet);
+    this.reply(connectionId, { type: 'AUTHENTICATED', wallet });
   }
 
   /**
