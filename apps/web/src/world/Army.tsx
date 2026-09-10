@@ -69,8 +69,8 @@ interface Strength {
 }
 
 const STRENGTH: Readonly<Record<DetailLevel, Strength>> = {
-  FULL: { mechs: 3, troopers: 10, walkers: 1 },
-  REDUCED: { mechs: 1, troopers: 4, walkers: 0 },
+  FULL: { mechs: 2, troopers: 7, walkers: 1 },
+  REDUCED: { mechs: 1, troopers: 2, walkers: 0 },
   SILHOUETTE: { mechs: 0, troopers: 0, walkers: 0 },
   CULLED: { mechs: 0, troopers: 0, walkers: 0 },
 };
@@ -366,11 +366,34 @@ function Unit({
     };
   }, [mixer, gltf.animations, clip, placement.x, placement.z]);
 
+  /**
+   * Everything this clone owns, released when it goes.
+   *
+   * This is not housekeeping. A unit is unmounted and remounted every time its
+   * sector changes detail level, which happens continuously as the camera
+   * moves — and each clone owns a `Skeleton`, which owns a bone texture on the
+   * GPU. Without this the world lost its WebGL context outright after a minute
+   * of flying around: `THREE.WebGLRenderer: Context Lost`, a black canvas, and
+   * no error anywhere to explain it.
+   *
+   * Only what the clone owns. `SkeletonUtils.clone` shares geometry with the
+   * original — every unit of a kind draws the same mesh — so disposing that
+   * would take the geometry out from under every other copy on the field.
+   */
   useEffect(() => {
     return () => {
-      // The mixer holds the clips bound to this clone. Left alone, a sector
-      // that drops to silhouette and back leaks one per unit per change.
       mixer.uncacheRoot(model);
+      model.traverse((node: Object3D) => {
+        if (node instanceof SkinnedMesh) {
+          node.skeleton.dispose();
+        }
+        if (node instanceof Mesh) {
+          const material: unknown = node.material;
+          if (material instanceof MeshStandardMaterial) {
+            material.dispose();
+          }
+        }
+      });
     };
   }, [mixer, model]);
 

@@ -14,18 +14,10 @@ import {
 } from '@ponswars/world-runtime';
 import { useGLTF } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type JSX,
-} from 'react';
-import { BackSide, BufferGeometry, Color, Mesh, Object3D, ShaderMaterial } from 'three';
-import type { Group, InstancedMesh, PerspectiveCamera, PointLight } from 'three';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { BackSide, Color, ShaderMaterial } from 'three';
+import type { BufferGeometry, Mesh } from 'three';
+import type { Group, PerspectiveCamera, PointLight } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
 import {
   MARKET_CORE,
@@ -37,6 +29,8 @@ import {
 } from './layout.js';
 import { Army } from './Army.js';
 import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigation-config.js';
+import { DeckProps } from './DeckProps.js';
+import { InstancedField, preparedGeometry, type Placement } from './InstancedField.js';
 import { SectorLabel } from './SectorLabel.js';
 import { WorldInput } from './WorldInput.js';
 import { WorldLighting } from './WorldLighting.js';
@@ -123,72 +117,6 @@ const CONTESTED_WIDTH = 76;
  */
 function terrainSeed(index: number, part: number): number {
   return index * 977 + part * 13;
-}
-
-/**
- * One instance of a shape, in the coordinate space of the field it belongs to.
- *
- * Positions rather than a scene graph, because these go through an
- * `InstancedMesh`: a hundred boxes as a hundred meshes is a hundred draw calls,
- * and §82.2 puts a frame budget on a world that has five of these fields in it
- * at once.
- */
-interface Placement {
-  readonly position: readonly [number, number, number];
-  readonly scale: readonly [number, number, number];
-  readonly rotation: readonly [number, number, number];
-}
-
-/**
- * A field of one shape, drawn in a single call.
- *
- * The geometry and material come in as children, so the same helper draws
- * buildings, their lit crowns, the rock under an island and the debris around
- * the world — four fields that differ in what they are made of and not at all
- * in how they are placed.
- *
- * Matrices are written in a layout effect rather than per frame: none of this
- * moves. Nothing here is animated, so nothing here costs anything after the
- * first commit.
- */
-function InstancedField({
-  placements,
-  children,
-}: {
-  readonly placements: readonly Placement[];
-  readonly children: readonly JSX.Element[];
-}): JSX.Element | null {
-  const field = useRef<InstancedMesh>(null);
-
-  useLayoutEffect(() => {
-    const mesh = field.current;
-    if (mesh === null) {
-      return;
-    }
-    const step = new Object3D();
-    for (const [index, placement] of placements.entries()) {
-      step.position.set(...placement.position);
-      step.rotation.set(...placement.rotation);
-      step.scale.set(...placement.scale);
-      step.updateMatrix();
-      mesh.setMatrixAt(index, step.matrix);
-    }
-    mesh.instanceMatrix.needsUpdate = true;
-    // The renderer culls against bounds it did not compute: the matrices were
-    // set here, so the sphere it inherited from a unit cube is wrong until it
-    // is told. Without this a field vanishes as soon as its centre leaves frame.
-    mesh.computeBoundingSphere();
-  }, [placements]);
-
-  if (placements.length === 0) {
-    return null;
-  }
-
-  return (
-    <instancedMesh ref={field} args={[undefined, undefined, placements.length]}>
-      {children}
-    </instancedMesh>
-  );
 }
 
 /**
@@ -650,9 +578,15 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
         </>
       ) : null}
 
-      {/* Two districts with that contested centre between them (§38.3). */}
-      <District side={-1} accent={leftAccent} detail={detail} seed={terrainSeed(index, 1)} />
-      <District side={1} accent={rightAccent} detail={detail} seed={terrainSeed(index, 2)} />
+      {/* Two districts with that contested centre between them (§38.3).
+          Suspended here, and this boundary is not optional: the structures are
+          loaded models now, and without a boundary of their own the nearest one
+          is the app's — so every island in the world would wait behind
+          `INITIALIZING WORLD` until the last district model arrived. */}
+      <Suspense fallback={null}>
+        <District side={-1} accent={leftAccent} detail={detail} seed={terrainSeed(index, 1)} />
+        <District side={1} accent={rightAccent} detail={detail} seed={terrainSeed(index, 2)} />
+      </Suspense>
 
       {/* The armies holding them (§38.3, §36.2).
           Suspended separately from the world so a sector draws the moment its
@@ -669,6 +603,15 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
           <Army side={1} accent={rightAccent} detail={detail} seed={terrainSeed(index, 5)} />
         </Suspense>
       ) : null}
+
+      {/* Supply, fuel and power behind each army (§38.5). A deck with only
+          soldiers on it is a parade ground; these are what say the army came
+          from somewhere. Suspended separately again — scenery must never be
+          the reason an island is late. */}
+      <Suspense fallback={null}>
+        <DeckProps side={-1} detail={detail} seed={terrainSeed(index, 6)} />
+        <DeckProps side={1} detail={detail} seed={terrainSeed(index, 7)} />
+      </Suspense>
 
       {/* Each side's forward base (§38.5).
           Temporary by definition: deployed into whichever sector the round
@@ -1003,19 +946,17 @@ function pieceFor(block: Block): Piece {
 function usePieceGeometry(piece: Piece): BufferGeometry | null {
   const { scene } = useGLTF(PIECE_MODEL[piece]);
 
-  return useMemo(() => {
-    let found: BufferGeometry | null = null;
-    scene.traverse((node: Object3D) => {
-      if (found === null && node instanceof Mesh) {
-        const geometry: unknown = node.geometry;
-        if (geometry instanceof BufferGeometry) {
-          found = geometry.clone();
-          found.translate(0, -0.5, 0);
-        }
-      }
-    });
-    return found;
-  }, [scene]);
+  return useMemo(
+    () =>
+      preparedGeometry(`piece:${piece}`, scene, (geometry) => {
+        // Shifted down half a unit. The pieces are exported standing on zero so
+        // that the Blender script's own maths is readable; every placement in
+        // this file was written for centred primitives, and moving the geometry
+        // once is cheaper than moving every placement.
+        geometry.translate(0, -0.5, 0);
+      }),
+    [scene, piece],
+  );
 }
 
 function PieceField({

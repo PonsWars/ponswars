@@ -83,6 +83,35 @@ const UNITS = [
   { from: 'quaternius-ultimate-space-kit/drone-flying.glb', to: 'units/drone-flying.glb' },
   { from: 'quaternius-ultimate-space-kit/dropship-a.glb', to: 'units/dropship-a.glb' },
   { from: 'quaternius-ultimate-space-kit/dropship-c.glb', to: 'units/dropship-c.glb' },
+
+  // Deck props. A district was a plate with an army standing on it; these are
+  // what make it a place the army came *from* — supply, power, fuel. Static
+  // meshes, so unlike the units they instance, and a hundred of them cost one
+  // draw call each.
+  {
+    from: 'kenney_city-kit-industrial/Models/GLB format/shipping-container-a.glb',
+    to: 'props/container-a.glb',
+  },
+  {
+    from: 'kenney_city-kit-industrial/Models/GLB format/shipping-container-b.glb',
+    to: 'props/container-b.glb',
+  },
+  {
+    from: 'kenney_city-kit-industrial/Models/GLB format/detail-tank.glb',
+    to: 'props/tank.glb',
+  },
+  {
+    from: 'kenney_city-kit-industrial/Models/GLB format/detail-tank-large.glb',
+    to: 'props/tank-large.glb',
+  },
+  {
+    from: 'kenney_city-kit-industrial/Models/GLB format/chimney-medium.glb',
+    to: 'props/chimney.glb',
+  },
+  {
+    from: 'kenney_city-kit-industrial/Models/GLB format/water-tower.glb',
+    to: 'props/water-tower.glb',
+  },
 ];
 
 const io = new NodeIO().registerExtensions(KHRONOS_EXTENSIONS);

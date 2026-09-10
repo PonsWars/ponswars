@@ -6,6 +6,21 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@ponswars/web", "dev", "--port", "5173"],
       "port": 5173
+    },
+    {
+      "name": "web-built",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@ponswars/web",
+        "exec",
+        "vite",
+        "preview",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
+      "port": 5174
     }
   ]
 }
