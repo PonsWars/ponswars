@@ -14,11 +14,11 @@ import type { DetailLevel } from '@ponswars/world-runtime';
  *
  * ## It says nothing the frontline does not
  *
- * Each round travels from a side's own line toward the frontline marker and
- * stops there. That is the whole of the information in it, and it is
- * information the marker already carries — §13 makes the battlefield a
- * visualisation of authoritative momentum, so fire that reached further than
- * the line, or fell short of it, would be a second and wrong answer.
+ * Each round travels from a side's own line to the frontline marker and flares
+ * there. That is the whole of the information in it, and it is information the
+ * marker already carries — §13 makes the battlefield a visualisation of
+ * authoritative momentum, so fire that reached past the line, or fell short of
+ * it, would be a second and wrong answer to the question the marker settles.
  *
  * Nothing is hit. There is no damage model here and there must not be one: the
  * outcome of a battle is §12's scoring, computed on the server from market
@@ -48,6 +48,15 @@ const REACH = 38;
 
 /** How far apart rounds sit along the line, inside the deck's own 96. */
 const LANE_SPREAD = 78;
+
+/**
+ * How much of a round's flight is spent as an impact rather than a streak.
+ *
+ * Fire that simply vanished at the line read as rounds falling short. A flare
+ * at the end says the two armies are reaching each other, which is the whole
+ * claim the tracers are making.
+ */
+const IMPACT_SHARE = 0.16;
 
 /**
  * How long one round takes to cross, in seconds.
@@ -110,13 +119,24 @@ export function Tracers({
       const along = travel - Math.floor(travel);
 
       const from = side * MUZZLE;
-      const x = from + (line - from) * along;
 
-      step.position.set(x, lane.height, lane.z);
+      if (along > 1 - IMPACT_SHARE) {
+        // The last stretch of the flight, spent at the line as a flare that
+        // opens and closes. Nothing is hit — §12 decides a battle on the server
+        // from market data, and there is no damage model here to be wrong.
+        const burst = (along - (1 - IMPACT_SHARE)) / IMPACT_SHARE;
+        const flare = Math.sin(burst * Math.PI);
+        step.position.set(line, lane.height, lane.z);
+        step.scale.setScalar(0.6 + flare * 3.4);
+      } else {
+        const travel = along / (1 - IMPACT_SHARE);
+        step.position.set(from + (line - from) * travel, lane.height, lane.z);
+        // Stretched along its own flight and thin across it: a round is read as
+        // a streak, and a streak is a shape rather than a dot that moved.
+        step.scale.set(7, 0.5, 0.5);
+      }
+
       step.rotation.set(0, 0, 0);
-      // Stretched along its own flight and thin across it: a round is read as a
-      // streak, and a streak is a shape rather than a dot that moved.
-      step.scale.set(7, 0.5, 0.5);
       step.updateMatrix();
       field.setMatrixAt(index, step.matrix);
     }
