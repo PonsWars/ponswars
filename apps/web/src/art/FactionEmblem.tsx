@@ -37,7 +37,7 @@ const FRAME = 'M32 2 L60 32 L32 62 L4 32 Z';
  * resemblance at small sizes, where the detail of any individual device stops
  * being legible and only its silhouette remains.
  */
-const DEVICE: Readonly<Record<ActiveTicker, readonly string[]>> = {
+export const FACTION_DEVICE: Readonly<Record<ActiveTicker, readonly string[]>> = {
   // Compute cluster: three blades, tallest at the centre.
   NVDA: [
     'M32 12 L37 32 L32 46 L27 32 Z',
@@ -110,7 +110,7 @@ export function FactionEmblem({
       style={{ display: 'block', flex: 'none' }}
     >
       <path d={FRAME} fill="none" stroke={tint} strokeWidth={2.5} opacity={0.55} />
-      {DEVICE[ticker].map((d, index) => (
+      {FACTION_DEVICE[ticker].map((d, index) => (
         // `evenodd`, so a second subpath inside the first cuts a hole instead of
         // painting over it. Three of these devices are apertures rather than
         // solids, and without this they render as filled diamonds.
