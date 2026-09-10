@@ -116,7 +116,7 @@ beforeEach(() => {
     picks,
     config: CONFIG,
     allowedOrigins: [ALLOWED_ORIGIN],
-    finalizedResult: (battleId) => finalized.get(battleId) ?? null,
+    finalizedResult: (battleId) => Promise.resolve(finalized.get(battleId) ?? null),
     now: () => now,
     // Any bearer token is treated as that wallet. Signature verification is
     // §45.2 and belongs to the auth service; these tests are about the routes.
@@ -401,7 +401,7 @@ function startingServer(): FastifyInstance {
     picks,
     config: CONFIG,
     allowedOrigins: [ALLOWED_ORIGIN],
-    finalizedResult: () => null,
+    finalizedResult: () => Promise.resolve(null),
     now: () => now,
     walletOf: () => null,
   });

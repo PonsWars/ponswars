@@ -172,9 +172,11 @@ async function main(): Promise<void> {
     // immutable once it exists, so there is nothing to cache and nothing that
     // could go stale — a second copy would only be a second thing to be wrong.
     finalizedResult: (battleId) =>
-      store.finalizations
-        .flatMap((finalization) => finalization.results)
-        .find((result) => result.battleId === battleId) ?? null,
+      Promise.resolve(
+        store.finalizations
+          .flatMap((finalization) => finalization.results)
+          .find((result) => result.battleId === battleId) ?? null,
+      ),
     picks,
     config: CONFIG,
     now,

@@ -93,8 +93,13 @@ export interface ServerDeps {
    * A lookup rather than a store, because §25 makes a result immutable once it
    * exists and this endpoint only reads. Where the results are kept is the
    * store adapter's business (§102) and not this server's.
+   *
+   * Asynchronous because every store that outlives a process is: the lookup is
+   * a query. A synchronous signature was only possible while the sole
+   * implementation was an array in memory, and it would have made the durable
+   * one — the one deployments actually run — impossible to write.
    */
-  readonly finalizedResult: (battleId: string) => FinalizedBattleResult | null;
+  readonly finalizedResult: (battleId: string) => Promise<FinalizedBattleResult | null>;
 }
 
 /** Correlation id for one request, so an error can be traced (§110.5). */
@@ -468,9 +473,9 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
    * cannot show one after a reload, and the result screen is reached *after*
    * the battle it describes has ended.
    */
-  app.get('/v1/battles/:battleId/result', (request, reply) => {
+  app.get('/v1/battles/:battleId/result', async (request, reply) => {
     const { battleId } = request.params as { battleId: string };
-    const result = deps.finalizedResult(battleId);
+    const result = await deps.finalizedResult(battleId);
     if (result === null) {
       return send(reply, resultNotFound(battleId, correlationId()));
     }
