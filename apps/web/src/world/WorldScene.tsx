@@ -600,6 +600,19 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
             <boxGeometry args={[CONTESTED_WIDTH, 0.6, 150]} />
             <meshBasicMaterial color="#0b1a22" transparent opacity={0.85} />
           </mesh>
+
+          {/* Lit paving across it. Every delivered frame has a floor that
+              carries light — it is what tells you the ground is built rather
+              than poured, and with bloom on it is what puts light under the
+              armies instead of only above them.
+
+              Dim on purpose: kept under the bloom threshold so the floor reads
+              as lit rather than as another source. What glows here is what
+              stands on it. */}
+          <InstancedField placements={CONTESTED_PAVING}>
+            <boxGeometry key="paving" args={[1, 1, 1]} />
+            <meshBasicMaterial key="paving-material" color="#2f6f86" transparent opacity={0.4} />
+          </InstancedField>
         </>
       ) : null}
 
@@ -820,6 +833,30 @@ function District({
     </group>
   );
 }
+
+/**
+ * The lit paving on the contested ground.
+ *
+ * A grid rather than a texture: there are no image assets in this app, and a
+ * few dozen thin boxes through one instanced draw cost less than the texture
+ * would have. Laid out here rather than generated because it is a grid — the
+ * generator in `world-runtime` exists for things that should differ between
+ * sectors, and a paved floor is the same floor everywhere.
+ */
+const CONTESTED_PAVING: readonly Placement[] = [
+  // Along the frontline axis.
+  ...[-30, -15, 15, 30].map((x) => ({
+    position: [x, 11.55, 0] as const,
+    scale: [0.7, 0.4, 148] as const,
+    rotation: [0, 0, 0] as const,
+  })),
+  // Across it, every fifteen units.
+  ...Array.from({ length: 11 }, (_, index) => ({
+    position: [0, 11.55, -75 + index * 15] as const,
+    scale: [CONTESTED_WIDTH - 4, 0.4, 0.7] as const,
+    rotation: [0, 0, 0] as const,
+  })),
+];
 
 /** Where the standards stand along a district's inner edge. */
 const BANNER_POSTS: readonly number[] = [-30, 0, 30];
