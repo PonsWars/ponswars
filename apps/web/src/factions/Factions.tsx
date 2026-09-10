@@ -147,20 +147,41 @@ function RosterGrid({ onNavigate }: { readonly onNavigate: (next: Route) => void
                 borderLeft: `2px solid ${accent}`,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--pw-space-3)' }}>
-                <FactionEmblem ticker={ticker} size={34} />
-                <div style={{ display: 'grid', gap: 2 }}>
-                  <div style={{ ...readoutStyle, fontSize: 15 }}>{ticker}</div>
-                  <div style={{ ...captionStyle, fontSize: 9, color: 'var(--pw-text-2)' }}>
-                    {faction.name.toUpperCase()}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'auto 1fr',
+                  gap: 'var(--pw-space-3)',
+                  alignItems: 'start',
+                }}
+              >
+                {/* The same standard the dossier and the battlefield fly, at
+                    roster size. The row of buttons above already carries the
+                    emblems; repeating one here would be the same mark twice on
+                    one screen at two sizes. */}
+                <FactionStandard ticker={ticker} height={96} />
+
+                <div style={{ display: 'grid', gap: 'var(--pw-space-2)', minWidth: 0 }}>
+                  <div style={{ display: 'grid', gap: 2 }}>
+                    <div style={{ ...readoutStyle, fontSize: 15 }}>{ticker}</div>
+                    <div style={{ ...captionStyle, fontSize: 9, color: 'var(--pw-text-2)' }}>
+                      {faction.name.toUpperCase()}
+                    </div>
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      color: 'var(--pw-text-2)',
+                      fontSize: 12.5,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {faction.identity}
+                  </p>
+                  <div style={{ ...captionStyle, fontSize: 9, color: accent }}>
+                    {faction.momentumSignature}
                   </div>
                 </div>
-              </div>
-              <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 12.5, lineHeight: 1.5 }}>
-                {faction.identity}
-              </p>
-              <div style={{ ...captionStyle, fontSize: 9, color: accent }}>
-                {faction.momentumSignature}
               </div>
             </button>
           );
