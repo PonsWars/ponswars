@@ -4,6 +4,7 @@ import {
   POOL_DISTRIBUTABLE_BPS,
 } from '@ponswars/shared-types';
 import { useEffect, useState, type JSX } from 'react';
+import { RewardVault } from '../art/RewardVault.js';
 import { captionStyle, controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
 import {
   claimCopy,
@@ -41,10 +42,25 @@ export function RewardsHub({
 }): JSX.Element {
   return (
     <>
-      <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-3)' }}>
-        <div style={captionStyle}>{view.label}</div>
-        {view.kind === 'ACTIVE' ? <WindowCountdown closesAt={view.closesAt} /> : null}
-        <Qualification view={view} />
+      <div
+        style={{
+          ...panelStyle,
+          display: 'grid',
+          gridTemplateColumns: 'auto 1fr',
+          alignItems: 'center',
+          gap: 'var(--pw-space-5)',
+        }}
+      >
+        {/* The object the whole page is about. §35 measures participation
+            against a published formula, and a column of figures about money is
+            exactly the shape the delivered hub avoids. */}
+        <RewardVault size={150} charged={pool !== null} />
+
+        <div style={{ display: 'grid', gap: 'var(--pw-space-3)', minWidth: 0 }}>
+          <div style={captionStyle}>{view.label}</div>
+          {view.kind === 'ACTIVE' ? <WindowCountdown closesAt={view.closesAt} /> : null}
+          <Qualification view={view} />
+        </div>
       </div>
 
       {view.kind === 'ACTIVE' ? (
