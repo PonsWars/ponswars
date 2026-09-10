@@ -23,7 +23,14 @@ import {
  */
 
 /** Groups a parameter to its section of the open-parameter registry. */
-export const PARAMETER_GROUPS = ['runtime', 'chain', 'storage', 'rewards', 'feeds'] as const;
+export const PARAMETER_GROUPS = [
+  'runtime',
+  'chain',
+  'storage',
+  'rewards',
+  'feeds',
+  'serving',
+] as const;
 
 export type ParameterGroup = (typeof PARAMETER_GROUPS)[number];
 
@@ -47,6 +54,50 @@ export interface ParameterSpec<T> {
 const NODE_ENVS = ['development', 'test', 'production'] as const;
 
 export type NodeEnv = (typeof NODE_ENVS)[number];
+
+/**
+ * The market data adapters that exist.
+ *
+ * `synthetic` is the one written so far and is a development tool: it produces
+ * a plausible market from a seed and is not a market. A production vendor is an
+ * `OPEN` decision (§59.3), so this list is short on purpose — an environment
+ * asking for a vendor nobody has written fails at startup with the name it
+ * asked for, rather than starting and scoring a round against nothing.
+ */
+const MARKET_DATA_PROVIDERS = ['synthetic'] as const;
+
+export type MarketDataProvider = (typeof MARKET_DATA_PROVIDERS)[number];
+
+/**
+ * A comma-separated origin list (§47).
+ *
+ * Empty is a real answer meaning *no browser may read this*, which is why it is
+ * parsed rather than treated as absent — a service reached only by other
+ * services should be able to say so, and `loadConfig` must not confuse that
+ * with a missing parameter.
+ *
+ * A wildcard is refused. §5 makes spectating the normal case so browsers do
+ * need in, but `*` would hand any page on the internet the ability to make
+ * requests on a visitor's behalf the moment credentials were enabled.
+ */
+function parseOriginList(raw: string): ParseResult<readonly string[]> {
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    return { ok: true, value: [] };
+  }
+
+  const origins = trimmed.split(',').map((entry) => entry.trim());
+  for (const origin of origins) {
+    if (origin === '*') {
+      return { ok: false, error: 'a wildcard origin is not allowed; list the origins' };
+    }
+    const parsed = parseUrl(origin, ['http:', 'https:']);
+    if (!parsed.ok) {
+      return { ok: false, error: `${origin}: ${parsed.error}` };
+    }
+  }
+  return { ok: true, value: origins };
+}
 
 export const PARAMETERS = {
   NODE_ENV: {
@@ -155,6 +206,35 @@ export const PARAMETERS = {
       'Authoritative scoring tick interval. BASELINE: §12.5 and §23.1 say approximately one per second.',
     parse: parseDurationMs,
   } satisfies ParameterSpec<number>,
+
+  // -- Serving (docs/OPEN_PARAMETERS.md §3) ---------------------------------
+  API_PORT: {
+    group: 'serving',
+    description:
+      'Port the REST API binds (§47). A deployment fact: the same image runs behind different ingresses.',
+    parse: (raw) => parseInteger(raw, { min: 1, max: 65_535 }),
+  } satisfies ParameterSpec<number>,
+
+  GATEWAY_PORT: {
+    group: 'serving',
+    description:
+      'Port the realtime gateway binds (§48). Separate from the API so the two can scale and fail independently.',
+    parse: (raw) => parseInteger(raw, { min: 1, max: 65_535 }),
+  } satisfies ParameterSpec<number>,
+
+  ALLOWED_ORIGINS: {
+    group: 'serving',
+    description:
+      'Browser origins allowed to read the API (§47). Comma separated. An empty value is valid and means no browser may.',
+    parse: parseOriginList,
+  } satisfies ParameterSpec<readonly string[]>,
+
+  MARKET_DATA_PROVIDER: {
+    group: 'serving',
+    description:
+      'Which market data adapter to run (§59.3, §23.6). OPEN: no vendor is chosen, so there is nothing to default to and startup refuses rather than inventing one.',
+    parse: (raw) => parseEnum(raw, MARKET_DATA_PROVIDERS),
+  } satisfies ParameterSpec<MarketDataProvider>,
 } as const;
 
 export type ParameterName = keyof typeof PARAMETERS;

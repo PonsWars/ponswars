@@ -131,6 +131,28 @@ export function roundIdFor(index: RoundIndex): string {
   return `round-${index.toString().padStart(10, '0')}`;
 }
 
+/**
+ * The index behind a round identifier.
+ *
+ * The inverse of `roundIdFor`, and it exists because a round resumed from a
+ * checkpoint (§25) has to know where the sequence was: rounds are contiguous
+ * (§3.1), so the one after it is the next index and not a fresh zero. Deriving
+ * it from the identifier rather than storing it separately means the two cannot
+ * disagree about which round this is.
+ *
+ * Returns `null` for anything this function did not produce, so a caller has to
+ * say what it will do about a malformed one rather than silently resuming at
+ * round zero on top of a live sequence.
+ */
+export function roundIndexOf(id: string): RoundIndex | null {
+  const match = /^round-(\d{10})$/.exec(id);
+  if (match?.[1] === undefined) {
+    return null;
+  }
+  const index = Number.parseInt(match[1], 10);
+  return Number.isSafeInteger(index) ? index : null;
+}
+
 /** Deterministic battle identifier within a round. */
 export function battleIdFor(index: RoundIndex, slot: number): string {
   if (!Number.isInteger(slot) || slot < 0) {

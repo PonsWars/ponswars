@@ -20,11 +20,53 @@ const VALID: Readonly<Record<string, string>> = {
   VOLUME_FEED_STALE_AFTER_MS: '60000',
   PONS_FEED_STALE_AFTER_MS: '15000',
   BATTLE_ENGINE_TICK_MS: '1000',
+  API_PORT: '4000',
+  GATEWAY_PORT: '4001',
+  ALLOWED_ORIGINS: 'https://play.example.invalid',
+  MARKET_DATA_PROVIDER: 'synthetic',
 };
 
 const withOverride = (
   patch: Readonly<Record<string, string | undefined>>,
 ): Record<string, string | undefined> => ({ ...VALID, ...patch });
+
+describe('the origin list', () => {
+  it('accepts an empty value as a real answer', () => {
+    // §47: a service reached only by other services should be able to say no
+    // browser may read it, and the loader must not confuse that with a missing
+    // parameter.
+    const config = loadConfig(withOverride({ ALLOWED_ORIGINS: '' }));
+    expect(config.ALLOWED_ORIGINS).toEqual([]);
+  });
+
+  it('takes a list', () => {
+    const config = loadConfig(
+      withOverride({ ALLOWED_ORIGINS: 'https://a.example.invalid, https://b.example.invalid' }),
+    );
+    expect(config.ALLOWED_ORIGINS).toEqual([
+      'https://a.example.invalid',
+      'https://b.example.invalid',
+    ]);
+  });
+
+  it('refuses a wildcard', () => {
+    // §5 makes spectating normal so browsers do need in, but `*` hands any page
+    // on the internet the ability to make requests on a visitor's behalf the
+    // moment credentials are enabled.
+    expect(() => loadConfig(withOverride({ ALLOWED_ORIGINS: '*' }))).toThrow(ConfigError);
+  });
+});
+
+describe('the market data provider', () => {
+  it('refuses a vendor nobody has written', () => {
+    // §59.3 leaves the vendor OPEN, so there is nothing to fall back to. An
+    // environment naming one that does not exist has to fail at startup rather
+    // than start and score a round against nothing.
+    expect(() => loadConfig(withOverride({ MARKET_DATA_PROVIDER: 'acme-feeds' }))).toThrow(
+      ConfigError,
+    );
+  });
+});
 
 describe('the parameter table', () => {
   it('covers every declared parameter', () => {
