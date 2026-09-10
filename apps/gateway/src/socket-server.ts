@@ -26,8 +26,12 @@ export interface SocketServerOptions {
    * `null` is a spectator, which §5 makes the normal case rather than a
    * degraded one. Signature verification is §45.2 and belongs to the auth
    * service; this takes its answer.
+   *
+   * Asynchronous because a session lives in a database — it has to survive a
+   * restart and be revocable — so the connection is held paused until it
+   * answers rather than opened as a spectator and corrected afterwards.
    */
-  readonly walletOf: (authorization: string | undefined) => WalletAddress | null;
+  readonly walletOf: (authorization: string | undefined) => Promise<WalletAddress | null>;
 }
 
 export interface RunningSocketServer {
@@ -92,20 +96,63 @@ export function startSocketServer(options: SocketServerOptions): RunningSocketSe
   wss.on('connection', (socket, request) => {
     const connectionId = randomUUID();
     sockets.set(connectionId, socket);
-    gateway.open(connectionId, options.walletOf(request.headers.authorization));
+
+    // Paused until the wallet is known. Resolving a session is a database read
+    // now (§45.2), and a client that subscribes in its first frame would
+    // otherwise be answered by a gateway that had not opened its connection
+    // yet — a spectator's subscription refused, or worse, a player's accepted
+    // as a spectator's. `pause` stops the socket being read at all, so the
+    // frames simply arrive a few milliseconds later, in order.
+    socket.pause();
+
+    let opened = false;
 
     socket.on('message', (data) => {
-      gateway.receive(connectionId, decodeFrame(data));
+      // A frame cannot arrive before the connection opens — the socket is
+      // paused until then — but it can arrive after the lookup failed and the
+      // socket was resumed to close it cleanly. There is no connection to
+      // receive it into.
+      if (opened) {
+        gateway.receive(connectionId, decodeFrame(data));
+      }
     });
 
     const forget = (): void => {
       sockets.delete(connectionId);
-      gateway.close(connectionId);
+      if (opened) {
+        gateway.close(connectionId);
+      }
     };
     socket.on('close', forget);
     // A socket that errors is gone whether or not `close` follows, and leaving
     // it registered would keep sending frames nobody receives.
     socket.on('error', forget);
+
+    void options.walletOf(request.headers.authorization).then(
+      (wallet) => {
+        if (socket.readyState !== socket.OPEN) {
+          // Closed while we were asking. Nothing was opened, so there is
+          // nothing to close.
+          sockets.delete(connectionId);
+          return;
+        }
+        gateway.open(connectionId, wallet);
+        opened = true;
+        socket.resume();
+      },
+      () => {
+        // The session store is unreachable. §5 makes spectating the normal
+        // case, so the tempting thing is to carry on as a spectator — and that
+        // would silently downgrade a player mid-round. Closing says what
+        // happened and lets the client retry.
+        sockets.delete(connectionId);
+        // Resumed first, or the close never completes: a closing handshake ends
+        // when the peer's own close frame is read, and a paused socket reads
+        // nothing. The connection would sit half-closed until a timeout.
+        socket.resume();
+        socket.close(1011, 'authentication unavailable');
+      },
+    );
   });
 
   return {

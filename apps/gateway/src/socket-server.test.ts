@@ -33,7 +33,11 @@ afterEach(async () => {
 
 /** Starts a server on an ephemeral port and returns its URL. */
 function start(walletFor: (auth: string | undefined) => ReturnType<typeof walletAddress> | null) {
-  running = startSocketServer({ port: 0, now: () => AT, walletOf: walletFor });
+  running = startSocketServer({
+    port: 0,
+    now: () => AT,
+    walletOf: (auth) => Promise.resolve(walletFor(auth)),
+  });
   const address = running.wss.address() as AddressInfo;
   return { url: `ws://127.0.0.1:${String(address.port)}`, server: running };
 }
@@ -207,7 +211,11 @@ describe('starting up', () => {
     const { server } = start(() => null);
     const port = (server.wss.address() as AddressInfo).port;
 
-    const second = startSocketServer({ port, now: () => AT, walletOf: () => null });
+    const second = startSocketServer({
+      port,
+      now: () => AT,
+      walletOf: () => Promise.resolve(null),
+    });
     await expect(second.ready).rejects.toMatchObject({ code: 'EADDRINUSE' });
     await second.close();
   });
@@ -219,6 +227,67 @@ describe('starting up', () => {
     // Ready means ready: a client may connect the moment it settles.
     const socket = await client(url);
     expect(socket.readyState).toBe(socket.OPEN);
+  });
+});
+
+describe('a session that takes a moment to resolve', () => {
+  /** A server whose wallet lookup answers only after `release()` is called. */
+  function slowStart(wallet: ReturnType<typeof walletAddress> | null) {
+    let release = (): void => undefined;
+    const answered = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    running = startSocketServer({
+      port: 0,
+      now: () => AT,
+      walletOf: async () => {
+        await answered;
+        return wallet;
+      },
+    });
+    const address = running.wss.address() as AddressInfo;
+    return { url: `ws://127.0.0.1:${String(address.port)}`, release };
+  }
+
+  it('answers the first frame with the wallet, not without it', async () => {
+    // Resolving a session is a database read (§45.2). A frame that arrived
+    // before the answer used to reach a gateway that had not opened the
+    // connection yet — so a player's own channel was refused as a spectator's.
+    // The connection is paused until the lookup returns, which makes the delay
+    // invisible rather than wrong.
+    const { url, release } = slowStart(ALICE);
+    const socket = await client(url, 'Bearer alice');
+    const answer = nextFrame(socket);
+
+    socket.send(JSON.stringify({ type: 'SUBSCRIBE', channel: `wallet:${ALICE}` }));
+    // Long enough that the frame has certainly reached the server and would
+    // have been read had the socket not been paused. Without the pause this
+    // test fails here rather than passing by a scheduling accident.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    release();
+
+    expect(await answer).toMatchObject({
+      type: 'SUBSCRIBED',
+      channel: `wallet:${ALICE}`,
+    });
+  });
+
+  it('closes rather than downgrading a player to a spectator', async () => {
+    // The session store being unreachable is not a spectator. Carrying on as
+    // one would silently take a player's own channel away mid-round.
+    running = startSocketServer({
+      port: 0,
+      now: () => AT,
+      walletOf: () => Promise.reject(new Error('session store unreachable')),
+    });
+    const address = running.wss.address() as AddressInfo;
+    const socket = await client(`ws://127.0.0.1:${String(address.port)}`, 'Bearer alice');
+
+    const code = await new Promise<number>((resolve) => {
+      socket.once('close', resolve);
+    });
+
+    expect(code).toBe(1011);
   });
 });
 
