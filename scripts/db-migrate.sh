@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 #
-# Applies every migration to the local development database, in order.
+# Applies every migration to the local development database.
 #
-# Each file is already wrapped in BEGIN/COMMIT, and psql runs with
-# ON_ERROR_STOP so a failure aborts rather than leaving a half-built schema.
+# The same runner a deployment uses (`apps/server/src/migrate.ts`), so a
+# developer's database and a deployed one are built by the same thing. There
+# used to be two ways to apply a migration here — this script piping files into
+# `psql`, and the deployment's job — and the two disagreed: files applied by the
+# first were invisible to the ledger the second keeps, so pointing the runner at
+# a database migrated by hand tried to create every type again.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-CONTAINER="${PONSWARS_PG_CONTAINER:-ponswars-postgres}"
+# The development compose file's credentials (infra/containers/docker-compose.yml).
+# A development address, not a production one: a deployment sets DATABASE_URL.
+: "${DATABASE_URL:=postgres://ponswars:ponswars_dev_only@localhost:5432/ponswars}"
+export DATABASE_URL
 
-if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
-  echo "Postgres container '$CONTAINER' is not running." >&2
-  echo "Start it with: docker compose -f infra/containers/docker-compose.yml up -d" >&2
-  exit 1
+if [ ! -f apps/server/dist/migrate.js ]; then
+  echo "==> building the migration runner"
+  pnpm exec tsc -b apps/server/tsconfig.build.json
 fi
 
-for file in database/migrations/*.sql; do
-  printf '==> %s\n' "$file"
-  docker exec -i "$CONTAINER" psql -v ON_ERROR_STOP=1 -U ponswars -d ponswars < "$file"
-done
-
-echo
-echo "All migrations applied."
+node apps/server/dist/migrate.js database/migrations
