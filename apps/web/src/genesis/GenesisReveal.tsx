@@ -1,5 +1,5 @@
-import { RARITY_USES, type CardType, type Rarity } from '@ponswars/shared-types';
-import { CARD_ART } from '../art/manifest.js';
+import type { CardType, Rarity } from '@ponswars/shared-types';
+import { GenesisCardFace } from '../art/GenesisCardFace.js';
 import { RARITY_COLOR } from '@ponswars/ui-tokens';
 import { useEffect, useState, type JSX } from 'react';
 import { captionStyle, controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
@@ -109,47 +109,45 @@ export function GenesisReveal({
 }
 
 function RevealedCard({ outcome }: { readonly outcome: GenesisOutcome }): JSX.Element {
-  const art = CARD_ART[outcome.cardType];
-
   return (
     <div
       style={{
         ...panelStyle,
         borderColor: RARITY_COLOR[outcome.rarity],
         display: 'grid',
-        gap: 'var(--pw-space-2)',
+        gap: 'var(--pw-space-3)',
         justifyItems: 'center',
         width: '100%',
       }}
     >
-      {/* The card itself, where one was drawn (§40.6).
+      {/* The card itself (§40.6).
           §17 of the visual guide makes the card art the object a player owns,
           and this is the moment they receive it — a panel of text describing a
-          card is not a reveal. Absent for the cards that have no art yet, which
-          is why `CARD_ART` is partial: a broken image at this moment would be
-          worse than the text alone. */}
-      {art === undefined ? null : (
-        <img
-          src={art}
-          alt=""
-          width={220}
-          style={{
-            width: 'min(220px, 60%)',
-            height: 'auto',
-            borderRadius: 'var(--pw-radius-md)',
-            // A rarity-tinted halo rather than a border: §40.6 wants the reveal
-            // to feel like the card arriving, and a frame around a framed card
-            // reads as a picture of one.
-            boxShadow: `0 0 28px ${RARITY_COLOR[outcome.rarity]}55`,
-          }}
-        />
-      )}
+          card is not a reveal. Every card in the pool has a face now, so this
+          moment no longer depends on which of the fourteen was drawn.
 
-      <div style={{ ...readoutStyle, fontSize: 24 }}>{outcome.cardName.toUpperCase()}</div>
-      <div style={{ ...captionStyle, color: RARITY_COLOR[outcome.rarity] }}>{outcome.rarity}</div>
-      <div style={{ fontSize: 13, color: 'var(--pw-text-2)' }}>{outcome.effect}</div>
-      <div className="pw-tabular" style={{ ...captionStyle, color: 'var(--pw-text-3)' }}>
-        USES {String(RARITY_USES[outcome.rarity]).padStart(2, '0')} · GENESIS #{outcome.genesisId}
+          A rarity-tinted halo rather than a border: a frame around a framed
+          card reads as a picture of one. */}
+      <div
+        style={{
+          filter: `drop-shadow(0 0 26px ${RARITY_COLOR[outcome.rarity]}55)`,
+          maxWidth: '100%',
+        }}
+      >
+        <GenesisCardFace
+          cardType={outcome.cardType}
+          rarity={outcome.rarity}
+          genesisId={outcome.genesisId}
+          width={300}
+        />
+      </div>
+
+      {/* The effect once more in running text. The card prints it too, and this
+          is the line a screen reader reaches — the face is one image with one
+          label, and §110 does not let the only statement of what a card does be
+          inside a picture. */}
+      <div style={{ fontSize: 13, color: 'var(--pw-text-2)' }}>
+        {outcome.cardName} — {outcome.effect}
       </div>
     </div>
   );

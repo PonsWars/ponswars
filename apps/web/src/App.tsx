@@ -7,6 +7,7 @@ import { LAYER } from '@ponswars/ui-tokens';
 import { lazy, Suspense, useEffect, useMemo, type JSX } from 'react';
 import { liveEndpoints } from './live/endpoints.js';
 import { Factions } from './factions/Factions.js';
+import { cardEffectLine } from './art/GenesisCardFace.js';
 import { Landing } from './landing/Landing.js';
 import { PreviewBanner } from './live/PreviewBanner.js';
 import { fetchBattleResult } from './live/round-client.js';
@@ -223,7 +224,7 @@ const PLACEHOLDER_GENESIS: GenesisOutcome = {
   rarity: 'LEGENDARY',
   cardType: 'GOLDEN_ARMY',
   cardName: 'Golden Army',
-  effect: 'General Support +50',
+  effect: cardEffectLine('GOLDEN_ARMY'),
   secretReservationSecured: true,
 };
 

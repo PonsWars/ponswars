@@ -1,7 +1,7 @@
-import { RARITY_USES, type CardType, type Rarity } from '@ponswars/shared-types';
+import type { CardType, Rarity } from '@ponswars/shared-types';
 import { RARITY_COLOR } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
-import { CARD_ART } from '../art/manifest.js';
+import { GenesisCardFace } from '../art/GenesisCardFace.js';
 import { captionStyle, humanize, panelStyle, readoutStyle } from '../hud/styles.js';
 
 /**
@@ -153,8 +153,6 @@ function GenesisCardPanel({ card }: { readonly card: GenesisCardView | null }): 
     );
   }
 
-  const totalUses = RARITY_USES[card.rarity];
-  const depleted = card.usesRemaining === 0;
   const finalUse = card.usesRemaining === 1;
 
   return (
@@ -171,32 +169,39 @@ function GenesisCardPanel({ card }: { readonly card: GenesisCardView | null }): 
       }}
     >
       <div style={captionStyle}>GENESIS CARD</div>
-      {/* The face the reveal opened. §34.2 makes the card the centrepiece of
-          this page, and a centrepiece described in words while its art exists
-          in the catalog is a caption standing in for the thing. */}
-      <CardFace card={card} depleted={depleted} />
-      <div style={{ ...readoutStyle, fontSize: 26 }}>
+      {/* The face the reveal opened, drawn by the same component (§34.2). A
+          centrepiece described in words while the reveal hands over an object
+          is two products in one page.
+
+          Its charge count, its rarity and its Genesis number are printed on the
+          card, so they are not repeated underneath. What stays is the name in
+          real text — the face is one image with one label, and §110 does not
+          let the only statement of what a player holds live inside a picture —
+          and the one state the card cannot show. */}
+      {card.cardType === null ? null : (
+        <div style={{ justifySelf: 'center', maxWidth: '100%' }}>
+          <GenesisCardFace
+            cardType={card.cardType}
+            rarity={card.rarity}
+            genesisId={card.genesisId}
+            usesRemaining={card.usesRemaining}
+            width={230}
+          />
+        </div>
+      )}
+
+      <div style={{ ...readoutStyle, fontSize: 22 }}>
         {card.name.toUpperCase()}
-        <span style={{ color: RARITY_COLOR[card.rarity], fontSize: 16 }}> — {card.rarity}</span>
+        <span style={{ color: RARITY_COLOR[card.rarity], fontSize: 14 }}> — {card.rarity}</span>
       </div>
       <div style={{ color: 'var(--pw-text-2)', fontSize: 13 }}>{card.effect}</div>
 
-      <div style={{ display: 'flex', gap: 'var(--pw-space-4)', alignItems: 'baseline' }}>
-        {/* §40.9 wants an unambiguous numeric count, zero-padded. */}
-        <span className="pw-tabular" style={{ ...readoutStyle, fontSize: 20 }}>
-          {String(card.usesRemaining).padStart(2, '0')} / {String(totalUses).padStart(2, '0')}
-        </span>
-        {depleted ? (
-          <span style={{ ...captionStyle, color: 'var(--pw-text-3)' }}>DEPLETED</span>
-        ) : null}
-        {finalUse ? (
-          <span style={{ ...captionStyle, color: 'var(--pw-warning)' }}>FINAL USE</span>
-        ) : null}
-      </div>
-
-      <div className="pw-tabular" style={{ ...captionStyle, color: 'var(--pw-text-3)' }}>
-        GENESIS #{card.genesisId}
-      </div>
+      {finalUse ? (
+        // The one thing the card itself does not say. §40.9 wants the count
+        // unambiguous, and `01 / 03` is unambiguous about the number without
+        // saying what it means.
+        <div style={{ ...captionStyle, color: 'var(--pw-warning)' }}>FINAL USE</div>
+      ) : null}
 
       {card.secretTrophy ? (
         // §34.8: a permanent, non-transferable artifact tied to the original
@@ -216,41 +221,6 @@ function GenesisCardPanel({ card }: { readonly card: GenesisCardView | null }): 
         </div>
       ) : null}
     </div>
-  );
-}
-
-/**
- * The card's art, when the catalog has it.
- *
- * A depleted card keeps its face and is dimmed rather than removed: §34.2 says
- * a spent card *"remains permanently visible as a Genesis artifact"*, and §7
- * makes Genesis a one-time record rather than a consumable that disappears.
- */
-function CardFace({
-  card,
-  depleted,
-}: {
-  readonly card: GenesisCardView;
-  readonly depleted: boolean;
-}): JSX.Element | null {
-  const art = card.cardType === null ? undefined : CARD_ART[card.cardType];
-  if (art === undefined) {
-    return null;
-  }
-
-  return (
-    <img
-      src={art}
-      alt=""
-      style={{
-        width: '100%',
-        maxWidth: 240,
-        height: 'auto',
-        justifySelf: 'center',
-        borderRadius: 'var(--pw-radius-sm)',
-        opacity: depleted ? 0.55 : 1,
-      }}
-    />
   );
 }
 
