@@ -26,6 +26,7 @@ import {
   LOD_THRESHOLDS,
   SECTOR_POSITIONS,
   SECTOR_SKYLINE_HEIGHT,
+  sectorSpin,
 } from './layout.js';
 import { Army } from './Army.js';
 import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigation-config.js';
@@ -572,21 +573,10 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
   return (
     <group
       position={[position.x, position.y, position.z]}
-      // Turned to face the camera that flies to it.
-      //
-      // The two districts sit either side of the island's local x axis, and the
-      // sector poses approach along the radius from the Market Core. With the
-      // island unrotated those two directions agreed only by accident: on most
-      // sectors the camera looked *along* the axis between the districts, so
-      // one army stood behind the other and the frontline ran across the view
-      // instead of into it. §36.2 asks for both staging areas readable and the
-      // frontline always understandable, which is a statement about this angle.
-      //
-      // Rotating the local x axis onto the tangent puts the two sides left and
-      // right of the frame on every sector, with the line between them running
-      // away from the camera — which is the arrangement every delivered sector
-      // frame is drawn from.
-      rotation={[0, -(Math.atan2(position.z, position.x) + Math.PI / 2), 0]}
+      // Turned so both armies are across the frame and the right one is on
+      // the right. The maths and the reasoning live in `sectorSpin`, which is
+      // where the test that pins it can reach them.
+      rotation={[0, sectorSpin(index), 0]}
     >
       {/* The neutral sector platform. No faction owns it (§38.3).
           A solid with depth rather than a disc: these are floating land masses

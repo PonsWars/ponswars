@@ -148,6 +148,33 @@ function sectorAt(index: number): Vec3 {
 }
 
 /**
+ * How far a sector island is turned about its own axis (§36.2, §36.15).
+ *
+ * The two districts sit either side of the island's local x axis, and every
+ * camera that flies to a sector approaches along the radius from the Market
+ * Core. Unrotated, those two directions agreed only by accident: on most
+ * sectors the camera looked *along* the axis between the districts, so one army
+ * stood behind the other and the frontline ran across the view rather than into
+ * it.
+ *
+ * Turning the local x axis onto the tangent puts the two sides left and right
+ * of the frame on every sector, with the line between them running away from
+ * the camera — the arrangement every delivered sector frame is drawn from.
+ *
+ * **Which** side lands where is the part that took two attempts. A rotation of
+ * `-(heading + π/2)` also puts the districts across the frame, and puts them
+ * across it the wrong way round: `side: -1` carries `battle.left`, the intel
+ * panel for `battle.left` is pinned to the left of the screen, and the district
+ * ended up on the right. §36.15 asks a player to read who holds what instantly,
+ * and a world that disagrees with the panel naming it is the opposite of that.
+ * `layout.test.ts` pins the frame side each army lands on.
+ */
+export function sectorSpin(index: number): number {
+  const sector = sectorAt(index);
+  return -(Math.atan2(sector.z, sector.x) - Math.PI / 2);
+}
+
+/**
  * Camera pose for approaching a sector (§37.2 level two).
  *
  * Offset outward from the core so the camera looks *inward* across the sector,

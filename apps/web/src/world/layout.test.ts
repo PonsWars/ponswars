@@ -13,6 +13,7 @@ import {
   SECTOR_ORBIT_RADIUS,
   SECTOR_POSITIONS,
   sectorPose,
+  sectorSpin,
   SECTOR_SKYLINE_HEIGHT,
   WORLD_BOUNDARY_RADIUS,
 } from './layout.js';
@@ -235,5 +236,79 @@ describe('level of detail across the layout', () => {
       tier: 'BALANCED',
     });
     expect(['REDUCED', 'SILHOUETTE']).toContain(detail);
+  });
+});
+
+describe('which side of the frame an army lands on', () => {
+  /**
+   * §36.2 and §36.15.
+   *
+   * A sector draws `battle.left` at `side: -1` and the HUD pins that faction's
+   * intel panel to the left of the screen. The two have to agree: a player
+   * reading "NVDA — FAVORED" on the left and seeing NVDA's colours on the right
+   * is being asked to hold a mirror in their head while a round is running.
+   *
+   * This is arithmetic, not a screenshot, so it can be checked on every commit:
+   * turn the district's local offset by the island's spin, and compare it with
+   * the camera's own right vector at the pose that looks at that island.
+   */
+
+  /** Where a district at local `side * 62` ends up in the world. */
+  function districtDirection(index: number, side: -1 | 1): { x: number; z: number } {
+    const spin = sectorSpin(index);
+    // A rotation about Y maps local (1, 0, 0) to (cos, 0, -sin).
+    return { x: side * Math.cos(spin), z: side * -Math.sin(spin) };
+  }
+
+  /**
+   * The camera's right vector, the way three.js builds one.
+   *
+   * `x = normalize(cross(up, position - target))`, with up as world up. Written
+   * out rather than imported so the test does not depend on the renderer to
+   * describe what a viewer sees.
+   */
+  function cameraRight(pose: ReturnType<typeof battlefieldPose>): { x: number; z: number } {
+    const backward = {
+      x: pose.position.x - pose.target.x,
+      z: pose.position.z - pose.target.z,
+    };
+    // cross((0,1,0), (bx, by, bz)) = (bz, 0, -bx)
+    const right = { x: backward.z, z: -backward.x };
+    const length = Math.hypot(right.x, right.z) || 1;
+    return { x: right.x / length, z: right.z / length };
+  }
+
+  for (const view of ['sector', 'battlefield'] as const) {
+    it(`puts battle.left on the left of the ${view} view, on every sector`, () => {
+      for (let index = 0; index < BATTLES_PER_ROUND; index += 1) {
+        const pose = view === 'sector' ? sectorPose(index) : battlefieldPose(index);
+        const right = cameraRight(pose);
+
+        // `side: -1` carries `battle.left`. Negative agreement with the
+        // camera's right vector is the left of the frame.
+        const left = districtDirection(index, -1);
+        expect(left.x * right.x + left.z * right.z).toBeLessThan(-0.9);
+
+        const other = districtDirection(index, 1);
+        expect(other.x * right.x + other.z * right.z).toBeGreaterThan(0.9);
+      }
+    });
+  }
+
+  it('lays both districts across the view rather than one behind the other', () => {
+    // The reason the islands are turned at all. Along the camera's own axis the
+    // two staging areas would overlap, and §36.2 wants both readable.
+    for (let index = 0; index < BATTLES_PER_ROUND; index += 1) {
+      const pose = battlefieldPose(index);
+      const forward = {
+        x: pose.target.x - pose.position.x,
+        z: pose.target.z - pose.position.z,
+      };
+      const length = Math.hypot(forward.x, forward.z) || 1;
+      const district = districtDirection(index, 1);
+      const alongView = (district.x * forward.x + district.z * forward.z) / length;
+
+      expect(Math.abs(alongView)).toBeLessThan(0.2);
+    }
   });
 });
