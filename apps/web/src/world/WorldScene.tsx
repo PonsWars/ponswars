@@ -35,6 +35,7 @@ import {
 import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT } from './navigation-config.js';
 import { SectorLabel } from './SectorLabel.js';
 import { WorldInput } from './WorldInput.js';
+import { WorldLighting } from './WorldLighting.js';
 
 /**
  * The persistent world scene (§37.9, §38).
@@ -283,9 +284,9 @@ function MarketCore(): JSX.Element {
         <mesh key={index} position={[spire.x, spire.height / 2, spire.z]}>
           <boxGeometry args={[spire.width, spire.height, spire.width]} />
           <meshStandardMaterial
-            color="#1a2a36"
-            metalness={0.2}
-            roughness={0.55}
+            color="#1e3140"
+            metalness={0.22}
+            roughness={0.48}
             emissive="#0e3040"
             emissiveIntensity={0.42}
           />
@@ -566,8 +567,8 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
           // Lifting under the pointer, a step below the focused tone: the world
           // should answer a hover before it answers a click (§37.3).
           color={isFocused ? '#22394a' : hovered ? '#1e3342' : '#1a2d3a'}
-          metalness={0.2}
-          roughness={0.85}
+          metalness={0.22}
+          roughness={0.8}
         />
       </mesh>
 
@@ -755,17 +756,21 @@ function District({
 
       <InstancedField placements={masses}>
         <boxGeometry key="mass" args={[1, 1, 1]} />
-        {/* Nearly dielectric, deliberately. There is no environment map in this
-            scene, and a metallic surface with nothing to reflect renders black:
-            the first pass at this district was a field of black rectangles that
-            looked like missing geometry rather than like buildings. */}
+        {/* Barely metallic, and that is not a compromise. A metal has no
+            diffuse response at all — it is entirely what it reflects — so in a
+            dark void raising metalness makes a surface *darker*, not richer.
+            Pushing these to 0.45 once the environment existed put the district
+            back to the near-black it started at, for the opposite reason.
+
+            The probe gives them a sheen along their lit edges. What lights them
+            is the key. */}
         <meshStandardMaterial
           key="mass-material"
-          color="#273c4a"
-          metalness={0.16}
-          roughness={0.62}
+          color="#2b4152"
+          metalness={0.18}
+          roughness={0.52}
           emissive="#0d2634"
-          emissiveIntensity={0.38}
+          emissiveIntensity={0.34}
         />
       </InstancedField>
 
@@ -1068,11 +1073,16 @@ export function WorldScene(): JSX.Element {
           void rather than ending at a hard line (§38.10). Pulled in from 3000
           so the boundary is felt before it is reached. */}
       <fog attach="fog" args={['#05080b', 700, 2_600]} />
-      <ambientLight intensity={0.3} />
-      <directionalLight position={[400, 900, 300]} intensity={1.05} />
+      <ambientLight intensity={0.34} />
+      {/* The key. Raised with the tone mapping: a filmic curve rolls the
+          midtones off, so a light calibrated against a linear output leaves the
+          structures reading as silhouettes. */}
+      <directionalLight position={[400, 900, 300]} intensity={1.7} />
       {/* A cold rim from the opposite side, so a silhouette separates from the
           background instead of dissolving into it. */}
-      <directionalLight position={[-600, 300, -500]} intensity={0.45} color="#5c8fb8" />
+      <directionalLight position={[-600, 300, -500]} intensity={0.7} color="#5c8fb8" />
+
+      <WorldLighting />
 
       <Starfield />
       {/* Between the stars and the islands, so the void has a middle distance. */}

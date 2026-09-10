@@ -91,3 +91,40 @@ export const VIEWPORT_FIT = {
   minFov: 45,
   maxFov: 78,
 } as const;
+
+/**
+ * The sky the world is lit under (§36.5, §38.10).
+ *
+ * `CALIBRATE` (§59.4). These are three colours and two exposures, and between
+ * them they decide whether the scene reads as a dark place with lights in it or
+ * as a diagram on a black background.
+ *
+ * `intensity` is low on purpose. An environment is what a metal reflects, not
+ * what lights the scene — §38.10 asks for a permanent dark atmosphere, and a
+ * probe bright enough to light the islands would lift them off the void they
+ * float in.
+ */
+export const ENVIRONMENT = {
+  /** Cold light from overhead. */
+  sky: '#3c6d8c',
+  /** A dim warm bounce from one side, so silhouettes separate. */
+  rim: '#7a5230',
+  /** Almost nothing underneath, but not nothing. */
+  ground: '#0a1017',
+  intensity: 0.62,
+  exposure: 1.35,
+} as const;
+
+/**
+ * How far light spreads past the thing emitting it.
+ *
+ * `CALIBRATE` (§59.4). The threshold is the important one: below about 0.8 the
+ * whole world blooms, which reads as a dirty lens rather than as light. What
+ * should glow here is what is genuinely bright — the crowns on the towers, the
+ * standards, the sector beacons and the Market Core.
+ */
+export const BLOOM = {
+  strength: 0.62,
+  radius: 0.55,
+  threshold: 0.82,
+} as const;
