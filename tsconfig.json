@@ -2,48 +2,6 @@
   "files": [],
   "references": [
     {
-      "path": "./tsconfig.node.json"
-    },
-    {
-      "path": "./packages/shared-types/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/config/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/battle-math/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/battle-engine/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/rewards-math/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/schemas/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/market-data/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/pons-indexer/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/genesis-service/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/realtime/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/replay/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/round-service/tsconfig.build.json"
-    },
-    {
-      "path": "./packages/store-postgres/tsconfig.build.json"
-    },
-    {
       "path": "./apps/api/tsconfig.build.json"
     },
     {
@@ -53,13 +11,58 @@
       "path": "./apps/local-stack/tsconfig.build.json"
     },
     {
-      "path": "./packages/world-runtime/tsconfig.build.json"
+      "path": "./apps/server/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/auth/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/battle-engine/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/battle-math/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/config/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/genesis-service/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/market-data/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/pons-indexer/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/realtime/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/replay/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/rewards-math/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/round-service/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/schemas/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/shared-types/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/store-postgres/tsconfig.build.json"
     },
     {
       "path": "./packages/ui-tokens/tsconfig.build.json"
     },
     {
-      "path": "./apps/server/tsconfig.build.json"
+      "path": "./packages/world-runtime/tsconfig.build.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
     }
   ]
 }

@@ -1,0 +1,26 @@
+{
+  "name": "@ponswars/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Wallet authentication: a signed challenge in, a short-lived session out (§45.2).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/shared-types": "workspace:*",
+    "viem": "^2.56.3"
+  }
+}
