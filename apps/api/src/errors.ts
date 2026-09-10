@@ -172,3 +172,40 @@ export function unauthenticated(correlationId: string): ErrorResponse {
     correlationId,
   );
 }
+
+/**
+ * The signature did not answer the challenge (§45.2, §69.5).
+ *
+ * One error for every way a sign-in can fail, and deliberately so. A challenge
+ * that expired, one already used, one that never existed and a signature from
+ * the wrong wallet are four different facts, and telling them apart is useful
+ * to exactly one kind of caller: somebody working through nonces that are not
+ * theirs. The player's next step is the same in all four cases.
+ */
+export function signInRefused(correlationId: string): ErrorResponse {
+  return error(
+    401,
+    'SIGN_IN_REFUSED',
+    'That signature did not match a live sign-in request.',
+    true,
+    'Ask for a new sign-in request and sign it again. Nothing was charged and no funds moved.',
+    correlationId,
+  );
+}
+
+/**
+ * The wallet is on a chain this deployment does not accept (§45.2).
+ *
+ * Answered before a signature is asked for, because the alternative is a
+ * player approving a wallet prompt and then being told it was pointless.
+ */
+export function wrongChain(expected: number, correlationId: string): ErrorResponse {
+  return error(
+    400,
+    'WRONG_CHAIN',
+    `This deployment accepts signatures from chain ${String(expected)} only.`,
+    true,
+    `Switch your wallet to chain ${String(expected)} and connect again.`,
+    correlationId,
+  );
+}

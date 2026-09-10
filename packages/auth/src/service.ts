@@ -132,7 +132,7 @@ export class AuthService {
    * "single-use unless the signature was wrong" is not single-use — it would
    * leave a nonce an attacker can keep trying against.
    */
-  async verify(nonce: string, message: string, signature: string): Promise<SignInResult> {
+  async verify(nonce: string, signature: string): Promise<SignInResult> {
     const at = this.#now();
     const challenge = await this.#store.consumeChallenge(nonce, at);
     if (challenge === null) {
@@ -140,8 +140,7 @@ export class AuthService {
     }
 
     const verified = await verifySignedChallenge({
-      message,
-      issued: challenge.message,
+      message: challenge.message,
       signature,
       expectedWallet: challenge.wallet,
       expectedDomain: this.#policy.domain,

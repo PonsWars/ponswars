@@ -1,3 +1,4 @@
+import { AuthService, MemoryAuthStore, type AuthPolicy } from '@ponswars/auth';
 import {
   createRound,
   CURRENT_ENGINE_VERSIONS,
@@ -13,6 +14,9 @@ import {
 } from '@ponswars/battle-math';
 import {
   apiErrorSchema,
+  authChallengeSchema,
+  authSessionInfoSchema,
+  authSessionSchema,
   battleResultSchema,
   currentRoundSchema,
   rosterSchema,
@@ -28,6 +32,7 @@ import {
   type UtcTimestamp,
 } from '@ponswars/shared-types';
 import type { FastifyInstance } from 'fastify';
+import { privateKeyToAccount } from 'viem/accounts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PickStore } from './pick-store.js';
 import { buildServer } from './server.js';
@@ -98,17 +103,34 @@ function openRound(): RoundEngineState {
 
 const ALLOWED_ORIGIN = 'https://play.example.test';
 
+/**
+ * Sign-in policy for these tests.
+ *
+ * A real `AuthService` over an in-memory store rather than a stub, so the
+ * routes are exercised against the thing that will answer them — including the
+ * parts that refuse.
+ */
+const AUTH_POLICY: AuthPolicy = {
+  challengeTtlMs: 300_000,
+  sessionTtlMs: 3_600_000,
+  domain: 'play.example.test',
+  uri: ALLOWED_ORIGIN,
+  chainId: 8453,
+};
+
 /** Finalized results the server can answer for, seeded per test. */
 let finalized: Map<string, FinalizedBattleResult>;
 
 let round: RoundEngineState;
 let picks: PickStore;
+let auth: AuthService;
 let now: UtcTimestamp;
 let app: FastifyInstance;
 
 beforeEach(() => {
   round = openRound();
   finalized = new Map();
+  auth = new AuthService({ store: new MemoryAuthStore(), policy: AUTH_POLICY, now: () => now });
   picks = new PickStore();
   now = utcTimestamp(EPOCH + 30_000);
   app = buildServer({
@@ -120,7 +142,8 @@ beforeEach(() => {
     now: () => now,
     // Any bearer token is treated as that wallet. Signature verification is
     // §45.2 and belongs to the auth service; these tests are about the routes.
-    walletOf: (authorization) => (authorization === undefined ? null : WALLET),
+    walletOf: (authorization) => Promise.resolve(authorization === undefined ? null : WALLET),
+    auth,
   });
 });
 
@@ -403,7 +426,8 @@ function startingServer(): FastifyInstance {
     allowedOrigins: [ALLOWED_ORIGIN],
     finalizedResult: () => Promise.resolve(null),
     now: () => now,
-    walletOf: () => null,
+    walletOf: () => Promise.resolve(null),
+    auth,
   });
 }
 
@@ -797,5 +821,202 @@ describe('GET /v1/status', () => {
     // this stays a decision rather than a habit.
     const keys = Object.keys((await app.inject({ method: 'GET', url: '/v1/status' })).json());
     expect(keys.sort()).toEqual(['protocolVersion', 'round', 'status']);
+  });
+});
+
+describe('signing in with a wallet', () => {
+  // A real key signing through a real wallet implementation. These routes must
+  // not be verified against a signature the same code path produced.
+  const account = privateKeyToAccount(
+    '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
+  );
+  const SIGNER = walletAddress(account.address);
+  const IMPOSTOR = privateKeyToAccount(`0x${'55'.repeat(32)}`);
+
+  async function challenge(): Promise<{ nonce: string; message: string }> {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/challenge',
+      payload: { wallet: SIGNER, chainId: AUTH_POLICY.chainId },
+    });
+    const body = authChallengeSchema.parse(response.json());
+    return { nonce: body.nonce, message: body.message };
+  }
+
+  async function session(): Promise<string> {
+    const { nonce, message } = await challenge();
+    const signature = await account.signMessage({ message });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify',
+      payload: { wallet: SIGNER, nonce, signature },
+    });
+    return authSessionSchema.parse(response.json()).token;
+  }
+
+  it('hands back a message the wallet can display', async () => {
+    const { message } = await challenge();
+
+    // §110: somebody about to approve a wallet prompt should be told what it
+    // is, and — the part people get wrong — what it is not.
+    expect(message).toContain('play.example.test');
+    expect(message).toContain('not a transaction');
+  });
+
+  it('refuses a wallet on another chain before anyone signs anything', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/challenge',
+      payload: { wallet: SIGNER, chainId: AUTH_POLICY.chainId + 1 },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(apiErrorSchema.parse(response.json()).code).toBe('WRONG_CHAIN');
+  });
+
+  it('turns a signature into a session', async () => {
+    const { nonce, message } = await challenge();
+    const signature = await account.signMessage({ message });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify',
+      payload: { wallet: SIGNER, nonce, signature },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(authSessionSchema.parse(response.json()).wallet).toBe(SIGNER);
+  });
+
+  it('refuses the same signature twice', async () => {
+    const { nonce, message } = await challenge();
+    const signature = await account.signMessage({ message });
+    const payload = { wallet: SIGNER, nonce, signature };
+    await app.inject({ method: 'POST', url: '/v1/auth/verify', payload });
+
+    const replayed = await app.inject({ method: 'POST', url: '/v1/auth/verify', payload });
+
+    expect(replayed.statusCode).toBe(401);
+    expect(apiErrorSchema.parse(replayed.json()).code).toBe('SIGN_IN_REFUSED');
+  });
+
+  it('refuses a signature that proves a different wallet', async () => {
+    const { nonce, message } = await challenge();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify',
+      payload: { wallet: SIGNER, nonce, signature: await IMPOSTOR.signMessage({ message }) },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('says the same thing however the sign-in failed', async () => {
+    // Four different facts, one answer. Telling them apart helps exactly one
+    // kind of caller, and it is not the player.
+    const { nonce, message } = await challenge();
+    const wrong = await IMPOSTOR.signMessage({ message });
+
+    const unknownNonce = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify',
+      payload: { wallet: SIGNER, nonce: '0'.repeat(32), signature: wrong },
+    });
+    const badSignature = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify',
+      payload: { wallet: SIGNER, nonce, signature: wrong },
+    });
+
+    expect(unknownNonce.json()).toMatchObject({ code: 'SIGN_IN_REFUSED' });
+    expect(badSignature.json()).toMatchObject({ code: 'SIGN_IN_REFUSED' });
+  });
+
+  it('tells a client what its token is', async () => {
+    const token = await session();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/auth/session',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(authSessionInfoSchema.parse(response.json()).wallet).toBe(SIGNER);
+  });
+
+  it('does not answer for a token nobody issued', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/auth/session',
+      headers: { authorization: 'Bearer nonsense' },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('ends a session on request, and again without complaint', async () => {
+    const token = await session();
+    const headers = { authorization: `Bearer ${token}` };
+
+    const first = await app.inject({ method: 'DELETE', url: '/v1/auth/session', headers });
+    const second = await app.inject({ method: 'DELETE', url: '/v1/auth/session', headers });
+    const after = await app.inject({ method: 'GET', url: '/v1/auth/session', headers });
+
+    expect(first.statusCode).toBe(204);
+    expect(second.statusCode).toBe(204);
+    expect(after.statusCode).toBe(401);
+  });
+
+  it('rotates a session into a new token and retires the old one', async () => {
+    const token = await session();
+    const headers = { authorization: `Bearer ${token}` };
+
+    const rotated = await app.inject({ method: 'POST', url: '/v1/auth/session/rotate', headers });
+    const next = authSessionSchema.parse(rotated.json());
+    const withOld = await app.inject({ method: 'GET', url: '/v1/auth/session', headers });
+    const withNew = await app.inject({
+      method: 'GET',
+      url: '/v1/auth/session',
+      headers: { authorization: `Bearer ${next.token}` },
+    });
+
+    expect(next.token).not.toBe(token);
+    expect(withOld.statusCode).toBe(401);
+    expect(withNew.statusCode).toBe(200);
+  });
+
+  it('will not rotate what is not a session', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/session/rotate',
+      headers: { authorization: 'Bearer nonsense' },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('ignores an Authorization header that is not a bearer token', async () => {
+    // Not a token to try anyway. Hashing whatever was there and looking it up
+    // cannot succeed, but does turn a malformed header into a database query.
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/auth/session',
+      headers: { authorization: 'Basic YWxpY2U6c2VjcmV0' },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('lets a browser reach the whole flow', async () => {
+    // Every method these routes add has to survive the preflight. The allowed
+    // list is derived from the routes, and this is what keeps that true.
+    const response = await app.inject({
+      method: 'OPTIONS',
+      url: '/v1/auth/session',
+      headers: { origin: ALLOWED_ORIGIN, 'access-control-request-method': 'DELETE' },
+    });
+
+    expect(response.headers['access-control-allow-methods']).toContain('DELETE');
   });
 });

@@ -20,18 +20,17 @@ import { parseSiweMessage, validateSiweMessage } from 'viem/siwe';
  */
 
 export type VerificationFailure =
-  | 'MESSAGE_MALFORMED'
-  | 'MESSAGE_MISMATCH'
-  | 'DOMAIN_MISMATCH'
-  | 'CHAIN_MISMATCH'
-  | 'EXPIRED'
-  | 'SIGNATURE_INVALID';
+  'MESSAGE_MALFORMED' | 'DOMAIN_MISMATCH' | 'CHAIN_MISMATCH' | 'EXPIRED' | 'SIGNATURE_INVALID';
 
 export interface VerifyInput {
-  /** The message the client says it signed. */
+  /**
+   * The message the server issued for this nonce, read back from the store.
+   *
+   * Never a copy sent by the client. An echoed message is either identical, in
+   * which case it adds nothing, or different, in which case believing it is the
+   * bug — a wallet could be shown one thing and the server told another.
+   */
   readonly message: string;
-  /** The message the server issued for this nonce, from the store. */
-  readonly issued: string;
   readonly signature: string;
   readonly expectedWallet: WalletAddress;
   readonly expectedDomain: string;
@@ -44,13 +43,6 @@ export type VerifyResult =
   | { readonly ok: false; readonly reason: VerificationFailure };
 
 export async function verifySignedChallenge(input: VerifyInput): Promise<VerifyResult> {
-  // The server's copy is the one that counts. Comparing the whole string first
-  // means none of the checks below can be defeated by a message that differs
-  // from the one issued — including in a field nothing here reads.
-  if (input.message !== input.issued) {
-    return { ok: false, reason: 'MESSAGE_MISMATCH' };
-  }
-
   const parsed = parseSiweMessage(input.message);
   if (parsed.address === undefined || parsed.nonce === undefined) {
     return { ok: false, reason: 'MESSAGE_MALFORMED' };

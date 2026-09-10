@@ -4,7 +4,13 @@ import {
   type EngineConfig,
   type RoundEngineState,
 } from '@ponswars/battle-engine';
+import { CHALLENGE_STATEMENT, type AuthService } from '@ponswars/auth';
 import {
+  authChallengeRequestSchema,
+  authChallengeSchema,
+  authSessionInfoSchema,
+  authSessionSchema,
+  authVerifyRequestSchema,
   cardDecisionRequestSchema,
   battleResultSchema,
   currentRoundSchema,
@@ -33,8 +39,10 @@ import {
   resultNotFound,
   picksClosed,
   roundNotFound,
+  signInRefused,
   tickerNotInBattle,
   unauthenticated,
+  wrongChain,
   type ErrorResponse,
 } from './errors.js';
 import type { PickStore } from './pick-store.js';
@@ -71,8 +79,20 @@ export interface ServerDeps {
    * Signature verification is §45.2 and belongs to the auth service; this takes
    * the result. Spectating needs no wallet at all (§5), so `null` is normal and
    * only writes reject it.
+   *
+   * Asynchronous because a session lives in a database: it has to survive a
+   * restart and be revocable, and neither is possible for a token this process
+   * can settle on its own.
    */
-  readonly walletOf: (authorization: string | undefined) => WalletAddress | null;
+  readonly walletOf: (authorization: string | undefined) => Promise<WalletAddress | null>;
+  /**
+   * Wallet sign-in (§45.2, §69.4, §69.5).
+   *
+   * The service rather than four functions, because the four endpoints below
+   * are one flow and splitting them across the dependency boundary would let a
+   * composition wire half of it.
+   */
+  readonly auth: AuthService;
   /**
    * Browser origins allowed to read this API.
    *
@@ -100,6 +120,21 @@ export interface ServerDeps {
    * one — the one deployments actually run — impossible to write.
    */
   readonly finalizedResult: (battleId: string) => Promise<FinalizedBattleResult | null>;
+}
+
+/**
+ * The token out of an `Authorization` header, or `null`.
+ *
+ * `Bearer <token>` and nothing else. A scheme this does not recognise is not a
+ * token to try anyway: `walletOf` would hash whatever was there and look it up,
+ * which cannot succeed but does turn a malformed header into a database query.
+ */
+export function bearer(authorization: string | undefined): string | null {
+  if (authorization === undefined) {
+    return null;
+  }
+  const match = /^Bearer (.+)$/.exec(authorization.trim());
+  return match?.[1] ?? null;
 }
 
 /** Correlation id for one request, so an error can be traced (§110.5). */
@@ -233,6 +268,134 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   });
 
   /**
+   * `POST /v1/auth/challenge` (§69.4, §45.2).
+   *
+   * Issued for whatever address asks, without checking that it exists or has
+   * ever played: an unknown address is what a first sign-in looks like, and
+   * refusing here would tell an anonymous caller which wallets have accounts.
+   *
+   * The chain is checked before anything is issued. §45.2 requires a signature
+   * to match chain policy, and the useful moment to say so is before somebody
+   * approves a wallet prompt rather than after.
+   */
+  app.post('/v1/auth/challenge', async (request, reply) => {
+    const id = correlationId();
+    const parsed = authChallengeRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return send(reply, invalidRequest(parsed.error.issues[0]?.message ?? 'unknown', id));
+    }
+    if (parsed.data.chainId !== deps.auth.chainId) {
+      return send(reply, wrongChain(deps.auth.chainId, id));
+    }
+
+    const challenge = await deps.auth.challenge(parsed.data.wallet);
+    return reply.code(201).send(
+      authChallengeSchema.parse({
+        nonce: challenge.nonce,
+        message: challenge.message,
+        expiresAt: challenge.expiresAt,
+        statement: CHALLENGE_STATEMENT,
+        chainId: deps.auth.chainId,
+      }),
+    );
+  });
+
+  /**
+   * `POST /v1/auth/verify` (§69.5, §45.2).
+   *
+   * One refusal for every way this can fail. An expired challenge, one already
+   * used, one that never existed and a signature from the wrong wallet are four
+   * different facts, and telling them apart helps exactly one kind of caller:
+   * somebody working through nonces that are not theirs. The player's next step
+   * is the same in all four.
+   *
+   * The token is in this response and nowhere else. The server keeps a
+   * fingerprint, so it cannot be re-sent — a client that loses it signs in
+   * again, which is the correct outcome.
+   */
+  app.post('/v1/auth/verify', async (request, reply) => {
+    const id = correlationId();
+    const parsed = authVerifyRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return send(reply, invalidRequest(parsed.error.issues[0]?.message ?? 'unknown', id));
+    }
+
+    const result = await deps.auth.verify(parsed.data.nonce, parsed.data.signature);
+    // The wallet in the body is checked against the one that signed rather than
+    // trusted: a client that asks to sign in as one address and proves another
+    // is confused at best, and this is the cheapest place to notice.
+    if (!result.ok || result.session.wallet !== parsed.data.wallet) {
+      return send(reply, signInRefused(id));
+    }
+
+    return reply.code(201).send(
+      authSessionSchema.parse({
+        token: result.session.token,
+        wallet: result.session.wallet,
+        expiresAt: result.session.expiresAt,
+      }),
+    );
+  });
+
+  /**
+   * `GET /v1/auth/session` (§45.2).
+   *
+   * What this token is, for a client that has one in storage and does not know
+   * whether it still works — after a reload, or after a session expired while
+   * the tab was in the background.
+   */
+  app.get('/v1/auth/session', async (request, reply) => {
+    const id = correlationId();
+    const session = await deps.auth.session(bearer(request.headers.authorization) ?? '');
+    if (session === null) {
+      return send(reply, unauthenticated(id));
+    }
+    return reply.send(
+      authSessionInfoSchema.parse({ wallet: session.wallet, expiresAt: session.expiresAt }),
+    );
+  });
+
+  /**
+   * `DELETE /v1/auth/session` (§45.2 revocation).
+   *
+   * Signing out. Answers `204` whether or not the token was live, because the
+   * caller's intent — that this token stops working — is satisfied either way,
+   * and an answer that distinguished the two would only help somebody holding a
+   * token that is not theirs.
+   */
+  app.delete('/v1/auth/session', async (request, reply) => {
+    const token = bearer(request.headers.authorization);
+    if (token !== null) {
+      await deps.auth.revoke(token);
+    }
+    return reply.code(204).send();
+  });
+
+  /**
+   * `POST /v1/auth/session/rotate` (§45.2 session rotation).
+   *
+   * A fresh token with a fresh expiry, the old one revoked. This is how a long
+   * visit stays signed in without the session token itself being long-lived:
+   * the credential in flight is always young, so a copy taken from a machine
+   * hours ago is already dead.
+   */
+  app.post('/v1/auth/session/rotate', async (request, reply) => {
+    const id = correlationId();
+    const token = bearer(request.headers.authorization);
+    const rotated = token === null ? null : await deps.auth.rotate(token);
+    if (rotated === null) {
+      return send(reply, unauthenticated(id));
+    }
+    return reply.code(201).send(
+      authSessionSchema.parse({
+        token: rotated.token,
+        wallet: rotated.wallet,
+        expiresAt: rotated.expiresAt,
+      }),
+    );
+  });
+
+  /**
    * `GET /v1/rounds/current` (§47.1, §27.4).
    *
    * The response is parsed through `currentRoundSchema` on the way out. That
@@ -283,10 +446,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
    * mistyped a ticker is in a different situation from one who missed the lock,
    * and only one of them needs telling that no card charge was spent.
    */
-  app.put('/v1/rounds/:roundId/pick', (request, reply) => {
+  app.put('/v1/rounds/:roundId/pick', async (request, reply) => {
     const id = correlationId();
 
-    const wallet = deps.walletOf(request.headers.authorization);
+    const wallet = await deps.walletOf(request.headers.authorization);
     if (wallet === null) {
       return send(reply, unauthenticated(id));
     }
@@ -352,9 +515,9 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   });
 
   /** `GET /v1/rounds/:roundId/pick` — what this wallet currently backs. */
-  app.get('/v1/rounds/:roundId/pick', (request, reply) => {
+  app.get('/v1/rounds/:roundId/pick', async (request, reply) => {
     const id = correlationId();
-    const wallet = deps.walletOf(request.headers.authorization);
+    const wallet = await deps.walletOf(request.headers.authorization);
     if (wallet === null) {
       return send(reply, unauthenticated(id));
     }
@@ -388,10 +551,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
    * a client retrying a withdrawal it never saw succeed must not be told it did
    * something wrong.
    */
-  app.delete('/v1/rounds/:roundId/pick', (request, reply) => {
+  app.delete('/v1/rounds/:roundId/pick', async (request, reply) => {
     const id = correlationId();
 
-    const wallet = deps.walletOf(request.headers.authorization);
+    const wallet = await deps.walletOf(request.headers.authorization);
     if (wallet === null) {
       return send(reply, unauthenticated(id));
     }
@@ -422,10 +585,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
    * spends anything, so a player who changes their mind before lock has spent
    * nothing (§40.7).
    */
-  app.put('/v1/rounds/:roundId/card-decision', (request, reply) => {
+  app.put('/v1/rounds/:roundId/card-decision', async (request, reply) => {
     const id = correlationId();
 
-    const wallet = deps.walletOf(request.headers.authorization);
+    const wallet = await deps.walletOf(request.headers.authorization);
     if (wallet === null) {
       return send(reply, unauthenticated(id));
     }

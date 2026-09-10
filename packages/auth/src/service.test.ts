@@ -76,9 +76,9 @@ describe('the challenge', () => {
 
 describe('exchanging a signature for a session', () => {
   it('accepts a signature from the wallet it was issued to', async () => {
-    const { nonce, message, signature } = await signIn();
+    const { nonce, signature } = await signIn();
 
-    const result = await auth.verify(nonce, message, signature);
+    const result = await auth.verify(nonce, signature);
 
     expect(result.ok).toBe(true);
     expect(result.ok && result.session.wallet).toBe(WALLET);
@@ -87,10 +87,10 @@ describe('exchanging a signature for a session', () => {
   it('refuses a second use of the same challenge', async () => {
     // §45.2: single-use. Signing once and replaying the same pair is the attack
     // this whole flow exists to stop.
-    const { nonce, message, signature } = await signIn();
-    await auth.verify(nonce, message, signature);
+    const { nonce, signature } = await signIn();
+    await auth.verify(nonce, signature);
 
-    const replayed = await auth.verify(nonce, message, signature);
+    const replayed = await auth.verify(nonce, signature);
 
     expect(replayed).toEqual({ ok: false, reason: 'NO_SUCH_CHALLENGE' });
   });
@@ -101,8 +101,8 @@ describe('exchanging a signature for a session', () => {
     const { nonce, message } = await signIn();
     const wrong = await privateKeyToAccount(`0x${'11'.repeat(32)}`).signMessage({ message });
 
-    const first = await auth.verify(nonce, message, wrong);
-    const second = await auth.verify(nonce, message, wrong);
+    const first = await auth.verify(nonce, wrong);
+    const second = await auth.verify(nonce, wrong);
 
     expect(first).toEqual({ ok: false, reason: 'SIGNATURE_INVALID' });
     expect(second).toEqual({ ok: false, reason: 'NO_SUCH_CHALLENGE' });
@@ -112,35 +112,36 @@ describe('exchanging a signature for a session', () => {
     const { nonce, message } = await signIn();
     const other = privateKeyToAccount(`0x${'22'.repeat(32)}`);
 
-    const result = await auth.verify(nonce, message, await other.signMessage({ message }));
+    const result = await auth.verify(nonce, await other.signMessage({ message }));
 
     expect(result).toEqual({ ok: false, reason: 'SIGNATURE_INVALID' });
   });
 
-  it('refuses a message that is not the one it issued', async () => {
-    // The client sends back the message it says it signed. If that were trusted,
-    // a wallet could be shown one thing and the server told another.
-    const { nonce, message, signature } = await signIn();
-    const edited = message.replace('ponswars.test', 'ponswars.evil');
+  it('refuses a signature over a message the server did not issue', async () => {
+    // The client never sends the message back — the server verifies against its
+    // own copy — so a wallet shown something else produces a signature that
+    // recovers to somebody who is not the challenge's wallet.
+    const { nonce } = await signIn();
+    const elsewhere = await account.signMessage({ message: 'Approve everything' });
 
-    const result = await auth.verify(nonce, edited, signature);
+    const result = await auth.verify(nonce, elsewhere);
 
-    expect(result).toEqual({ ok: false, reason: 'MESSAGE_MISMATCH' });
+    expect(result).toEqual({ ok: false, reason: 'SIGNATURE_INVALID' });
   });
 
   it('refuses a challenge that expired while it was being signed', async () => {
-    const { nonce, message, signature } = await signIn();
+    const { nonce, signature } = await signIn();
     clock += POLICY.challengeTtlMs + 1;
 
-    const result = await auth.verify(nonce, message, signature);
+    const result = await auth.verify(nonce, signature);
 
     expect(result).toEqual({ ok: false, reason: 'NO_SUCH_CHALLENGE' });
   });
 
   it('refuses a nonce nobody issued', async () => {
-    const { message, signature } = await signIn();
+    const { signature } = await signIn();
 
-    const result = await auth.verify('0'.repeat(32), message, signature);
+    const result = await auth.verify('0'.repeat(32), signature);
 
     expect(result).toEqual({ ok: false, reason: 'NO_SUCH_CHALLENGE' });
   });
@@ -148,8 +149,8 @@ describe('exchanging a signature for a session', () => {
 
 describe('the session', () => {
   it('names the wallet that signed', async () => {
-    const { nonce, message, signature } = await signIn();
-    const result = await auth.verify(nonce, message, signature);
+    const { nonce, signature } = await signIn();
+    const result = await auth.verify(nonce, signature);
     const token = result.ok ? result.session.token : '';
 
     expect(await auth.walletOf(token)).toBe(WALLET);
@@ -158,16 +159,16 @@ describe('the session', () => {
   it('is not the token the store keeps', async () => {
     // A database read must not be a set of live sessions. The store holds a
     // fingerprint; the token itself exists only in the response and the client.
-    const { nonce, message, signature } = await signIn();
-    const result = await auth.verify(nonce, message, signature);
+    const { nonce, signature } = await signIn();
+    const result = await auth.verify(nonce, signature);
     const token = result.ok ? result.session.token : '';
 
     expect(JSON.stringify(store)).not.toContain(token);
   });
 
   it('stops working when it expires', async () => {
-    const { nonce, message, signature } = await signIn();
-    const result = await auth.verify(nonce, message, signature);
+    const { nonce, signature } = await signIn();
+    const result = await auth.verify(nonce, signature);
     const token = result.ok ? result.session.token : '';
 
     clock += POLICY.sessionTtlMs;
@@ -176,8 +177,8 @@ describe('the session', () => {
   });
 
   it('stops working when it is revoked', async () => {
-    const { nonce, message, signature } = await signIn();
-    const result = await auth.verify(nonce, message, signature);
+    const { nonce, signature } = await signIn();
+    const result = await auth.verify(nonce, signature);
     const token = result.ok ? result.session.token : '';
 
     await auth.revoke(token);
@@ -188,8 +189,8 @@ describe('the session', () => {
   it('can be revoked twice without complaint', async () => {
     // Sign out, then sign out again from a second tab. The caller's intent —
     // that this token stops working — is already satisfied.
-    const { nonce, message, signature } = await signIn();
-    const result = await auth.verify(nonce, message, signature);
+    const { nonce, signature } = await signIn();
+    const result = await auth.verify(nonce, signature);
     const token = result.ok ? result.session.token : '';
 
     await auth.revoke(token);
@@ -198,8 +199,8 @@ describe('the session', () => {
   });
 
   it('rotates into a new token and retires the old one', async () => {
-    const { nonce, message, signature } = await signIn();
-    const result = await auth.verify(nonce, message, signature);
+    const { nonce, signature } = await signIn();
+    const result = await auth.verify(nonce, signature);
     const token = result.ok ? result.session.token : '';
 
     clock += 60_000;
@@ -225,7 +226,7 @@ describe('the session', () => {
 describe('housekeeping', () => {
   it('drops what has expired and keeps what has not', async () => {
     const live = await signIn();
-    const session = await auth.verify(live.nonce, live.message, live.signature);
+    const session = await auth.verify(live.nonce, live.signature);
     const token = session.ok ? session.session.token : '';
     await auth.challenge(WALLET);
     await auth.challenge(WALLET);

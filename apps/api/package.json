@@ -20,6 +20,7 @@
     "clean": "tsc --build --clean"
   },
   "dependencies": {
+    "@ponswars/auth": "workspace:*",
     "@ponswars/battle-engine": "workspace:*",
     "@ponswars/realtime": "workspace:*",
     "@ponswars/round-service": "workspace:*",
@@ -28,6 +29,7 @@
     "fastify": "^5.12.3"
   },
   "devDependencies": {
-    "@ponswars/battle-math": "workspace:*"
+    "@ponswars/battle-math": "workspace:*",
+    "viem": "^2.56.3"
   }
 }
