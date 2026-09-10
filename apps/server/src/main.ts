@@ -46,13 +46,13 @@ import { connectPostgres } from './postgres.js';
  *
  * ## What is still a stand-in, and says so
  *
- * The market. `MARKET_DATA_PROVIDER` has one member today, `synthetic`, and it
- * is not a market: choosing a vendor is a commercial and licensing decision
- * that has not been made. A deployment running it prints a line saying the
- * prices are not real, every time it starts, because the failure mode for a
- * thing like this is somebody running it and believing it.
+ * The market, and only the market. `MARKET_DATA_PROVIDER` has one member today,
+ * `synthetic`, and it is not a market: choosing a vendor is a commercial and
+ * licensing decision that has not been made. A deployment running it prints a
+ * line saying the prices are not real, every time it starts, because the
+ * failure mode for a thing like this is somebody running it and believing it.
  *
- * The market is the only one left. Authentication is real now (§45.2): a wallet
+ * Authentication used to be the other one. It is real now (§45.2): a wallet
  * signs a challenge, the signature is verified, and the session that comes back
  * lives in the database so that it survives a deploy and can be revoked.
  */
@@ -213,6 +213,26 @@ async function main(): Promise<void> {
   say(banner(config.API_PORT, config.GATEWAY_PORT, config.MARKET_DATA_PROVIDER, market.real));
 
   /**
+   * Housekeeping for the auth tables.
+   *
+   * Expired challenges and sessions are already refused by every read — this is
+   * about the tables not growing forever, which is why the interval is not
+   * configuration: nothing behaves differently if a dead row survives another
+   * hour. It is a constant with a reason rather than an `OPEN` value (§102).
+   *
+   * `unref` so it never holds the process open, and it swallows its own
+   * failures: a database blip during a cleanup is not worth taking a service
+   * down for, and the next hour will try again.
+   */
+  const housekeeping = setInterval(
+    () => {
+      void auth.prune().catch(() => undefined);
+    },
+    60 * 60 * 1_000,
+  );
+  housekeeping.unref();
+
+  /**
    * Stops between rounds rather than mid-write (§25).
    *
    * An orchestrator sends `SIGTERM` and then waits before `SIGKILL`. What must
@@ -257,6 +277,7 @@ async function main(): Promise<void> {
       signal: stopping.signal,
     });
   } finally {
+    clearInterval(housekeeping);
     // `finally`, not the happy path. The driver can fail rather than stop —
     // the chain port has no implementation and rejects (§13.6) — and without
     // this the process stayed up afterwards: the API kept the event loop
