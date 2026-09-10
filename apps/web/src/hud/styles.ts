@@ -16,6 +16,14 @@ import type { CSSProperties } from 'react';
  */
 export const panelStyle: CSSProperties = {
   background: 'var(--pw-surface-2)',
+  // A sheen down the first stretch of the panel, and nothing after it. §42.11
+  // asks for tactical glass rather than a flat plate, and glass is read from
+  // the light that lands on its top edge — without it every panel in the
+  // product was the same dark rectangle at the same value, whatever it sat on.
+  //
+  // Deliberately faint. §42.1 keeps the world the hero, and a panel with a
+  // visible gradient in it competes with the thing behind it.
+  backgroundImage: 'linear-gradient(180deg, rgba(214, 236, 248, 0.05), rgba(214, 236, 248, 0) 42%)',
   border: 'var(--pw-line-hair) solid var(--pw-border-1)',
   borderRadius: 'var(--pw-radius-panel)',
   backdropFilter: 'blur(6px)',
