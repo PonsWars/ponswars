@@ -88,10 +88,10 @@ async function signIn(): Promise<{ nonce: string; message: string; signature: st
 
 describe('a challenge', () => {
   it('is answered once and never again', async () => {
-    const { nonce, message, signature } = await signIn();
+    const { nonce, signature } = await signIn();
 
-    const first = await auth.verify(nonce, message, signature);
-    const second = await auth.verify(nonce, message, signature);
+    const first = await auth.verify(nonce, signature);
+    const second = await auth.verify(nonce, signature);
 
     expect(first.ok).toBe(true);
     expect(second).toEqual({ ok: false, reason: 'NO_SUCH_CHALLENGE' });
@@ -101,21 +101,21 @@ describe('a challenge', () => {
     // The property the whole table exists for. Both callers see an unused
     // challenge if consumption is a read followed by a write; the conditional
     // UPDATE is what makes exactly one of them win.
-    const { nonce, message, signature } = await signIn();
+    const { nonce, signature } = await signIn();
 
     const [a, b] = await Promise.all([
-      auth.verify(nonce, message, signature),
-      auth.verify(nonce, message, signature),
+      auth.verify(nonce, signature),
+      auth.verify(nonce, signature),
     ]);
 
     expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
   });
 
   it('cannot be answered after it expires', async () => {
-    const { nonce, message, signature } = await signIn();
+    const { nonce, signature } = await signIn();
     clock += POLICY.challengeTtlMs + 1;
 
-    expect(await auth.verify(nonce, message, signature)).toEqual({
+    expect(await auth.verify(nonce, signature)).toEqual({
       ok: false,
       reason: 'NO_SUCH_CHALLENGE',
     });
@@ -125,7 +125,7 @@ describe('a challenge', () => {
     const { nonce, message } = await signIn();
     const wrong = await privateKeyToAccount(`0x${'33'.repeat(32)}`).signMessage({ message });
 
-    await auth.verify(nonce, message, wrong);
+    await auth.verify(nonce, wrong);
 
     const rows = await pg.query<{ used_at: Date | null }>('SELECT used_at FROM auth_challenges');
     expect(rows.rows[0]?.used_at).not.toBeNull();
@@ -134,8 +134,8 @@ describe('a challenge', () => {
 
 describe('a session', () => {
   async function live(): Promise<string> {
-    const { nonce, message, signature } = await signIn();
-    const result = await auth.verify(nonce, message, signature);
+    const { nonce, signature } = await signIn();
+    const result = await auth.verify(nonce, signature);
     if (!result.ok) {
       throw new Error(`sign-in failed: ${result.reason}`);
     }
@@ -218,7 +218,7 @@ describe('a session', () => {
     const other = privateKeyToAccount(`0x${'44'.repeat(32)}`);
     const theirs = await auth.challenge(other.address);
     const signature = await other.signMessage({ message: theirs.message });
-    const session = await auth.verify(theirs.nonce, theirs.message, signature);
+    const session = await auth.verify(theirs.nonce, signature);
 
     await store.revokeEverySession(WALLET, now());
 
@@ -231,8 +231,8 @@ describe('a session', () => {
 
 describe('housekeeping', () => {
   it('removes what has expired and leaves what has not', async () => {
-    const { nonce, message, signature } = await signIn();
-    const session = await auth.verify(nonce, message, signature);
+    const { nonce, signature } = await signIn();
+    const session = await auth.verify(nonce, signature);
     await auth.challenge(WALLET);
 
     clock += POLICY.challengeTtlMs + 1;
