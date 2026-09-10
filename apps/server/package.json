@@ -5,6 +5,9 @@
   "type": "module",
   "description": "The deployable service: round driver, REST API and realtime gateway in one process, wired from validated configuration.",
   "main": "./dist/main.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc --build",
     "clean": "tsc --build --clean",

@@ -1,0 +1,36 @@
+# What never belongs in a build context.
+#
+# Two reasons, and both matter. Size: the visual pack, the masterplan and every
+# `node_modules` in the workspace are hundreds of megabytes that would be sent
+# to the daemon on every build. Correctness: a `node_modules` built on the host
+# is the wrong platform's binaries, and a stale `dist` copied in is a build that
+# silently ships yesterday's code.
+
+.git
+.github
+.githooks
+
+# Installed and built on the host. Both are produced inside the image instead.
+**/node_modules
+**/dist
+**/.tsbuildinfo
+**/*.tsbuildinfo
+
+# Source material and working files, none of which any build reads.
+01_Masterplan
+02_Claude_Guides
+03_Visual_Pack
+_archive
+assets
+simulations
+tools/art/out
+
+# Secrets never reach a build context, whatever else happens.
+.env
+.env.*
+!.env.example
+
+# Foundry output; the contracts are built by their own toolchain.
+out
+cache
+broadcast
