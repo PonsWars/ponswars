@@ -13,6 +13,4 @@
 interface ImportMetaEnv {
   readonly VITE_API_URL?: string;
   readonly VITE_WS_URL?: string;
-  /** Development only — see `live/session-token.ts`. Never a real session. */
-  readonly VITE_DEV_SESSION_TOKEN?: string;
 }

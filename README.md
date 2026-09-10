@@ -116,6 +116,18 @@ The stack allows the two spellings of the Vite dev origin by default and takes
 also hand any page on the internet the ability to make authenticated requests
 on a visitor's behalf the moment credentials are enabled.
 
+### Connecting a wallet
+
+Press **CONNECT WALLET** in the bar. The wallet signs an EIP-4361 message the
+server issued, the signature comes back as a session, and that session is what
+every write carries — one signature, not one per pick (§45.2). Watching needs
+none of it: §5 makes spectating the whole product, so nothing is behind the
+button except the ability to play.
+
+The local stack keeps sessions in memory, so restarting it signs everyone out.
+A deployment keeps them in PostgreSQL, where they survive a deploy and can be
+revoked.
+
 ## Operator tools
 
 Three commands, each one a step an incident runbook tells someone to take. A
@@ -291,8 +303,15 @@ address would ship a localhost URL inside a production bundle, failing in the
 worst way: a deployed client quietly showing nothing while looking configured.
 A build with no endpoints runs as a labelled preview — placeholder battles under
 `PREVIEW — NOT A LIVE ROUND` — rather than presenting invented rounds as real
-ones. Wallet, card and reward values are still seeded, because the RPC provider
-and the Player service behind them are `OPEN`.
+ones.
+
+A wallet connects for real (§45.2). It signs an EIP-4361 challenge, the
+signature becomes a session that lives in PostgreSQL, and that session
+authenticates both the writes and the socket — a browser cannot put a header on
+a WebSocket, so the client proves its wallet in a frame before it subscribes to
+anything. Balance, card and reward values are still seeded, because the RPC
+provider and the Player service behind them are `OPEN`; the client shows a dash
+rather than a zero for a figure nobody has read.
 
 Design tokens are transcribed into `@ponswars/ui-tokens` from the design-token
 specification, with a test asserting the stylesheet and the typed constants

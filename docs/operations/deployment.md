@@ -39,8 +39,19 @@ stop one:
 | ------------------ | ----------------------------------------------------------------- |
 | Chain RPC (§59.3)  | **No round can finalize.** The driver fails and the process exits |
 | Market data (§102) | Prices are synthetic; the banner says so on every start           |
-| Auth (§45.2)       | Every write is refused outside `NODE_ENV=development`             |
 | Redis (§21.3)      | `REDIS_URL` is required and validated but nothing reads it yet    |
+
+Authentication is no longer on that list. §45.2 is built: a wallet signs an
+EIP-4361 challenge, the signature is verified, and the session that comes back
+lives in PostgreSQL so it survives a deploy and can be revoked. What a
+deployment has to decide is how long a challenge and a session last — both are
+`OPEN` (`docs/OPEN_PARAMETERS.md` §4) and both are required at startup.
+
+One limitation worth knowing before somebody reports it as a bug: a
+smart-contract wallet cannot sign in. EIP-1271 verification is a call to the
+wallet's own contract, which needs the chain client that does not exist yet, so
+a signature that does not recover to the expected address is refused. That is
+the same open decision as the tiebreak, arriving in a second place.
 
 ## Configuration
 
@@ -55,11 +66,17 @@ Invalid configuration (19 problem(s)):
   ...
 ```
 
-Four variables are the composition's rather than the server's, and live in the
+Six variables are the composition's rather than the server's, and live in the
 same file: `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` for the
 bundled database, and `VITE_API_URL`, `VITE_WS_URL`, `WEB_PORT` for the client.
 The two `VITE_` values are compiled into the bundle and are public the moment it
 ships — which is why they are not in the server's table, where the secrets are.
+
+`AUTH_ORIGIN` is the one worth reading twice. A sign-in signature is bound to
+the origin named in the message, so this is the **client's** public URL, not the
+API's — and a signature produced for one deployment must not authenticate at
+another. Getting it wrong works perfectly right up until somebody clones the
+front end.
 
 ## Bringing it up
 
@@ -141,7 +158,13 @@ the last round it saw, forever.
 curl -fsS "http://HOST:$API_PORT/v1/health"          # process is up
 curl -fsS "http://HOST:$API_PORT/v1/ready"           # a round is loaded
 curl -fsS "http://HOST:$API_PORT/v1/rounds/current"  # five battles, real tickers
+
+# Sign-in is reachable, and names the origin it is bound to (§45.2).
+curl -fsS -X POST "http://HOST:$API_PORT/v1/auth/challenge"   -H 'content-type: application/json'   -d '{"wallet":"0x0000000000000000000000000000000000000001","chainId":CHAIN_ID}'
 ```
+
+The first line of that message is `AUTH_ORIGIN`'s host. If it is not the host
+players will be on, no signature they produce will be accepted.
 
 Then open the client. The world view shows the round's five matchups and a
 countdown; if it shows a preview instead, `VITE_API_URL` and `VITE_WS_URL` were
