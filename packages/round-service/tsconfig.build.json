@@ -12,6 +12,7 @@
     { "path": "../shared-types/tsconfig.build.json" },
     { "path": "../battle-math/tsconfig.build.json" },
     { "path": "../battle-engine/tsconfig.build.json" },
-    { "path": "../realtime/tsconfig.build.json" }
+    { "path": "../realtime/tsconfig.build.json" },
+    { "path": "../schemas/tsconfig.build.json" }
   ]
 }
