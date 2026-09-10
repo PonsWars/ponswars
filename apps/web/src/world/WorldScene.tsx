@@ -14,6 +14,7 @@ import {
 } from '@ponswars/world-runtime';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -33,6 +34,7 @@ import {
   SECTOR_POSITIONS,
   SECTOR_SKYLINE_HEIGHT,
 } from './layout.js';
+import { Army } from './Army.js';
 import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigation-config.js';
 import { SectorLabel } from './SectorLabel.js';
 import { WorldInput } from './WorldInput.js';
@@ -650,6 +652,22 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
       {/* Two districts with that contested centre between them (§38.3). */}
       <District side={-1} accent={leftAccent} detail={detail} seed={terrainSeed(index, 1)} />
       <District side={1} accent={rightAccent} detail={detail} seed={terrainSeed(index, 2)} />
+
+      {/* The armies holding them (§38.3, §36.2).
+          Suspended separately from the world so a sector draws the moment its
+          island is ready and the units arrive when they have downloaded. §82.3
+          stages the load; an island that waited on three megabytes of rig would
+          be a black screen with a countdown over it.
+
+          `null` while they load rather than a placeholder: a stand-in soldier
+          that is replaced a second later is a worse first frame than an empty
+          deck that fills. */}
+      {battle !== undefined ? (
+        <Suspense fallback={null}>
+          <Army side={-1} accent={leftAccent} detail={detail} seed={terrainSeed(index, 4)} />
+          <Army side={1} accent={rightAccent} detail={detail} seed={terrainSeed(index, 5)} />
+        </Suspense>
+      ) : null}
 
       {/* Each side's forward base (§38.5).
           Temporary by definition: deployed into whichever sector the round
