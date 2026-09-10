@@ -6,6 +6,38 @@
     <title>PonsWars</title>
     <meta name="description" content="The market is at war." />
     <meta name="color-scheme" content="dark" />
+    <!--
+      The chrome around the page. A browser paints the surround from this before
+      any script runs, so leaving it out means the first thing a visitor sees on
+      a phone is a white bar over a black world.
+    -->
+    <meta name="theme-color" content="#05080b" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!--
+      What a shared link unfurls as (§80.4).
+
+      Every surface here is a shareable URL, so links get posted — and a post
+      with no card is a grey rectangle with a hostname in it. The image is built
+      by `tools/build-share-card.mjs` from the same marks the app draws.
+
+      No absolute URL on `og:image`, and that is a real limitation rather than
+      an omission: most crawlers resolve a relative one, some do not, and the
+      origin this deploys to is still an `OPEN` decision (§102). Writing a guess
+      here would be worse than a relative path — a wrong absolute URL fails
+      everywhere instead of somewhere.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PonsWars" />
+    <meta property="og:title" content="PonsWars — real markets. Higher stakes." />
+    <meta
+      property="og:description"
+      content="Ten stock factions fight five battles every ten minutes, scored from live market data. Pick a side and watch the frontline move."
+    />
+    <meta property="og:image" content="/share-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="root"></div>

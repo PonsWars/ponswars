@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!--
+    The PonsWars mark, as the browser tab icon.
+
+    The same arrowhead the app draws in `art/PonsWarsMark.tsx` and the same
+    diamond frame the ten faction emblems are held in, so the tab, the
+    navigation bar and the heraldry are one mark. Written out rather than
+    exported from the component: a favicon is requested before any script runs,
+    so it cannot come from React, and a second drawing is the only alternative
+    to a second file.
+
+    SVG rather than a PNG set. It is four flat shapes, so it is smaller than any
+    raster of it and sharp at every size a browser or an installed shortcut asks
+    for.
+  -->
+  <rect width="64" height="64" rx="12" fill="#080f15" />
+  <path d="M32 6 L56 32 L32 58 L8 32 Z" fill="none" stroke="#9cff38" stroke-width="2.5" opacity="0.55" />
+  <g fill="#9cff38">
+    <path d="M32 15 L37.5 31 L32 27.5 L26.5 31 Z" />
+    <path d="M19.5 25.5 L26.5 36 L19.5 43 L16 33.5 Z" />
+    <path d="M44.5 25.5 L48 33.5 L44.5 43 L37.5 36 Z" />
+    <path d="M23 44.5 L41 44.5 L41 49 L23 49 Z" />
+  </g>
+</svg>

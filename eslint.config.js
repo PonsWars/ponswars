@@ -77,6 +77,9 @@ export default tseslint.config(
       // still looks for a tsconfig that will never contain this file.
       parserOptions: { projectService: false, project: false },
       globals: {
+        // Listed one at a time rather than pulled in as a preset, so a script
+        // reaching for a runtime global is a line someone had to add.
+        Buffer: 'readonly',
         console: 'readonly',
         process: 'readonly',
         URL: 'readonly',
