@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@ponswars/battle-math": "workspace:*",
+    "@ponswars/round-service": "workspace:*",
     "@ponswars/shared-types": "workspace:*"
   }
 }

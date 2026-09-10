@@ -1,6 +1,6 @@
 import { ACTIVE_TICKERS, utcTimestamp, type ActiveTicker } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SYNTHETIC_MARKET, SyntheticMarket } from './synthetic-market.js';
+import { DEFAULT_SYNTHETIC_MARKET, SyntheticMarket } from './synthetic.js';
 
 /**
  * That the synthetic market behaves like a market.

@@ -12,6 +12,7 @@
     { "path": "../../packages/shared-types/tsconfig.build.json" },
     { "path": "../../packages/battle-math/tsconfig.build.json" },
     { "path": "../../packages/battle-engine/tsconfig.build.json" },
+    { "path": "../../packages/market-data/tsconfig.build.json" },
     { "path": "../../packages/realtime/tsconfig.build.json" },
     { "path": "../../packages/round-service/tsconfig.build.json" },
     { "path": "../api/tsconfig.build.json" },

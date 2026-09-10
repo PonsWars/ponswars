@@ -19,7 +19,7 @@ import {
   type UtcTimestamp,
   type WalletAddress,
 } from '@ponswars/shared-types';
-import { SyntheticMarket } from './synthetic-market.js';
+import { SyntheticMarket } from '@ponswars/market-data';
 
 /**
  * The whole loop, running locally (§68).
