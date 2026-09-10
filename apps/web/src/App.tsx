@@ -12,6 +12,8 @@ import { Landing } from './landing/Landing.js';
 import { PreviewBanner } from './live/PreviewBanner.js';
 import { fetchBattleResult } from './live/round-client.js';
 import { useLiveWorld } from './live/useLiveWorld.js';
+import { useWalletSession } from './live/useWalletSession.js';
+import { WalletSessionProvider } from './live/WalletSessionContext.js';
 import type { GenesisOutcome } from './genesis/GenesisReveal.js';
 import { Hud } from './hud/Hud.js';
 import { Presentations, type FinishedBattle } from './presentation/Presentations.js';
@@ -340,9 +342,20 @@ export function App(): JSX.Element {
   const setCard = useSession((state) => state.setCard);
   const setReducedMotion = useSession((state) => state.setReducedMotion);
 
+  /**
+   * The page's one wallet session (§45.2).
+   *
+   * Owned here and read everywhere else through the provider below, because
+   * `useWalletSession` holds a token, a restore on load and a rotation timer —
+   * a second copy would race the first and the bar would disagree with the HUD
+   * about who is signed in.
+   */
+  const walletSession = useWalletSession();
+
   // Opens the round fetch and the realtime stream, or reports that this build
-  // was never told where they are.
-  const status = useLiveWorld();
+  // was never told where they are. The session goes in rather than being read
+  // there: writes carry it, and so does the socket (§48.2).
+  const status = useLiveWorld(walletSession.authorization);
   const lastResults = useSession((state) => state.lastResults);
   const myBattleId = useSession((state) => state.myBattleId);
 
@@ -468,7 +481,7 @@ export function App(): JSX.Element {
   }, [setReducedMotion]);
 
   return (
-    <>
+    <WalletSessionProvider session={walletSession}>
       {/* Mounted once, outside every route branch. Nothing below can unmount
           it, which is how §80.4's constraint stays true by construction. */}
       <Suspense fallback={<WorldLoading />}>
@@ -527,7 +540,7 @@ export function App(): JSX.Element {
           result={status.live ? finished : PLACEHOLDER_RESULT}
         />
       ) : null}
-    </>
+    </WalletSessionProvider>
   );
 }
 

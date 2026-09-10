@@ -45,6 +45,16 @@ export interface LiveSocketOptions {
   readonly endpoints: LiveEndpoints;
   readonly handlers: LiveSocketHandlers;
   /**
+   * The session token this connection belongs to, or `null` for a spectator.
+   *
+   * Sent as an `AUTHENTICATE` frame the moment the socket opens, and again on
+   * every reconnect — a browser cannot put an `Authorization` header on a
+   * WebSocket, so this frame is the only way §48.2's private channels are
+   * reachable at all. It goes before the subscriptions, so the gateway has
+   * decided who this connection is by the time one arrives.
+   */
+  readonly token?: string | null;
+  /**
    * Delays between reconnect attempts, in milliseconds.
    *
    * A list rather than a formula: the shape of a backoff is a product decision
@@ -110,6 +120,11 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocket {
 
     next.onopen = () => {
       attempt = 0;
+      // Before anything else. The gateway handles frames in order, so a
+      // subscription sent after this is judged against the wallet it proves.
+      if (options.token !== undefined && options.token !== null) {
+        next.send(JSON.stringify({ type: 'AUTHENTICATE', token: options.token }));
+      }
       // The receiver starts over on a new connection. Sequences are per
       // connection on the server's side of the fan-out, and carrying the old
       // channel positions across would read the first frame as a duplicate.

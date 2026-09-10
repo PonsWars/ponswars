@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { PonsWarsMark, PonsWarsWordmark } from '../art/PonsWarsMark.js';
 import { pathFor, type Route } from '../routing/route.js';
+import { WalletConnect } from './WalletConnect.js';
 import { captionStyle, panelStyle } from './styles.js';
 
 /**
@@ -132,11 +133,23 @@ export function NavBar({
         })}
       </div>
 
-      {children === undefined ? null : (
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', flex: 'none' }}>
-          {children}
-        </div>
-      )}
+      {/*
+        The wallet lives at the right edge of every bar, on every surface, which
+        is where each delivered mockup puts it. §5 makes it an offer rather than
+        a gate: a visitor who never presses it sees the entire world.
+      */}
+      <div
+        style={{
+          marginLeft: 'auto',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--pw-space-3)',
+          flex: 'none',
+        }}
+      >
+        {children}
+        <WalletConnect />
+      </div>
     </nav>
   );
 }

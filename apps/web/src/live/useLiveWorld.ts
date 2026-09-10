@@ -17,7 +17,6 @@ import {
   type PickResult,
 } from './pick-client.js';
 import { fetchCurrentRound, type RoundFetchFailure } from './round-client.js';
-import { sessionAuthorization } from './session-token.js';
 import { openLiveSocket, type LiveSocket } from './socket-client.js';
 
 /**
@@ -31,6 +30,11 @@ import { openLiveSocket, type LiveSocket } from './socket-client.js';
  * endpoints configured is a preview of the world, and the caller is expected to
  * label it — placeholder battles presented as a running round would be the
  * worst thing this client could do.
+ *
+ * `authorization` is passed in rather than read here, because there is exactly
+ * one session in a page and it belongs to the component that owns the wallet
+ * (§45.2). A hook that fetched its own would give every caller a different one.
+ * `null` is a spectator, which §5 makes the normal case.
  */
 
 export type LiveStatus =
@@ -39,11 +43,9 @@ export type LiveStatus =
   /** Configured, and this is how it is going. */
   | { readonly live: true; readonly lastFailure: RoundFetchFailure | null };
 
-export function useLiveWorld(): LiveStatus {
+export function useLiveWorld(authorization: string | null): LiveStatus {
   const endpoints = useMemo<LiveEndpoints | null>(() => liveEndpoints(import.meta.env), []);
   const [lastFailure, setLastFailure] = useState<RoundFetchFailure | null>(null);
-
-  const authorization = useMemo(() => sessionAuthorization(import.meta.env), []);
 
   const setRound = useSession((state) => state.setRound);
   const setBattles = useSession((state) => state.setBattles);
@@ -129,6 +131,12 @@ export function useLiveWorld(): LiveStatus {
 
     socketRef.current = openLiveSocket({
       endpoints,
+      // The socket belongs to the session as much as the writes do: §48.2's
+      // private channels are only reachable by a connection that has proved a
+      // wallet, and a browser can only prove one in a frame. Signing in
+      // therefore re-opens it — the close is deliberate, so nothing reports a
+      // reconnect, and the new connection resyncs as any connection does.
+      token: authorization === null ? null : authorization.replace(/^Bearer /i, ''),
       handlers: {
         onConnectionChange: setConnection,
         onResync: () => {

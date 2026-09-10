@@ -13,23 +13,28 @@ import { captionStyle, panelStyle } from './styles.js';
  * rather than a placeholder, and a zero balance shown to someone who never
  * connected is a placeholder that reads as fact.
  */
-export function WalletSummary(): JSX.Element {
+export function WalletSummary(): JSX.Element | null {
   const wallet = useSession((state) => state.wallet);
 
+  // Nothing at all when nobody is connected. The bar's own wallet control sits
+  // beside this and already says so — two panels captioned WALLET, one saying
+  // NOT CONNECTED and the other offering to connect, is the same sentence
+  // twice in a bar §42.1 wants out of the way.
   if (wallet === null) {
-    return (
-      <div style={panelStyle}>
-        <div style={captionStyle}>WALLET</div>
-        <div style={{ fontFamily: 'var(--pw-font-display)', fontSize: 13 }}>NOT CONNECTED</div>
-      </div>
-    );
+    return null;
   }
 
   return (
     <div style={{ ...panelStyle, display: 'flex', gap: 'var(--pw-space-4)' }}>
       <Field caption="WALLET" value={wallet.addressFragment} />
-      <Field caption="$WAR" value={wallet.warBalance} />
-      <Field caption="WP" value={String(wallet.warPoints)} />
+      {/*
+        An em dash rather than a zero for a figure nobody has read yet (§42.14).
+        The balance needs a chain client and the RPC vendor is OPEN (§59.3); War
+        Points need the profile endpoint, which is not built. Showing `0` to
+        somebody holding a million $WAR would be a placeholder read as fact.
+      */}
+      <Field caption="$WAR" value={wallet.warBalance ?? '—'} />
+      <Field caption="WP" value={wallet.warPoints === null ? '—' : String(wallet.warPoints)} />
     </div>
   );
 }

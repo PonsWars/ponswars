@@ -121,10 +121,20 @@ export interface WalletSummary {
    * A string, not a number. §66.3 keeps token amounts in integer base units all
    * the way to the edge; formatting them into a float here to render them would
    * be the one place the rule quietly breaks.
+   *
+   * `null` when nobody has read it yet. A connected wallet whose balance needs
+   * a chain client — and the RPC vendor is `OPEN` (§59.3) — is exactly §42.14's
+   * sync state, and a zero shown to somebody holding a million $WAR is a
+   * placeholder that reads as fact.
    */
-  readonly warBalance: string;
-  /** Current-window War Points (§16.2). A whole count, not a token amount. */
-  readonly warPoints: number;
+  readonly warBalance: string | null;
+  /**
+   * Current-window War Points (§16.2). A whole count, not a token amount.
+   *
+   * `null` for the same reason as the balance: the profile endpoint that would
+   * answer it is not built, and zero is a number somebody would believe.
+   */
+  readonly warPoints: number | null;
 }
 
 /**
