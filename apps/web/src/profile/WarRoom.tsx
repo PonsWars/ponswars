@@ -2,6 +2,7 @@ import type { CardType, Rarity } from '@ponswars/shared-types';
 import { RARITY_COLOR } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
 import { GenesisCardFace } from '../art/GenesisCardFace.js';
+import { GenesisTrophy } from '../art/GenesisTrophy.js';
 import { captionStyle, humanize, panelStyle, readoutStyle } from '../hud/styles.js';
 
 /**
@@ -211,12 +212,24 @@ function GenesisCardPanel({ card }: { readonly card: GenesisCardView | null }): 
             ...panelStyle,
             borderColor: RARITY_COLOR.SECRET,
             display: 'grid',
-            gap: 'var(--pw-space-1)',
+            gridTemplateColumns: 'auto 1fr',
+            alignItems: 'center',
+            gap: 'var(--pw-space-4)',
           }}
         >
-          <div style={{ ...captionStyle, color: RARITY_COLOR.SECRET }}>SECRET STOCK DROP</div>
-          <div className="pw-tabular" style={{ fontSize: 13, color: 'var(--pw-text-2)' }}>
-            CLAIMED ✓
+          <GenesisTrophy size={124} />
+          <div style={{ display: 'grid', gap: 'var(--pw-space-1)' }}>
+            <div style={{ ...captionStyle, color: RARITY_COLOR.SECRET }}>SECRET STOCK DROP</div>
+            <div className="pw-tabular" style={{ fontSize: 13, color: 'var(--pw-text-2)' }}>
+              CLAIMED ✓
+            </div>
+            {/* §34.8 makes this outlive the claim it came from, and that is the
+                whole of what makes it worth holding. Two lines saying it was
+                claimed do not say it. */}
+            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--pw-text-3)' }}>
+              A permanent, non-transferable record tied to this wallet&apos;s Genesis claim. It
+              stays after the card is spent.
+            </p>
           </div>
         </div>
       ) : null}
