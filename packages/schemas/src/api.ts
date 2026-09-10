@@ -165,13 +165,46 @@ export const cardDecisionRequestSchema = z
 // Auth (§47.3)
 // ---------------------------------------------------------------------------
 
+/**
+ * `POST /v1/auth/challenge` request (§69.4).
+ *
+ * The chain is named by the caller and checked against the deployment's,
+ * because §45.2 requires a signature to match chain policy and the useful
+ * moment to say so is before somebody signs — a wallet on the wrong network
+ * gets told which one to switch to, rather than a refusal after the prompt.
+ */
+export const authChallengeRequestSchema = z
+  .object({
+    wallet: walletAddressSchema,
+    chainId: z.int().positive(),
+  })
+  .strict();
+
 /** `POST /v1/auth/challenge` response: a single-use nonce with an expiry. */
 export const authChallengeSchema = z.object({
   nonce: z.string().min(16).max(128),
   expiresAt: z.int().positive(),
   statement: z.string().min(1),
+  /**
+   * The exact EIP-4361 message to sign.
+   *
+   * Sent whole rather than assembled by the client from the fields beside it.
+   * Two implementations of one format is one implementation too many, and the
+   * server verifies against its own copy — so a client that built a different
+   * string would produce a signature that recovers to nobody.
+   */
+  message: z.string().min(1),
+  chainId: z.int().positive(),
 });
 
+/**
+ * `POST /v1/auth/verify` request (§69.5).
+ *
+ * No message field. The server holds the message it issued under this nonce and
+ * verifies against that: a message echoed by the client is either identical, in
+ * which case it adds nothing, or different, in which case trusting it is the
+ * bug.
+ */
 export const authVerifyRequestSchema = z
   .object({
     wallet: walletAddressSchema,
@@ -179,6 +212,25 @@ export const authVerifyRequestSchema = z
     signature: z.string().regex(/^0x[0-9a-fA-F]+$/),
   })
   .strict();
+
+/**
+ * `POST /v1/auth/verify` response: the session, once.
+ *
+ * The token is in this response and nowhere else — the server keeps only a
+ * fingerprint of it, so it cannot be re-sent and a client that loses it signs
+ * in again.
+ */
+export const authSessionSchema = z.object({
+  token: z.string().min(16),
+  wallet: walletAddressSchema,
+  expiresAt: z.int().positive(),
+});
+
+/** `GET /v1/auth/session` response: what this token is, without re-issuing it. */
+export const authSessionInfoSchema = z.object({
+  wallet: walletAddressSchema,
+  expiresAt: z.int().positive(),
+});
 
 // ---------------------------------------------------------------------------
 // Public reads (§47.1)

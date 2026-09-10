@@ -30,6 +30,7 @@ export const PARAMETER_GROUPS = [
   'rewards',
   'feeds',
   'serving',
+  'auth',
 ] as const;
 
 export type ParameterGroup = (typeof PARAMETER_GROUPS)[number];
@@ -235,6 +236,28 @@ export const PARAMETERS = {
       'Which market data adapter to run (§59.3, §23.6). OPEN: no vendor is chosen, so there is nothing to default to and startup refuses rather than inventing one.',
     parse: (raw) => parseEnum(raw, MARKET_DATA_PROVIDERS),
   } satisfies ParameterSpec<MarketDataProvider>,
+
+  // -- Wallet authentication (docs/OPEN_PARAMETERS.md §4) --------------------
+  AUTH_ORIGIN: {
+    group: 'auth',
+    description:
+      'The origin a sign-in signature is bound to (§45.2). The message names its host, and a signature produced for one site must not authenticate at another — so this is the public URL of the client, not of the API.',
+    parse: (raw) => parseUrl(raw, ['http:', 'https:']),
+  } satisfies ParameterSpec<string>,
+
+  AUTH_CHALLENGE_TTL_MS: {
+    group: 'auth',
+    description:
+      'How long a sign-in challenge is worth signing (§45.2). OPEN: the masterplan says short-lived and names no figure. Long enough for a hardware wallet, short enough that a stolen unsigned challenge is worth little.',
+    parse: parseDurationMs,
+  } satisfies ParameterSpec<number>,
+
+  AUTH_SESSION_TTL_MS: {
+    group: 'auth',
+    description:
+      'How long a session lasts before the wallet is asked again (§45.2). OPEN, and the more consequential of the two: a session is a bearer credential, so this is how long a stolen one works.',
+    parse: parseDurationMs,
+  } satisfies ParameterSpec<number>,
 } as const;
 
 export type ParameterName = keyof typeof PARAMETERS;

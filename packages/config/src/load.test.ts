@@ -24,6 +24,9 @@ const VALID: Readonly<Record<string, string>> = {
   GATEWAY_PORT: '4001',
   ALLOWED_ORIGINS: 'https://play.example.invalid',
   MARKET_DATA_PROVIDER: 'synthetic',
+  AUTH_ORIGIN: 'https://play.example.invalid',
+  AUTH_CHALLENGE_TTL_MS: '300000',
+  AUTH_SESSION_TTL_MS: '86400000',
 };
 
 const withOverride = (

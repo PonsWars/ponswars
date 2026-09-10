@@ -76,7 +76,20 @@ Only the constants inside them are open.
 | Launch concurrency target                          | `OPEN` |
 | WebSocket connection and rate limits               | `OPEN` |
 
-## 4. Visual implementation tuning (§59.4)
+## 4. Wallet authentication (§45.2, §102)
+
+§45.2 asks for a short-lived challenge and a short-lived session and names no
+figure for either. Both are therefore deployment decisions, and both are real
+ones: the first bounds how long an unsigned challenge is worth stealing, and the
+second is how long a stolen session works.
+
+| Parameter               | Status | Note                                                                                     |
+| ----------------------- | ------ | ---------------------------------------------------------------------------------------- |
+| `AUTH_CHALLENGE_TTL_MS` | `OPEN` | Long enough for a hardware wallet, short enough that a stolen challenge is worth little. |
+| `AUTH_SESSION_TTL_MS`   | `OPEN` | How long a bearer session lasts. Rotation (§45.2) is what keeps a long visit signed in.  |
+| `AUTH_ORIGIN`           | `OPEN` | The client's public origin. A signature is bound to it and must not work elsewhere.      |
+
+## 5. Visual implementation tuning (§59.4)
 
 Art direction is locked (§36, §39). Production tuning is not.
 
@@ -92,7 +105,7 @@ Art direction is locked (§36, §39). Production tuning is not.
 | Performance Mode presets     | `OPEN` |
 | Device performance cutoffs   | `OPEN` |
 
-## 5. Compliance (§59.5)
+## 6. Compliance (§59.5)
 
 Blocking for public value launch (§33, §57).
 
