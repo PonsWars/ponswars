@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ponswars/api": "workspace:*",
+    "@ponswars/auth": "workspace:*",
     "@ponswars/battle-engine": "workspace:*",
     "@ponswars/battle-math": "workspace:*",
     "@ponswars/config": "workspace:*",

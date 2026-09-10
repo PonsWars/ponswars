@@ -1,4 +1,5 @@
-import { buildServer, PickStore } from '@ponswars/api';
+import { bearer, buildServer, PickStore } from '@ponswars/api';
+import { AuthService, MemoryAuthStore, type AuthPolicy } from '@ponswars/auth';
 import {
   CURRENT_ENGINE_VERSIONS,
   type EngineConfig,
@@ -15,7 +16,6 @@ import {
 import {
   milliseconds,
   utcTimestamp,
-  walletAddress,
   type UtcTimestamp,
   type WalletAddress,
 } from '@ponswars/shared-types';
@@ -128,19 +128,39 @@ const WEB_ORIGINS = (process.env['WEB_ORIGINS'] ?? 'http://localhost:5173,http:/
 
 const now = (): UtcTimestamp => utcTimestamp(Date.now());
 
-/** A demo wallet for any authenticated request. Real auth is §45.2. */
-const DEMO_WALLET: WalletAddress = walletAddress(`0x${'d'.repeat(40)}`);
+/**
+ * Sign-in policy for the local stack (§45.2).
+ *
+ * The real flow — a wallet signs an EIP-4361 challenge, the signature is
+ * verified, a session comes back — against an in-memory store. A restart signs
+ * everyone out, which is the one thing about this that is local: a deployment
+ * keeps sessions in PostgreSQL so a deploy does not.
+ *
+ * Five minutes and a day are this stack's numbers, not recommendations. Both
+ * are `OPEN` (§102) and a deployment sets them.
+ */
+const AUTH_POLICY: AuthPolicy = {
+  challengeTtlMs: 300_000,
+  sessionTtlMs: 86_400_000,
+  domain: 'localhost:5173',
+  uri: 'http://localhost:5173',
+  // Base Sepolia. The stack signs nothing on chain; what this decides is which
+  // chain a signature must name, and a local default has to be *a* chain.
+  chainId: 84_532,
+};
 
 async function main(): Promise<void> {
   const picks = new PickStore();
   const store = new MemoryRoundStore();
   const market = new SyntheticMarket();
+  const auth = new AuthService({ store: new MemoryAuthStore(), policy: AUTH_POLICY, now });
 
-  const sockets = startSocketServer({
-    port: PORT_WS,
-    now,
-    walletOf: (authorization) => (authorization === undefined ? null : DEMO_WALLET),
-  });
+  const walletOf = (authorization: string | undefined): Promise<WalletAddress | null> => {
+    const token = bearer(authorization);
+    return token === null ? Promise.resolve(null) : auth.walletOf(token);
+  };
+
+  const sockets = startSocketServer({ port: PORT_WS, now, walletOf });
 
   // Before anything else binds. A failed WebSocket bind surfaces a tick later
   // than the call that caused it, so without this the API port was already
@@ -180,7 +200,8 @@ async function main(): Promise<void> {
     picks,
     config: CONFIG,
     now,
-    walletOf: (authorization) => (authorization === undefined ? null : DEMO_WALLET),
+    walletOf,
+    auth,
   });
 
   try {

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Runs the whole loop locally against a synthetic market. Development only — not a deployable.",
+  "description": "Runs the whole loop locally against a synthetic market. Development only \u2014 not a deployable.",
   "main": "./dist/main.js",
   "scripts": {
     "build": "tsc --build",
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ponswars/api": "workspace:*",
+    "@ponswars/auth": "workspace:*",
     "@ponswars/battle-engine": "workspace:*",
     "@ponswars/battle-math": "workspace:*",
     "@ponswars/gateway": "workspace:*",

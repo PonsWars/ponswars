@@ -44,6 +44,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@ponswars/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@ponswars/battle-engine':
         specifier: workspace:*
         version: link:../../packages/battle-engine
@@ -66,6 +69,9 @@ importers:
       '@ponswars/battle-math':
         specifier: workspace:*
         version: link:../../packages/battle-math
+      viem:
+        specifier: ^2.56.3
+        version: 2.56.3(typescript@6.0.3)(zod@4.5.4)
 
   apps/gateway:
     dependencies:
@@ -91,6 +97,9 @@ importers:
       '@ponswars/api':
         specifier: workspace:*
         version: link:../api
+      '@ponswars/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@ponswars/battle-engine':
         specifier: workspace:*
         version: link:../../packages/battle-engine
@@ -118,6 +127,9 @@ importers:
       '@ponswars/api':
         specifier: workspace:*
         version: link:../api
+      '@ponswars/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@ponswars/battle-engine':
         specifier: workspace:*
         version: link:../../packages/battle-engine

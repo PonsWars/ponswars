@@ -1,4 +1,5 @@
-import { buildServer, PickStore } from '@ponswars/api';
+import { bearer, buildServer, PickStore } from '@ponswars/api';
+import { AuthService } from '@ponswars/auth';
 import {
   CURRENT_ENGINE_VERSIONS,
   type EngineConfig,
@@ -17,11 +18,14 @@ import {
 import {
   milliseconds,
   utcTimestamp,
-  walletAddress,
   type UtcTimestamp,
   type WalletAddress,
 } from '@ponswars/shared-types';
-import { PostgresRoundStore, readFinalizedResult } from '@ponswars/store-postgres';
+import {
+  PostgresAuthStore,
+  PostgresRoundStore,
+  readFinalizedResult,
+} from '@ponswars/store-postgres';
 import { connectPostgres } from './postgres.js';
 
 /**
@@ -48,11 +52,9 @@ import { connectPostgres } from './postgres.js';
  * prices are not real, every time it starts, because the failure mode for a
  * thing like this is somebody running it and believing it.
  *
- * Authentication is the other. §45.2 puts wallet-signature verification in an
- * auth service that does not exist yet, so writes are attributed to a
- * configured wallet or refused entirely. It is refused entirely unless
- * `NODE_ENV` is `development`, because the alternative is a deployment where
- * any caller can pick on anyone's behalf.
+ * The market is the only one left. Authentication is real now (§45.2): a wallet
+ * signs a challenge, the signature is verified, and the session that comes back
+ * lives in the database so that it survives a deploy and can be revoked.
  */
 
 const now = (): UtcTimestamp => utcTimestamp(Date.now());
@@ -111,7 +113,6 @@ function marketFor(provider: MarketDataProvider): { port: MarketDataPort; real: 
 
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
-  const development = config.NODE_ENV === 'development';
 
   const market = marketFor(config.MARKET_DATA_PROVIDER);
   const database = connectPostgres({
@@ -128,14 +129,30 @@ async function main(): Promise<void> {
   /**
    * Who a request is from (§45.2).
    *
-   * Signature verification belongs to the auth service and there is not one, so
-   * outside development every write is refused rather than attributed to
-   * somebody. A deployment where any caller can pick on anyone's behalf is
-   * worse than one where nobody can pick at all.
+   * A wallet signature, verified, exchanged for a session that lives in the
+   * database beside everything else. Sessions are there rather than in this
+   * process for two reasons that are really one: a deploy must not sign
+   * everybody out, and a session must be revocable — neither is possible for a
+   * credential a single process settles on its own.
    */
-  const demoWallet: WalletAddress = walletAddress(`0x${'d'.repeat(40)}`);
-  const walletOf = (authorization: string | undefined): WalletAddress | null =>
-    development && authorization !== undefined ? demoWallet : null;
+  const auth = new AuthService({
+    store: new PostgresAuthStore(database),
+    policy: {
+      challengeTtlMs: config.AUTH_CHALLENGE_TTL_MS,
+      sessionTtlMs: config.AUTH_SESSION_TTL_MS,
+      // The message names a host and a signature is bound to it, so this is the
+      // client's origin rather than the API's — and the host without the
+      // scheme, which is what EIP-4361 asks for.
+      domain: new URL(config.AUTH_ORIGIN).host,
+      uri: config.AUTH_ORIGIN,
+      chainId: config.CHAIN_ID,
+    },
+    now,
+  });
+  const walletOf = (authorization: string | undefined): Promise<WalletAddress | null> => {
+    const token = bearer(authorization);
+    return token === null ? Promise.resolve(null) : auth.walletOf(token);
+  };
 
   const sockets = startSocketServer({ port: config.GATEWAY_PORT, now, walletOf });
   // Before anything else binds. A failed WebSocket bind surfaces a tick later
@@ -179,6 +196,7 @@ async function main(): Promise<void> {
     config: CONFIG,
     now,
     walletOf,
+    auth,
   });
 
   try {
