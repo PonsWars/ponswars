@@ -2,11 +2,17 @@ import {
   BATTLE_SCORE_WEIGHTS,
   BATTLES_PER_ROUND,
   ACTIVE_TICKERS,
+  CARD_TYPES,
+  cardsOfRarity,
+  RARITIES,
+  RARITY_USES,
   ROUND_DURATION,
   WP_AWARDS,
 } from '@ponswars/shared-types';
+import { RARITY_COLOR } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
 import { FactionEmblem } from '../art/FactionEmblem.js';
+import { GenesisCardFace } from '../art/GenesisCardFace.js';
 import { captionStyle, controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
 import type { Route } from '../routing/route.js';
 
@@ -245,6 +251,62 @@ export function About({ onNavigate }: { readonly onNavigate: (next: Route) => vo
             </article>
           ))}
         </div>
+      </section>
+
+      <section style={{ display: 'grid', gap: 'var(--pw-space-3)' }}>
+        <div style={captionStyle}>THE GENESIS POOL</div>
+        <h2 style={{ ...readoutStyle, margin: 0, fontSize: 24 }}>
+          {CARD_TYPES.length} CARDS. ONE DRAW.
+        </h2>
+        <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.6 }}>
+          A Genesis claim opens once and gives one card. What it supports and how many battles it
+          lasts are fixed by its rarity — nothing here is bought, upgraded or traded.
+        </p>
+
+        {RARITIES.map((rarity) => {
+          const cards = cardsOfRarity(rarity);
+          if (cards.length === 0) {
+            return null;
+          }
+          return (
+            <div key={rarity} style={{ display: 'grid', gap: 'var(--pw-space-2)' }}>
+              <div
+                style={{
+                  ...captionStyle,
+                  fontSize: 9,
+                  color: RARITY_COLOR[rarity],
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--pw-space-2)',
+                }}
+              >
+                {rarity}
+                <span
+                  style={{ flex: 1, height: 1, background: RARITY_COLOR[rarity], opacity: 0.3 }}
+                />
+                <span style={{ color: 'var(--pw-text-3)' }}>
+                  {RARITY_USES[rarity]} {RARITY_USES[rarity] === 1 ? 'USE' : 'USES'}
+                </span>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))',
+                  gap: 'var(--pw-space-3)',
+                }}
+              >
+                {cards.map((card) => (
+                  <GenesisCardFace
+                    key={card.type}
+                    cardType={card.type}
+                    rarity={card.rarity}
+                    width={148}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </section>
 
       <section style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-3)' }}>
