@@ -323,6 +323,9 @@ importers:
 
   packages/store-postgres:
     dependencies:
+      '@ponswars/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@ponswars/battle-engine':
         specifier: workspace:*
         version: link:../battle-engine
@@ -339,6 +342,9 @@ importers:
       '@ponswars/battle-math':
         specifier: workspace:*
         version: link:../battle-math
+      viem:
+        specifier: ^2.56.3
+        version: 2.56.3(typescript@6.0.3)(zod@4.5.4)
 
   packages/ui-tokens:
     dependencies:
