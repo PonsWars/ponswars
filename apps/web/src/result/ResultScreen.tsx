@@ -1,5 +1,6 @@
 import type { FinalizedBattleResult } from '@ponswars/shared-types';
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
+import { FactionStandard } from '../art/FactionStandard.js';
 import type { JSX } from 'react';
 import { captionStyle, humanize, panelStyle, readoutStyle } from '../hud/styles.js';
 import {
@@ -109,25 +110,39 @@ function Total({
   readonly align: 'start' | 'end';
 }): JSX.Element {
   return (
-    <div style={{ display: 'grid', gap: 2, justifyItems: align, textAlign: align }}>
-      <div style={{ ...captionStyle, color: FACTION_ACCENT[side.ticker] }}>{side.ticker}</div>
-      <div
-        className="pw-tabular"
-        style={{
-          ...readoutStyle,
-          fontSize: 'clamp(30px, 6vw, 48px)',
-          lineHeight: 1,
-          // The loser's total is stated as plainly as the winner's — §26 makes
-          // this a record, not an award ceremony — but the winner carries its
-          // own colour, because the headline above already said who won and a
-          // reader should not have to check twice.
-          color: side.won ? FACTION_ACCENT[side.ticker] : 'var(--pw-text-2)',
-        }}
-      >
-        {side.totalLabel}
-      </div>
-      <div style={{ ...captionStyle, fontSize: 9, color: 'var(--pw-text-3)' }}>
-        {side.won ? 'WINNER' : ''}
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--pw-space-3)',
+        flexDirection: align === 'end' ? 'row-reverse' : 'row',
+      }}
+    >
+      {/* The standard the army fought under, the same one hanging in the sector
+          the battle was fought in. A result screen is the record of a war, and
+          the delivered one flies both flags over it. */}
+      <FactionStandard ticker={side.ticker} height={104} />
+
+      <div style={{ display: 'grid', gap: 2, justifyItems: align, textAlign: align }}>
+        <div style={{ ...captionStyle, color: FACTION_ACCENT[side.ticker] }}>{side.ticker}</div>
+        <div
+          className="pw-tabular"
+          style={{
+            ...readoutStyle,
+            fontSize: 'clamp(30px, 6vw, 48px)',
+            lineHeight: 1,
+            // The loser's total is stated as plainly as the winner's — §26 makes
+            // this a record, not an award ceremony — but the winner carries its
+            // own colour, because the headline above already said who won and a
+            // reader should not have to check twice.
+            color: side.won ? FACTION_ACCENT[side.ticker] : 'var(--pw-text-2)',
+          }}
+        >
+          {side.totalLabel}
+        </div>
+        <div style={{ ...captionStyle, fontSize: 9, color: 'var(--pw-text-3)' }}>
+          {side.won ? 'WINNER' : ''}
+        </div>
       </div>
     </div>
   );
