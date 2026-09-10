@@ -24,6 +24,10 @@ because in an incident the temptation is to decide it fresh.
 Deploying rather than repairing: [Deploying PonsWars](deployment.md) — what a
 deployment consists of, and what is still open before it can finish a round.
 
+Building rather than repairing: [Generated art](generated-art.md) — how the card
+and faction images are made — and [Third-party models](third-party-models.md) —
+every 3D asset in the world, where it came from, and under what licence.
+
 ## Three rules that outrank any runbook
 
 **1. Degrade or void; never fabricate.** §61 principle 19. If required data is
