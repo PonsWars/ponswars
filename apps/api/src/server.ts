@@ -187,12 +187,44 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     });
   });
 
+  /**
+   * Liveness (§59.3).
+   *
+   * Is this process running. Nothing else — deliberately. An orchestrator
+   * restarts a container whose liveness probe fails, so a liveness check that
+   * fails when a *dependency* is down turns one outage into a restart loop that
+   * makes it worse.
+   */
   app.get('/v1/health', () => {
     const round = deps.currentRound();
     return {
       status: 'ok',
       round: round === null ? null : { roundId: round.roundId, state: round.state },
     };
+  });
+
+  /**
+   * Readiness (§59.3).
+   *
+   * Should this instance be sent traffic. It should not before a round has
+   * loaded: §47.1's whole surface answers about a round, so an instance without
+   * one serves `404` to every request a spectator makes — and §5 makes
+   * spectating the normal case. A load balancer holding it out of rotation for
+   * the few seconds that takes is the difference between a rolling deploy
+   * nobody notices and one that empties the world for everyone.
+   *
+   * `503` rather than a `200` with a flag in the body, because that is the
+   * status every load balancer already reads without being configured to.
+   */
+  app.get('/v1/ready', (_request, reply) => {
+    const round = deps.currentRound();
+    if (round === null) {
+      return reply.code(503).send({ status: 'starting', reason: 'no round loaded yet' });
+    }
+    return reply.send({
+      status: 'ready',
+      round: { roundId: round.roundId, state: round.state },
+    });
   });
 
   /**

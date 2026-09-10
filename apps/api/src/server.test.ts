@@ -394,6 +394,51 @@ describe('GET /v1/health', () => {
   });
 });
 
+/** The same server before a round has loaded, which is how every one starts. */
+function startingServer(): FastifyInstance {
+  return buildServer({
+    currentRound: () => null,
+    picks,
+    config: CONFIG,
+    allowedOrigins: [ALLOWED_ORIGIN],
+    finalizedResult: () => null,
+    now: () => now,
+    walletOf: () => null,
+  });
+}
+
+describe('GET /v1/ready', () => {
+  it('is ready once a round is loaded', async () => {
+    const response = await app.inject({ method: 'GET', url: '/v1/ready' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: 'ready', round: { state: 'PICK_OPEN' } });
+  });
+
+  it('refuses traffic before one is', async () => {
+    // Every §47.1 route answers about a round, so an instance without one
+    // serves 404 to every request a spectator makes — and §5 makes spectating
+    // the normal case. Held out of rotation until it can answer.
+    const starting = startingServer();
+
+    const response = await starting.inject({ method: 'GET', url: '/v1/ready' });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ status: 'starting' });
+
+    await starting.close();
+  });
+
+  it('stays alive while it is not ready', async () => {
+    // The distinction the two probes exist for. An orchestrator restarts a
+    // container whose liveness fails, so if this reported the same thing as
+    // readiness a slow start would become a restart loop.
+    const starting = startingServer();
+
+    expect((await starting.inject({ method: 'GET', url: '/v1/health' })).statusCode).toBe(200);
+
+    await starting.close();
+  });
+});
+
 describe('the canonical clock', () => {
   it('stamps server time when the payload is produced, not when the round opened', async () => {
     // §23.5 and the type's own words: "server time at the moment this payload
