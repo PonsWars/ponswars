@@ -437,6 +437,72 @@ function toTimestamp(at: number): string {
  * transaction is what the caller means: `saveFinalization` needs the state and
  * the results to land together.
  */
+/**
+ * One finalized result, by battle (§25, §27.8, §47.3).
+ *
+ * The result screen is the one surface in the product that shows a score, and
+ * without this the deployable service had no way to answer for one — the loop
+ * wrote results it could never read back, so a shared `/result/:battleId` link
+ * returned `404` for a battle that had definitely finished.
+ *
+ * `null` for a battle that has not finalized, which is a normal answer rather
+ * than an error: §22 makes a result exist only after finalization, and every
+ * battle spends most of its life before that.
+ *
+ * Numbers come back as `bigint` from the driver and are narrowed here, because
+ * `FinalizedBattleResult` carries `number` at the boundary — the four
+ * components are scaled points under 1e8, so the narrowing is exact rather
+ * than hopeful.
+ */
+export async function readFinalizedResult(
+  db: SqlExecutor,
+  battleId: string,
+): Promise<FinalizedBattleResult | null> {
+  const { rows } = await db.query(
+    `SELECT battle_id, round_id, left_ticker, right_ticker, winner_ticker,
+            left_price_scaled, left_volume_scaled, left_pons_scaled, left_card_scaled,
+            right_price_scaled, right_volume_scaled, right_pons_scaled, right_card_scaled,
+            victory, tiebreak, scoring_engine_version, evidence_hash, finalized_at
+       FROM battle_results
+      WHERE battle_id = $1`,
+    [battleId],
+  );
+
+  const row = rows[0];
+  if (row === undefined) {
+    return null;
+  }
+
+  return {
+    battleId: toBattleId(text(row['battle_id'])),
+    roundId: toRoundId(text(row['round_id'])),
+    left: text(row['left_ticker']),
+    right: text(row['right_ticker']),
+    winner: text(row['winner_ticker']),
+    leftScore: {
+      priceMomentum: Number(big(row['left_price_scaled'])),
+      relativeVolume: Number(big(row['left_volume_scaled'])),
+      ponsPower: Number(big(row['left_pons_scaled'])),
+      holderCardSupport: Number(big(row['left_card_scaled'])),
+    },
+    rightScore: {
+      priceMomentum: Number(big(row['right_price_scaled'])),
+      relativeVolume: Number(big(row['right_volume_scaled'])),
+      ponsPower: Number(big(row['right_pons_scaled'])),
+      holderCardSupport: Number(big(row['right_card_scaled'])),
+    },
+    victoryLabel: text(row['victory']),
+    // Absent rather than empty when there was no tiebreak: §12.7 makes naming
+    // the step meaningful, and `''` would be a step nobody can look up.
+    ...(row['tiebreak'] === null || row['tiebreak'] === undefined
+      ? {}
+      : { tiebreakStep: text(row['tiebreak']) }),
+    scoringEngineVersion: text(row['scoring_engine_version']),
+    evidenceHash: text(row['evidence_hash']),
+    finalizedAt: utcTimestamp(instant(row['finalized_at'])),
+  } as FinalizedBattleResult;
+}
+
 function singleUse(tx: SqlExecutor): SqlDatabase {
   return {
     query: (text, params) => tx.query(text, params),

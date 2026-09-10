@@ -30,7 +30,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PostgresRoundStore } from './round-store.js';
+import { PostgresRoundStore, readFinalizedResult } from './round-store.js';
 import type { SqlDatabase, SqlRow } from './sql.js';
 
 /**
@@ -498,5 +498,69 @@ describe('recovering from a restart', () => {
     await store.saveFinalization(finishedRound(round, 3));
 
     expect((await store.loadLatest())?.state).toBe('FINALIZED');
+  });
+});
+
+describe('reading a result back', () => {
+  /**
+   * The lookup behind `GET /v1/battles/:battleId/result` (§47.1, §27.8).
+   *
+   * Read through a query rather than off the object that wrote it, because the
+   * instance answering a shared link is usually not the one that fought the
+   * battle — and, after a restart, never is.
+   */
+
+  it('has nothing for a battle that has not finished', async () => {
+    const round = openRound();
+    await store.saveState(round);
+
+    expect(await readFinalizedResult(database(pg), round.battles[0]!.setup.battleId)).toBeNull();
+  });
+
+  it('has nothing for a battle it has never heard of', async () => {
+    expect(await readFinalizedResult(database(pg), 'battle-nobody-fought')).toBeNull();
+  });
+
+  it('returns what the finalization wrote', async () => {
+    const round = openRound();
+    await store.saveState(round);
+    const finalization = finishedRound(round, 6);
+    await store.saveFinalization(finalization);
+
+    const written = finalization.results[0]!;
+    const read = await readFinalizedResult(database(pg), written.battleId);
+
+    expect(read).toEqual(written);
+  });
+
+  it('keeps the four components exact', async () => {
+    // §12 splits a hundred points 45/25/20/10 and the database enforces it. A
+    // component read back through the wrong column would still sum to a
+    // hundred, so the check is per component rather than on the total.
+    const round = openRound();
+    await store.saveState(round);
+    const finalization = finishedRound(round, 2);
+    await store.saveFinalization(finalization);
+
+    const written = finalization.results[0]!;
+    const read = await readFinalizedResult(database(pg), written.battleId);
+
+    expect(read?.leftScore).toEqual(written.leftScore);
+    expect(read?.rightScore).toEqual(written.rightScore);
+  });
+
+  it('gives back the instant it was finalized, not a broken date', async () => {
+    // `TIMESTAMPTZ` comes back as a `Date` from both drivers this runs on, and
+    // an earlier version of this function ran that through a string coercion
+    // that threw on one and produced `NaN` on the other.
+    const round = openRound();
+    await store.saveState(round);
+    const finalization = finishedRound(round, 8);
+    await store.saveFinalization(finalization);
+
+    const read = await readFinalizedResult(database(pg), finalization.results[0]!.battleId);
+
+    expect(Number.isFinite(read?.finalizedAt)).toBe(true);
+    expect(read?.finalizedAt).toBe(finalization.results[0]!.finalizedAt);
   });
 });
