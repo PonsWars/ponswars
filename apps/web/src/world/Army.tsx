@@ -10,11 +10,13 @@ import {
   MeshStandardMaterial,
   SkinnedMesh,
   Vector3,
+  type AnimationAction,
   type AnimationClip,
   type Group,
   type Object3D,
 } from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import type { MomentumState } from '@ponswars/shared-types';
 import type { DetailLevel } from '@ponswars/world-runtime';
 
 /**
@@ -26,13 +28,19 @@ import type { DetailLevel } from '@ponswars/world-runtime';
  * primitives produces one. They are CC0 models, listed with their sources in
  * `docs/operations/third-party-models.md`.
  *
- * ## They are not the battle
+ * ## They visualise the battle; they never decide it
  *
  * §13 makes the battlefield a visualisation of authoritative momentum and never
- * a source of it, and that applies to a unit as much as to the frontline. These
- * stand, idle and face the fight. Nothing here reads a score, decides a winner,
- * or moves because of one — the frontline marker is the only thing that carries
- * the state of a battle, and it is fed from the server.
+ * a source of it. So an army *reads* momentum and the frontline — the two
+ * things the public stream already carries (§48.3) — and turns them into a
+ * posture: holding, advancing, or assaulting. Nothing here computes a score,
+ * infers a winner, or feeds anything back. It cannot: `ClientBattle` has no
+ * score field, and §24 keeps the exact figure off the wire for the whole live
+ * battle.
+ *
+ * The rule that keeps it honest is that an army never says anything the
+ * frontline marker does not already say. It leans into a push it is winning by
+ * a few units — never across the line, which stays the authoritative readout.
  *
  * ## What keeps it affordable
  *
@@ -152,17 +160,80 @@ function pseudo(value: number): number {
   return x - Math.floor(x);
 }
 
+/**
+ * What an army is doing, from the two things the public stream carries.
+ *
+ * §48.3 sends a momentum state and a normalized frontline and deliberately no
+ * score, so these three postures are everything an army can honestly show. The
+ * mapping is written to be read rather than tuned:
+ *
+ * - `CONTESTED` is a fight neither side is winning. Both assault.
+ * - Any other state has a side with the advantage — the frontline says which —
+ *   and that side advances while the other holds under fire.
+ *
+ * `COMEBACK` needs no special case. §13 describes it as a reversal, and the
+ * frontline is already where the reversal has got to; the side it now favours
+ * is the side advancing, which is exactly what a comeback looks like.
+ */
+export type Posture = 'HOLDING' | 'ADVANCING' | 'ASSAULTING';
+
+export function postureFor(side: -1 | 1, momentum: MomentumState, frontline: number): Posture {
+  if (momentum === 'CONTESTED') {
+    return 'ASSAULTING';
+  }
+  // `frontline` is the share held by the LEFT faction, which is `side: -1`.
+  const advantage = side === -1 ? frontline - 0.5 : 0.5 - frontline;
+  return advantage > 0 ? 'ADVANCING' : 'HOLDING';
+}
+
+/**
+ * The clip each kind of unit plays for a posture.
+ *
+ * Only clips `tools/build-models.mjs` keeps are named here — the build drops
+ * the rest of the rig's vocabulary, so a name that is not in `KEEP_CLIPS`
+ * would silently fall back to whatever the file happens to list first.
+ */
+const CLIPS: Readonly<Record<Posture, { trooper: string; mech: string }>> = {
+  HOLDING: { trooper: 'Idle_Gun', mech: 'Idle' },
+  ADVANCING: { trooper: 'Walk_Gun', mech: 'Walk' },
+  ASSAULTING: { trooper: 'Run_Gun_Shoot', mech: 'Shoot_Big' },
+};
+
+/**
+ * How far an army leans into a push, in world units.
+ *
+ * Small on purpose. The frontline marker is the readout; this is body language,
+ * and an army that walked as far as the line would be a second, competing
+ * answer to the question §36.15 says a player must be able to settle instantly.
+ */
+const LEAN = 9;
+
+/**
+ * How long one posture takes to become another.
+ *
+ * §114.2's timing classes put a state change in the quarter-second band. Long
+ * enough that the blend is visible as a movement, short enough that an army
+ * reacting to a momentum swing still reads as reacting to it.
+ */
+const CROSSFADE_SECONDS = 0.28;
+
 export function Army({
   side,
   accent,
   detail,
   seed,
+  momentum,
+  frontline,
 }: {
   readonly side: -1 | 1;
   /** The faction's colour. Carried as a rim, never as a coat of paint (§36.5). */
   readonly accent: string;
   readonly detail: DetailLevel;
   readonly seed: number;
+  /** §48.3's qualitative state. Never a score — there is none to have. */
+  readonly momentum: MomentumState;
+  /** Share of the field held by the LEFT faction, in `[0, 1]`. */
+  readonly frontline: number;
 }): JSX.Element | null {
   // Indexed rather than looked up conditionally: the record covers every
   // member of the union, so a level added to `DetailLevel` fails to compile
@@ -181,19 +252,21 @@ export function Army({
     [seed, side, strength],
   );
 
+  const posture = postureFor(side, momentum, frontline);
+
   if (strength.mechs + strength.troopers + strength.walkers === 0) {
     return null;
   }
 
   return (
-    <group>
+    <Formation side={side} frontline={frontline}>
       {placements.mechs.map((placement, index) => (
         <Unit
           key={`mech-${String(index)}`}
           url={pick(MODELS.mech, seed + index)}
           placement={placement}
           accent={accent}
-          clip="Idle"
+          clip={CLIPS[posture].mech}
           height={HEIGHT.mech}
         />
       ))}
@@ -203,7 +276,7 @@ export function Army({
           url={pick(MODELS.trooper, seed + index * 3)}
           placement={placement}
           accent={accent}
-          clip="Idle_Gun"
+          clip={CLIPS[posture].trooper}
           height={HEIGHT.trooper}
         />
       ))}
@@ -213,12 +286,50 @@ export function Army({
           url={MODELS.walker[0]}
           placement={placement}
           accent={accent}
-          clip="Idle"
+          clip={CLIPS[posture].mech}
           height={HEIGHT.walker}
         />
       ))}
-    </group>
+    </Formation>
   );
+}
+
+/**
+ * The whole army, leaning toward the line it is winning or losing.
+ *
+ * Eased in a frame loop rather than set from a prop, for the same reason the
+ * frontline marker is: the value arrives about once a second on the realtime
+ * stream, and a formation that teleported on each one would read as a readout
+ * refreshing rather than as ground being taken (§13.4, §36.14).
+ *
+ * It only ever *follows* the authoritative number and never leads it.
+ */
+function Formation({
+  side,
+  frontline,
+  children,
+}: {
+  readonly side: -1 | 1;
+  readonly frontline: number;
+  readonly children: React.ReactNode;
+}): JSX.Element {
+  const group = useRef<Group | null>(null);
+  const shown = useRef(0);
+
+  useFrame((_, delta) => {
+    const node = group.current;
+    if (node === null) {
+      return;
+    }
+    // Positive when this side is winning ground, so a winning army moves
+    // toward the centre and a losing one gives way.
+    const advantage = side === -1 ? frontline - 0.5 : 0.5 - frontline;
+    const target = -side * advantage * 2 * LEAN;
+    shown.current += (target - shown.current) * Math.min(1, delta * 1.6);
+    node.position.x = shown.current;
+  });
+
+  return <group ref={group}>{children}</group>;
 }
 
 function pick(urls: readonly string[], seed: number): string {
@@ -348,23 +459,50 @@ function Unit({
 
   const mixer = useMemo(() => new AnimationMixer(model), [model]);
 
+  // The action currently in charge, so the next one can fade in over it rather
+  // than replacing it. A rank that snapped from a walk to a firing pose the
+  // instant momentum changed would read as a slideshow of poses; §114 asks for
+  // motion with intent, and a quarter-second blend is what makes a posture
+  // change look like a decision.
+  const current = useRef<AnimationAction | null>(null);
+
   useEffect(() => {
     const found: AnimationClip | undefined =
       gltf.animations.find((animation) => animation.name === clip) ?? gltf.animations[0];
     if (found === undefined) {
       return;
     }
-    const action = mixer.clipAction(found);
-    // Started at a random point in the loop. Without it a rank breathes in
-    // perfect unison, which reads as one object copied rather than as several
-    // soldiers standing near each other.
-    action.time = pseudo(placement.z + placement.x) * found.duration;
-    action.play();
 
+    const next = mixer.clipAction(found);
+    const previous = current.current;
+    if (previous === next) {
+      return;
+    }
+
+    next.reset();
+    // Started at a point of its own. Without it a rank breathes in perfect
+    // unison, which reads as one object copied rather than as several soldiers
+    // standing near each other — and it matters most on a walk, where a dozen
+    // legs in lockstep is unmistakable.
+    next.time = pseudo(placement.z + placement.x) * found.duration;
+    next.enabled = true;
+    next.setEffectiveWeight(1);
+    next.play();
+
+    if (previous !== null) {
+      // The old action keeps running through the blend and is stopped by the
+      // mixer when its weight reaches zero.
+      previous.crossFadeTo(next, CROSSFADE_SECONDS, false);
+    }
+    current.current = next;
+  }, [mixer, gltf.animations, clip, placement.x, placement.z]);
+
+  useEffect(() => {
     return () => {
       mixer.stopAllAction();
+      current.current = null;
     };
-  }, [mixer, gltf.animations, clip, placement.x, placement.z]);
+  }, [mixer]);
 
   /**
    * Everything this clone owns, released when it goes.

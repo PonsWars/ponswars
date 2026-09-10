@@ -33,6 +33,7 @@ import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigati
 import { DeckProps } from './DeckProps.js';
 import { InstancedField, preparedGeometry, type Placement } from './InstancedField.js';
 import { SectorLabel } from './SectorLabel.js';
+import { Tracers } from './Tracers.js';
 import { WorldInput } from './WorldInput.js';
 import { WorldLighting } from './WorldLighting.js';
 
@@ -480,10 +481,24 @@ interface SectorProps {
   readonly battle: ClientBattle | undefined;
   readonly detail: DetailLevel;
   readonly isFocused: boolean;
+  /**
+   * Whether the round is actually being fought (§22).
+   *
+   * A sector holds a battle through the pick phase too, and the difference
+   * matters to anything that would say a fight is happening.
+   */
+  readonly live: boolean;
   readonly onSelect: (index: number) => void;
 }
 
-function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JSX.Element | null {
+function Sector({
+  index,
+  battle,
+  detail,
+  isFocused,
+  live,
+  onSelect,
+}: SectorProps): JSX.Element | null {
   const bases = useRef<(Group | null)[]>([]);
   const frontline = useRef<Mesh | null>(null);
   const readReshuffle = useReshuffleReader();
@@ -676,9 +691,46 @@ function Sector({ index, battle, detail, isFocused, onSelect }: SectorProps): JS
           deck that fills. */}
       {battle !== undefined ? (
         <Suspense fallback={null}>
-          <Army side={-1} accent={leftAccent} detail={detail} seed={terrainSeed(index, 4)} />
-          <Army side={1} accent={rightAccent} detail={detail} seed={terrainSeed(index, 5)} />
+          <Army
+            side={-1}
+            accent={leftAccent}
+            detail={detail}
+            seed={terrainSeed(index, 4)}
+            momentum={battle.momentum}
+            frontline={held}
+          />
+          <Army
+            side={1}
+            accent={rightAccent}
+            detail={detail}
+            seed={terrainSeed(index, 5)}
+            momentum={battle.momentum}
+            frontline={held}
+          />
         </Suspense>
+      ) : null}
+
+      {/* Fire crossing the ground between them (§36.2).
+          Only while a battle is live: §22 makes the pick phase a phase nobody
+          is fighting in, and tracers over an empty field would say a fight had
+          started before it had. */}
+      {battle !== undefined && detail !== 'SILHOUETTE' && live ? (
+        <>
+          <Tracers
+            side={-1}
+            accent={leftAccent}
+            detail={detail}
+            frontline={held}
+            seed={terrainSeed(index, 8)}
+          />
+          <Tracers
+            side={1}
+            accent={rightAccent}
+            detail={detail}
+            frontline={held}
+            seed={terrainSeed(index, 9)}
+          />
+        </>
       ) : null}
 
       {/* Supply, fuel and power behind each army (§38.5). A deck with only
@@ -1306,6 +1358,10 @@ function aim(active: PerspectiveCamera, pose: CameraState['pose']): void {
 export function WorldScene(): JSX.Element {
   const camera = useSession((state) => state.camera);
   const battles = useSession((state) => state.battles);
+  // §22's phase, not a countdown read from the clock. The engine decides when a
+  // battle is live and the client is told; deriving it here would be a second
+  // copy of the state machine.
+  const roundState = useSession((state) => state.round?.state);
   const quality = useSession((state) => state.quality);
   const focusSector = useSession((state) => state.focusSector);
   const tick = useSession((state) => state.tick);
@@ -1403,6 +1459,7 @@ export function WorldScene(): JSX.Element {
           battle={battles[index]}
           detail={details[index] ?? 'SILHOUETTE'}
           isFocused={battles[index]?.battleId === camera.focusedBattleId}
+          live={roundState === 'BATTLE_LIVE'}
           onSelect={(selected) => {
             // A pan that happens to end over a sector is not a click on it.
             // Without this, dragging across the world flies the camera to
