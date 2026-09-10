@@ -208,20 +208,29 @@ async function main(): Promise<void> {
   // The loop itself lives in `@ponswars/round-service`, because the deployable
   // server runs the same one. What is local about this stack is which ports it
   // hands over, not how a round is driven.
-  await runRounds({
-    ports,
-    config: CONFIG,
-    calibration: CONFIDENCE_CALIBRATION,
-    now,
-    tickMs: TICK_MS,
-    baseSeedHex: `0x${'5c'.repeat(32)}`,
-    onRound: (next) => {
-      round = next;
-    },
-    onEvent: (event) => {
-      process.stdout.write(describe(event));
-    },
-  });
+  try {
+    await runRounds({
+      ports,
+      config: CONFIG,
+      calibration: CONFIDENCE_CALIBRATION,
+      now,
+      tickMs: TICK_MS,
+      baseSeedHex: `0x${'5c'.repeat(32)}`,
+      onRound: (next) => {
+        round = next;
+      },
+      onEvent: (event) => {
+        process.stdout.write(describe(event));
+      },
+    });
+  } finally {
+    // The loop can fail rather than stop, and the API and the socket server
+    // both hold the event loop open — so without this a stack whose round
+    // loop had died stayed up, still answering with the last round it saw.
+    // A process that exits is a process someone notices.
+    await api.close();
+    await sockets.close();
+  }
 }
 
 /** One line of console for whatever the driver just did. */

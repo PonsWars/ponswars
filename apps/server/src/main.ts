@@ -219,28 +219,38 @@ async function main(): Promise<void> {
     shutdown('SIGINT');
   });
 
-  await runRounds({
-    ports,
-    config: CONFIG,
-    calibration: CONFIDENCE_CALIBRATION,
-    now,
-    tickMs: config.BATTLE_ENGINE_TICK_MS,
-    // §26: per-deployment, and never generated here — a server that invented
-    // one would make two deployments of the same code produce different
-    // evidence for the same inputs.
-    baseSeedHex: `0x${'5c'.repeat(32)}`,
-    onRound: (next) => {
-      round = next;
-    },
-    onEvent: (event) => {
-      say(describe(event));
-    },
-    signal: stopping.signal,
-  });
+  try {
+    await runRounds({
+      ports,
+      config: CONFIG,
+      calibration: CONFIDENCE_CALIBRATION,
+      now,
+      tickMs: config.BATTLE_ENGINE_TICK_MS,
+      // §26: per-deployment, and never generated here — a server that invented
+      // one would make two deployments of the same code produce different
+      // evidence for the same inputs.
+      baseSeedHex: `0x${'5c'.repeat(32)}`,
+      onRound: (next) => {
+        round = next;
+      },
+      onEvent: (event) => {
+        say(describe(event));
+      },
+      signal: stopping.signal,
+    });
+  } finally {
+    // `finally`, not the happy path. The driver can fail rather than stop —
+    // the chain port has no implementation and rejects (§13.6) — and without
+    // this the process stayed up afterwards: the API kept the event loop
+    // alive, so a service whose round loop had died went on answering
+    // `/v1/ready` with `200` and serving the last round it saw, forever. A
+    // crash an orchestrator can see is worth more than a process that is
+    // technically still running.
+    await api.close();
+    await sockets.close();
+    await database.close();
+  }
 
-  await api.close();
-  await sockets.close();
-  await database.close();
   say('stopped cleanly\n');
 }
 
