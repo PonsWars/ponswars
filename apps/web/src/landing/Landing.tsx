@@ -2,7 +2,9 @@ import { ACTIVE_TICKERS, BATTLES_PER_ROUND, ROUND_DURATION } from '@ponswars/sha
 import { LAYER } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
 import { FactionEmblem } from '../art/FactionEmblem.js';
-import { CARD_ART } from '../art/manifest.js';
+import { FactionStandard } from '../art/FactionStandard.js';
+import { GenesisCardFace } from '../art/GenesisCardFace.js';
+import { WorldRing } from '../art/WorldRing.js';
 import { NavBar } from '../hud/NavBar.js';
 import { formatCountdown, roundView } from '../hud/round-phase.js';
 import { captionStyle, controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
@@ -374,8 +376,6 @@ function RoundStrip({
 
 /** The three things the mockup puts below the fold, in its own words. */
 function Pillars({ onNavigate }: { readonly onNavigate: (next: Route) => void }): JSX.Element {
-  const card = CARD_ART.GOLDEN_ARMY;
-
   return (
     <section
       style={{
@@ -394,6 +394,20 @@ function Pillars({ onNavigate }: { readonly onNavigate: (next: Route) => void })
           alignContent: 'start',
         }}
       >
+        {/* The ten, as their standards. The panel claims ten factions; showing
+            four of them and a paragraph is the claim without the evidence. */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 'var(--pw-space-2)',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+          }}
+        >
+          {ACTIVE_TICKERS.map((ticker) => (
+            <FactionStandard key={ticker} ticker={ticker} height={86} />
+          ))}
+        </div>
         <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>
           TEN FACTIONS. INFINITE STORIES.
         </h2>
@@ -401,6 +415,15 @@ function Pillars({ onNavigate }: { readonly onNavigate: (next: Route) => void })
           From AI to retail. From legacy to disruption. Every faction has a vision — which one are
           you with?
         </p>
+        <button
+          type="button"
+          onClick={() => {
+            onNavigate({ kind: 'FACTIONS', ticker: null });
+          }}
+          style={{ ...controlStyle, fontSize: 11, justifySelf: 'start' }}
+        >
+          EXPLORE FACTIONS →
+        </button>
       </article>
 
       <article
@@ -413,14 +436,13 @@ function Pillars({ onNavigate }: { readonly onNavigate: (next: Route) => void })
           alignContent: 'start',
         }}
       >
-        {card === undefined ? null : (
-          <img
-            src={card}
-            alt=""
-            width={120}
-            style={{ width: 120, height: 'auto', justifySelf: 'center' }}
-          />
-        )}
+        {/* An actual card, drawn by the component the reveal uses. It used to
+            be the raw art file, which is the illustration cut out of the master
+            — a picture of a battle, where the point of the panel is the object
+            you are given. */}
+        <div style={{ justifySelf: 'center' }}>
+          <GenesisCardFace cardType="GOLDEN_ARMY" rarity="LEGENDARY" width={132} />
+        </div>
         <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>MORE THAN JUST A CARD.</h2>
         <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.5 }}>
           Genesis Cards give you real impact on the battlefield. Rare. Powerful. Yours to command.
@@ -446,6 +468,11 @@ function Pillars({ onNavigate }: { readonly onNavigate: (next: Route) => void })
           alignContent: 'start',
         }}
       >
+        {/* The shape of the place, drawn from the same constants the world is
+            built from (§38.2, §38.3). */}
+        <div style={{ justifySelf: 'center' }}>
+          <WorldRing size={150} />
+        </div>
         <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>REAL MARKETS. REAL IMPACT.</h2>
         <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.5 }}>
           Powered by live market data, onchain activity, and a global community. This is more than a
