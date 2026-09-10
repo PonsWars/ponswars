@@ -21,7 +21,7 @@ import {
   useState,
   type JSX,
 } from 'react';
-import { Object3D } from 'three';
+import { BackSide, Color, Object3D, ShaderMaterial } from 'three';
 import type { Group, InstancedMesh, Mesh, PerspectiveCamera, PointLight } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
 import {
@@ -32,7 +32,7 @@ import {
   SECTOR_POSITIONS,
   SECTOR_SKYLINE_HEIGHT,
 } from './layout.js';
-import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT } from './navigation-config.js';
+import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigation-config.js';
 import { SectorLabel } from './SectorLabel.js';
 import { WorldInput } from './WorldInput.js';
 import { WorldLighting } from './WorldLighting.js';
@@ -1007,6 +1007,73 @@ function ForwardBase({
 }
 
 /**
+ * The void itself, before anything is in it (§38.1, §38.10).
+ *
+ * A flat clear colour is not a void, it is a background — nothing about it says
+ * *deep*, because depth is read from a gradient and there was none. §38.10 asks
+ * for a permanent dark cinematic atmosphere, and every delivered frame has a
+ * horizon in it somewhere: light gathered low and away, dark overhead.
+ *
+ * A shader on the inside of a sphere rather than an image. There are no texture
+ * assets in this app, and two mixes over the vertical axis are cheaper than
+ * fetching one would be. It sits outside the starfield and outside the fog, so
+ * nothing dims it and nothing is drawn behind it.
+ */
+function Void(): JSX.Element {
+  const material = useMemo(
+    () =>
+      new ShaderMaterial({
+        side: BackSide,
+        depthWrite: false,
+        fog: false,
+        uniforms: {
+          top: { value: new Color(VOID_SKY.top) },
+          horizon: { value: new Color(VOID_SKY.horizon) },
+          bottom: { value: new Color(VOID_SKY.bottom) },
+        },
+        vertexShader: `
+          varying float vHeight;
+          void main() {
+            // The unit height of this vertex on the sphere, which is all the
+            // gradient needs and is stable however large the sphere is.
+            vHeight = normalize(position).y;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 top;
+          uniform vec3 horizon;
+          uniform vec3 bottom;
+          varying float vHeight;
+          void main() {
+            // Two mixes rather than one, so the light can gather at the horizon
+            // instead of only at an end. A single mix from top to bottom is a
+            // wash; a world needs somewhere the light comes from.
+            vec3 sky = vHeight > 0.0
+              ? mix(horizon, top, smoothstep(0.0, 0.55, vHeight))
+              : mix(horizon, bottom, smoothstep(0.0, 0.4, -vHeight));
+            gl_FragColor = vec4(sky, 1.0);
+          }
+        `,
+      }),
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      material.dispose();
+    },
+    [material],
+  );
+
+  return (
+    <mesh material={material} renderOrder={-1} frustumCulled={false}>
+      <sphereGeometry args={[7_000, 24, 16]} />
+    </mesh>
+  );
+}
+
+/**
  * The void the world floats in (§38.1, §38.10).
  *
  * Points rather than a texture: there are no image assets in this app, and a
@@ -1151,6 +1218,7 @@ export function WorldScene(): JSX.Element {
 
       <WorldLighting />
 
+      <Void />
       <Starfield />
       {/* Between the stars and the islands, so the void has a middle distance. */}
       <Debris />

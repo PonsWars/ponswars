@@ -128,3 +128,17 @@ export const BLOOM = {
   radius: 0.55,
   threshold: 0.82,
 } as const;
+
+/**
+ * The three colours the void is mixed from (§38.10).
+ *
+ * `CALIBRATE` (§59.4). Dark overhead, a little light gathered at the horizon,
+ * darker again below — the world floats above the light rather than in it.
+ * All three are close together on purpose: the gradient is meant to be felt as
+ * depth rather than seen as a sky.
+ */
+export const VOID_SKY = {
+  top: '#03060a',
+  horizon: '#0d2130',
+  bottom: '#04080d',
+} as const;
