@@ -27,22 +27,38 @@ gave the work away and are named anyway.
 
 ## What is used
 
-| Model                                  | Pack               | Author     | Licence | Source                                                                |
-| -------------------------------------- | ------------------ | ---------- | ------- | --------------------------------------------------------------------- |
-| `mech-a`, `mech-b`, `mech-c`, `mech-d` | Ultimate Space Kit | Quaternius | CC0     | [poly.pizza](https://poly.pizza/bundle/Ultimate-Space-Kit-YWh743lqGX) |
-| `trooper-a`, `trooper-b`, `trooper-c`  | Ultimate Space Kit | Quaternius | CC0     | same                                                                  |
-| `walker-large`, `drone-flying`         | Ultimate Space Kit | Quaternius | CC0     | same                                                                  |
-| `dropship-a`, `dropship-c`             | Ultimate Space Kit | Quaternius | CC0     | same                                                                  |
+| Model                                  | Pack                  | Author     | Licence | Source                                                                |
+| -------------------------------------- | --------------------- | ---------- | ------- | --------------------------------------------------------------------- |
+| `mech-a`, `mech-b`, `mech-c`, `mech-d` | Ultimate Space Kit    | Quaternius | CC0     | [poly.pizza](https://poly.pizza/bundle/Ultimate-Space-Kit-YWh743lqGX) |
+| `trooper-a`, `trooper-b`, `trooper-c`  | Ultimate Space Kit    | Quaternius | CC0     | same                                                                  |
+| `walker-large`, `drone-flying`         | Ultimate Space Kit    | Quaternius | CC0     | same                                                                  |
+| `dropship-a`, `dropship-c`             | Ultimate Space Kit    | Quaternius | CC0     | same                                                                  |
+| `container-a`, `container-b`           | City Kit (Industrial) | Kenney     | CC0     | [kenney.nl](https://kenney.nl/assets/city-kit-industrial)             |
+| `tank`, `tank-large`                   | City Kit (Industrial) | Kenney     | CC0     | same                                                                  |
+| `chimney`, `water-tower`               | City Kit (Industrial) | Kenney     | CC0     | same                                                                  |
 
 Quaternius publishes at [quaternius.com](https://quaternius.com/) under CC0 —
-"free to use in personal, educational and commercial projects".
+"free to use in personal, educational and commercial projects". Kenney's kits
+carry a `License.txt` saying the same thing, in the download itself.
 
 Kenney's [Modular Space Kit](https://kenney.nl/assets/modular-space-kit),
-[City Kit (Industrial)](https://kenney.nl/assets/city-kit-industrial),
 [City Kit (Commercial)](https://kenney.nl/assets/city-kit-commercial) and
-[Factory Kit](https://kenney.nl/assets/factory-kit) are downloaded and also CC0.
-Nothing from them is built into the client yet; they are the source for the
-district structures, which are still primitives.
+[Factory Kit](https://kenney.nl/assets/factory-kit) are downloaded and also CC0,
+and nothing from them is used yet.
+
+Nothing from any pack became a _building_. The city kits are modern low-rise
+offices and warehouses, which is further from the delivered concept art than the
+procedural towers already were — so the districts are modelled instead, by
+`tools/blender/build-district-kit.py`, and the kits contribute the scenery
+standing between them.
+
+## What is modelled here instead
+
+The district structures are not from a pack. `tools/blender/build-district-kit.py`
+builds them procedurally in headless Blender — four terraced pieces, 110 kB,
+156–442 polys — because the free kits are modern low-rise offices and interior
+corridors, and the delivered art shows a terraced citadel. It runs with no
+add-on and no live session, and is committed like any other build tool.
 
 ## The two directories
 
