@@ -773,9 +773,51 @@ function District({
         <boxGeometry key="crown" args={[1, 1, 1]} />
         <meshBasicMaterial key="crown-material" color={accent} transparent opacity={0.85} />
       </InstancedField>
+
+      {/* The army's standards, along the edge it faces the fight from.
+          Every delivered battlefield frame hangs these either side of a sector,
+          and they are what tells you at a glance whose half you are looking at —
+          the district's own colour is a lit ledge and a few crowns, which reads
+          as lighting rather than as ownership.
+
+          Only at full detail: they are identity, not information, and §37.6
+          ties density to zoom. */}
+      {detail === 'FULL'
+        ? BANNER_POSTS.map((z) => (
+            // Negated: inside this group the axes are the world's, so the edge
+            // facing the contested centre is `-side`. At `+side` they stood
+            // along the back of each district, with their own army between them
+            // and the fight.
+            <group key={z} position={[-side * 21, DISTRICT_DECK, z]}>
+              <mesh position={[0, 26, 0]}>
+                <cylinderGeometry args={[0.6, 0.6, 52, 5]} />
+                <meshStandardMaterial color="#25333d" metalness={0.3} roughness={0.6} />
+              </mesh>
+              {/* The crossbar the cloth hangs from, across the frontline axis so
+                  the banner faces the camera that approaches the sector. */}
+              <mesh position={[0, 50, 0]}>
+                <boxGeometry args={[0.9, 0.9, 15]} />
+                <meshStandardMaterial color="#2d3d48" metalness={0.3} roughness={0.6} />
+              </mesh>
+              <mesh position={[0, 36, 0]}>
+                <boxGeometry args={[0.4, 27, 13]} />
+                <meshStandardMaterial
+                  color={accent}
+                  emissive={accent}
+                  emissiveIntensity={0.5}
+                  metalness={0.1}
+                  roughness={0.8}
+                />
+              </mesh>
+            </group>
+          ))
+        : null}
     </group>
   );
 }
+
+/** Where the standards stand along a district's inner edge. */
+const BANNER_POSTS: readonly number[] = [-30, 0, 30];
 
 /**
  * The rock hanging under a plateau (§38.1).
