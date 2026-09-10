@@ -15,7 +15,7 @@ import {
 import { useGLTF } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { BackSide, Color, ShaderMaterial } from 'three';
+import { BackSide, Box3, Color, ShaderMaterial, Vector3 } from 'three';
 import type { BufferGeometry, Mesh } from 'three';
 import type { Group, PerspectiveCamera, PointLight } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
@@ -375,15 +375,102 @@ function Routes({ battles }: { readonly battles: readonly ClientBattle[] }): JSX
                 pulses.current[index] = node;
               }}
             >
+              {/* What travels a route is a ship, not a dot.
+                  The dot was a stand-in for traffic and read as a readout
+                  cycling; every delivered world frame has craft in the air
+                  between the core and the sectors, and that is most of what
+                  says the world is inhabited rather than displayed.
+
+                  The glow stays, behind it and smaller: at the global view the
+                  hull is a few pixels, and the accent is what makes a route
+                  legible from across the world (§38.6). */}
               <mesh>
-                <sphereGeometry args={[4.5, 10, 10]} />
-                <meshBasicMaterial color={accent} transparent opacity={0.85} />
+                <sphereGeometry args={[2.6, 8, 8]} />
+                <meshBasicMaterial color={accent} transparent opacity={0.8} />
               </mesh>
+              <Suspense fallback={null}>
+                <Dropship
+                  index={index}
+                  heading={Math.atan2(position.x, position.z)}
+                  accent={accent}
+                />
+              </Suspense>
             </group>
           </group>
         );
       })}
     </group>
+  );
+}
+
+/**
+ * A craft on a route (§38.6).
+ *
+ * Two hulls between five routes, picked by index, because the point is that
+ * something is flying rather than that each one is distinct — and a second
+ * model is the difference between traffic and a repeated asset.
+ *
+ * Turned to face along its route. `heading` is the same angle the rail is laid
+ * at, taken from the sector's position, so a ship cannot end up flying sideways
+ * down a line drawn at a different angle.
+ */
+const DROPSHIPS = ['/models/units/dropship-a.glb', '/models/units/dropship-c.glb'] as const;
+
+/** How long a dropship is, in world units. A sector island is 240 across. */
+const DROPSHIP_LENGTH = 26;
+
+function Dropship({
+  index,
+  heading,
+  accent,
+}: {
+  readonly index: number;
+  readonly heading: number;
+  readonly accent: string;
+}): JSX.Element | null {
+  const url = DROPSHIPS[index % DROPSHIPS.length] ?? DROPSHIPS[0];
+  const { scene } = useGLTF(url);
+
+  const geometry = useMemo(
+    () =>
+      preparedGeometry(`dropship:${url}`, scene, (shaped) => {
+        shaped.computeBoundingBox();
+        const box: unknown = shaped.boundingBox;
+        if (!(box instanceof Box3)) {
+          return;
+        }
+        const size = box.getSize(new Vector3());
+        const span = Math.max(size.x, size.z, 0.0001);
+        const fit = DROPSHIP_LENGTH / span;
+        shaped.scale(fit, fit, fit);
+        // Centred on its own middle, so the group's position is where the ship
+        // is rather than where one corner of it is.
+        shaped.translate(
+          -((box.min.x + box.max.x) / 2) * fit,
+          -((box.min.y + box.max.y) / 2) * fit,
+          -((box.min.z + box.max.z) / 2) * fit,
+        );
+      }),
+    [scene, url],
+  );
+
+  if (geometry === null) {
+    return null;
+  }
+
+  return (
+    <mesh rotation={[0, heading, 0]}>
+      <primitive object={geometry} attach="geometry" />
+      {/* Lit like everything else in this world rather than like the pack it
+          came from, with the route's own colour as a faint rim (§36.5). */}
+      <meshStandardMaterial
+        color="#6f8494"
+        metalness={0.32}
+        roughness={0.58}
+        emissive={accent}
+        emissiveIntensity={0.18}
+      />
+    </mesh>
   );
 }
 
@@ -1346,4 +1433,14 @@ export function WorldScene(): JSX.Element {
       ))}
     </>
   );
+}
+
+// Fetched with the world chunk rather than when a sector first needs one. A
+// district that appears three seconds after the island it stands on is worse
+// than one that arrives with it.
+for (const piece of PIECES) {
+  useGLTF.preload(PIECE_MODEL[piece]);
+}
+for (const url of DROPSHIPS) {
+  useGLTF.preload(url);
 }
