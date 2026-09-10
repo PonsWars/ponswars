@@ -20,6 +20,9 @@ because in an incident the temptation is to decide it fresh.
 | [Rewards distribution](rewards-distribution.md)     | Snapshot, calculation, publication, claims                     |
 | [A disputed result](disputed-result.md)             | Someone says a battle was scored wrongly                       |
 
+Deploying rather than repairing: [Deploying PonsWars](deployment.md) — what a
+deployment consists of, and what is still open before it can finish a round.
+
 ## Three rules that outrank any runbook
 
 **1. Degrade or void; never fabricate.** §61 principle 19. If required data is
