@@ -110,6 +110,18 @@ describe('a district', () => {
     }
   });
 
+  it('builds a mix of forms rather than one repeated', () => {
+    // A skyline of nothing but boxes reads as blocks. The mix has to come out of
+    // the same stream as the layout, so a district's silhouette is as stable
+    // across rounds as its footprint is.
+    const forms = new Set(districtBlocks(5, SHAPE, 17).map((block) => block.form));
+
+    expect(forms.size).toBeGreaterThan(1);
+    expect(districtBlocks(5, SHAPE, 17).map((block) => block.form)).toEqual(
+      districtBlocks(5, SHAPE, 17).map((block) => block.form),
+    );
+  });
+
   it('lights only structures tall enough to be a skyline', () => {
     // §36.5 keeps faction colour an accent. A crown on every roof is a lit grid
     // and the accent stops meaning anything.

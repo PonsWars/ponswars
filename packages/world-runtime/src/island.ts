@@ -33,7 +33,20 @@ export interface Block {
   readonly rotation: number;
   /** Whether this one carries a lit crown — the tall ones, so the skyline reads. */
   readonly lit: boolean;
+  /**
+   * How it is built.
+   *
+   * A skyline of nothing but boxes reads as blocks rather than as a city, and
+   * the difference is entirely in the outline: a taper puts a diagonal in it, a
+   * tower puts a round shoulder in it. Which one a structure gets comes from
+   * the same stream as its size, so a district's mix is as stable as its
+   * layout.
+   */
+  readonly form: BlockForm;
 }
+
+/** The three ways a structure is built. */
+export type BlockForm = 'BLOCK' | 'TAPER' | 'TOWER';
 
 /** A rock hanging beneath the plateau, which is what makes an island float. */
 export interface Crag {
@@ -172,6 +185,11 @@ export function districtBlocks(
     // came out shorter than the platform it stood on.
     const height = cap * between(next, 0.58, 1);
 
+    // Mostly blocks, because most of a city is. The tapers and towers are what
+    // stop the rest reading as a bar chart.
+    const roll = next();
+    const form: BlockForm = roll < 0.62 ? 'BLOCK' : roll < 0.84 ? 'TAPER' : 'TOWER';
+
     blocks.push({
       x,
       z,
@@ -182,6 +200,7 @@ export function districtBlocks(
       // The tall ones only. A crown on every roof is a lit grid, and §36.5 keeps
       // faction colour an accent rather than a wash.
       lit: height > shape.peakHeight * 0.52,
+      form,
     });
   }
 

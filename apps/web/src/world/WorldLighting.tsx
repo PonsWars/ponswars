@@ -9,6 +9,8 @@ import {
   PMREMGenerator,
   Scene,
   Vector2,
+  WebGLRenderTarget,
+  HalfFloatType,
 } from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
@@ -142,7 +144,17 @@ function Bloom({ tier }: { readonly tier: QualityTier }): null {
   const size = useThree((state) => state.size);
 
   const composer = useMemo(() => {
-    const made = new EffectComposer(gl);
+    // A render target with multisampling, rather than the composer's default.
+    //
+    // `Canvas` asks the renderer for antialiasing, and that applies to the
+    // canvas — which the composer stops drawing to the moment it takes over.
+    // Without this the whole world loses its edges the instant bloom is
+    // switched on, which is a strange trade to make for a glow.
+    const target = new WebGLRenderTarget(Math.max(1, size.width), Math.max(1, size.height), {
+      type: HalfFloatType,
+      samples: BLOOM.samples,
+    });
+    const made = new EffectComposer(gl, target);
     made.addPass(new RenderPass(scene, camera));
     made.addPass(
       new UnrealBloomPass(

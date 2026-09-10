@@ -8,6 +8,7 @@ import {
   SETTLED_WORLD,
   type CameraState,
   type DetailLevel,
+  type BlockForm,
   type DistrictShape,
   type ReshuffleFrame,
 } from '@ponswars/world-runtime';
@@ -747,29 +748,42 @@ function District({
     [seed, detail],
   );
 
-  const masses = useMemo<readonly Placement[]>(
-    () =>
-      blocks.map((block) => ({
+  // Grouped by how each structure is built, because each form is a different
+  // geometry and an instanced draw carries one. Three groups of masses and
+  // three of crowns, so a crown always matches the wall it rings — a square
+  // band around an octagonal tower reads as a mistake at any distance.
+  const built = useMemo(() => {
+    const masses = new Map<BlockForm, Placement[]>();
+    const crowns = new Map<BlockForm, Placement[]>();
+
+    for (const block of blocks) {
+      const rotation: readonly [number, number, number] = [
+        0,
+        // The cylinder forms put their first vertex on the axis, so a four-sided
+        // one is a diamond until it is turned an eighth of a turn.
+        block.rotation + (block.form === 'BLOCK' ? 0 : Math.PI / 4),
+        0,
+      ];
+
+      (masses.get(block.form) ?? masses.set(block.form, []).get(block.form) ?? []).push({
         position: [block.x, DISTRICT_DECK + block.height / 2, block.z],
         scale: [block.width, block.height, block.depth],
-        rotation: [0, block.rotation, 0],
-      })),
-    [blocks],
-  );
+        rotation,
+      });
 
-  const crowns = useMemo<readonly Placement[]>(
-    () =>
-      blocks
-        .filter((block) => block.lit)
-        .map((block) => ({
+      if (block.lit) {
+        (crowns.get(block.form) ?? crowns.set(block.form, []).get(block.form) ?? []).push({
           // A band just below the roof line, slightly proud of the wall, so it
           // reads as a lit ring on the building rather than as its roof.
           position: [block.x, DISTRICT_DECK + block.height - 3.4, block.z],
           scale: [block.width * 1.1, 2.6, block.depth * 1.1],
-          rotation: [0, block.rotation, 0],
-        })),
-    [blocks],
-  );
+          rotation,
+        });
+      }
+    }
+
+    return { masses, crowns };
+  }, [blocks]);
 
   return (
     <group position={[side * 62, 11, 0]}>
@@ -797,30 +811,40 @@ function District({
         <meshBasicMaterial color={accent} transparent opacity={0.5} />
       </mesh>
 
-      <InstancedField placements={masses}>
-        <boxGeometry key="mass" args={[1, 1, 1]} />
-        {/* Barely metallic, and that is not a compromise. A metal has no
-            diffuse response at all — it is entirely what it reflects — so in a
-            dark void raising metalness makes a surface *darker*, not richer.
-            Pushing these to 0.45 once the environment existed put the district
-            back to the near-black it started at, for the opposite reason.
+      {BLOCK_FORMS.map((form) => (
+        <InstancedField key={`mass-${form}`} placements={built.masses.get(form) ?? []}>
+          <BlockGeometry key={`mass-geometry-${form}`} form={form} />
+          {/* Barely metallic, and that is not a compromise. A metal has no
+              diffuse response at all — it is entirely what it reflects — so in
+              a dark void raising metalness makes a surface *darker*, not
+              richer. Pushing these to 0.45 once the environment existed put the
+              district back to the near-black it started at, for the opposite
+              reason.
 
-            The probe gives them a sheen along their lit edges. What lights them
-            is the key. */}
-        <meshStandardMaterial
-          key="mass-material"
-          color="#2b4152"
-          metalness={0.18}
-          roughness={0.52}
-          emissive="#0d2634"
-          emissiveIntensity={0.34}
-        />
-      </InstancedField>
+              The probe gives them a sheen along their lit edges. What lights
+              them is the key. */}
+          <meshStandardMaterial
+            key={`mass-material-${form}`}
+            color="#2b4152"
+            metalness={0.18}
+            roughness={0.52}
+            emissive="#0d2634"
+            emissiveIntensity={0.34}
+          />
+        </InstancedField>
+      ))}
 
-      <InstancedField placements={crowns}>
-        <boxGeometry key="crown" args={[1, 1, 1]} />
-        <meshBasicMaterial key="crown-material" color={accent} transparent opacity={0.85} />
-      </InstancedField>
+      {BLOCK_FORMS.map((form) => (
+        <InstancedField key={`crown-${form}`} placements={built.crowns.get(form) ?? []}>
+          <BlockGeometry key={`crown-geometry-${form}`} form={form} />
+          <meshBasicMaterial
+            key={`crown-material-${form}`}
+            color={accent}
+            transparent
+            opacity={0.85}
+          />
+        </InstancedField>
+      ))}
 
       {/* The army's standards, along the edge it faces the fight from.
           Every delivered battlefield frame hangs these either side of a sector,
@@ -890,6 +914,28 @@ const CONTESTED_PAVING: readonly Placement[] = [
 
 /** Where the standards stand along a district's inner edge. */
 const BANNER_POSTS: readonly number[] = [-30, 0, 30];
+
+/** The three forms, in one place so nothing iterates a subset of them. */
+const BLOCK_FORMS: readonly BlockForm[] = ['BLOCK', 'TAPER', 'TOWER'];
+
+/**
+ * The geometry one form is built from, at unit size.
+ *
+ * A block is a box. A taper is a four-sided frustum, which puts a diagonal in
+ * the outline. A tower is an eight-sided prism, which puts a shoulder in it.
+ * All three are a unit across and a unit tall, so one placement scales any of
+ * them the same way.
+ */
+function BlockGeometry({ form }: { readonly form: BlockForm }): JSX.Element {
+  switch (form) {
+    case 'BLOCK':
+      return <boxGeometry args={[1, 1, 1]} />;
+    case 'TAPER':
+      return <cylinderGeometry args={[0.34, 0.5, 1, 4]} />;
+    case 'TOWER':
+      return <cylinderGeometry args={[0.46, 0.5, 1, 8]} />;
+  }
+}
 
 /**
  * The rock hanging under a plateau (§38.1).

@@ -127,6 +127,14 @@ export const BLOOM = {
   strength: 0.62,
   radius: 0.55,
   threshold: 0.82,
+  /**
+   * Multisampling on the composer's own target.
+   *
+   * The canvas antialiasing `Canvas` requests stops applying the moment the
+   * composer takes the render, so this is where the edges come back. Four is
+   * the usual floor for it to be worth doing at all.
+   */
+  samples: 4,
 } as const;
 
 /**
