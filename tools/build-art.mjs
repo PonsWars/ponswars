@@ -54,8 +54,22 @@ if (source === undefined || !existsSync(source)) {
  * Sized by use rather than uniformly. A faction dossier is read at panel size
  * and a card is held at card size; giving both the same width would make one
  * blurry and the other wasteful.
+ *
+ * `crop` is what makes these usable at all. Each master is a finished card
+ * render — frame, rarity banner, name plate, charge count — photographed on a
+ * floor. The application draws its own frame for all fourteen cards in the
+ * pool, so putting a whole rendered card inside it produced a card inside a
+ * card, with the name and the charge count printed twice at two sizes. What is
+ * wanted from the master is the illustration, so that is what is cut out of it.
+ *
+ * Fractions rather than pixels: the three masters share one template at one
+ * size, and a fraction survives a redelivery at a different one.
  */
-const GROUPS = [{ dir: '02_Cards', prefix: 'card', width: 720, quality: 82 }];
+const CARD_ART_WINDOW = { left: 0.182, right: 0.845, top: 0.145, bottom: 0.628 };
+
+const GROUPS = [
+  { dir: '02_Cards', prefix: 'card-art', width: 560, quality: 84, crop: CARD_ART_WINDOW },
+];
 
 mkdirSync(out, { recursive: true });
 
@@ -75,7 +89,20 @@ for (const group of GROUPS) {
     const name = `${group.prefix}-${basename(file, '.png').replace(/^\d+[a-z]?_/, '')}.webp`;
     const target = join(out, name);
 
-    const info = await sharp(join(dir, file))
+    const image = sharp(join(dir, file));
+    const { width, height } = await image.metadata();
+    if (width === undefined || height === undefined) {
+      console.error(`Could not read the size of ${file}`);
+      process.exit(1);
+    }
+
+    const info = await image
+      .extract({
+        left: Math.round(group.crop.left * width),
+        top: Math.round(group.crop.top * height),
+        width: Math.round((group.crop.right - group.crop.left) * width),
+        height: Math.round((group.crop.bottom - group.crop.top) * height),
+      })
       .resize({ width: group.width, withoutEnlargement: true })
       .webp({ quality: group.quality })
       .toFile(target);

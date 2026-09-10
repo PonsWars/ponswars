@@ -25,15 +25,20 @@ import type { CardType } from '@ponswars/shared-types';
  */
 
 /**
- * Card art, for the three cards that have any.
+ * Painted illustrations, for the three cards that have one.
  *
- * `Partial`, and deliberately so: §7 has a catalog of cards and three of them
- * were drawn. A record claiming every card had art would make a missing file a
- * broken image at the moment a player opens a Genesis reveal, which is the one
- * moment §40.6 asks to feel like a reveal.
+ * The illustration rather than the card. Each master is a finished card render
+ * — frame, rarity banner, name plate, charge count — and the application draws
+ * its own frame for all fourteen, so what these files hold is the picture cut
+ * out of the middle. `build-art.mjs` does the cutting.
+ *
+ * `Partial`, and deliberately so: §7 has fourteen cards and three of them were
+ * painted. `GenesisCardFace` draws a device for the other eleven, so a missing
+ * entry is a different picture rather than a missing one — which is what makes
+ * it safe for this map to be honest about what exists.
  */
 export const CARD_ART: Readonly<Partial<Record<CardType, string>>> = {
-  REINFORCEMENT: '/art/card-common_reinforcement.webp',
-  GOLDEN_ARMY: '/art/card-legendary_golden_army.webp',
-  SECRET_STOCK_DROP: '/art/card-secret_stock_drop_0_2_spy.webp',
+  REINFORCEMENT: '/art/card-art-common_reinforcement.webp',
+  GOLDEN_ARMY: '/art/card-art-legendary_golden_army.webp',
+  SECRET_STOCK_DROP: '/art/card-art-secret_stock_drop_0_2_spy.webp',
 };
