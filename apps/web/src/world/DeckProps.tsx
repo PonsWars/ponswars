@@ -28,7 +28,7 @@ const PROPS = [
   'water-tower',
 ] as const;
 
-type Prop = (typeof PROPS)[number];
+export type Prop = (typeof PROPS)[number];
 
 /**
  * How tall each prop stands, in world units.
@@ -147,7 +147,7 @@ export function DeckProps({
   );
 }
 
-function PropField({
+export function PropField({
   prop,
   placements,
 }: {

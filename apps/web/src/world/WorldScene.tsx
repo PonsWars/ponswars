@@ -30,7 +30,7 @@ import {
 } from './layout.js';
 import { Army } from './Army.js';
 import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigation-config.js';
-import { DeckProps } from './DeckProps.js';
+import { DeckProps, PropField, type Prop } from './DeckProps.js';
 import { InstancedField, preparedGeometry, type Placement } from './InstancedField.js';
 import { SectorLabel } from './SectorLabel.js';
 import { WorldInput } from './WorldInput.js';
@@ -1165,6 +1165,55 @@ function Debris(): JSX.Element {
 }
 
 /**
+ * What a forward base was landed with (§38.5).
+ *
+ * A mast on a footing read as a marker rather than as a base. A few crates and
+ * two fuel tanks around it are what say something was *brought* here for this
+ * round — which is the one thing a forward base is, and why it retracts at the
+ * reshuffle rather than being part of the island (§15).
+ *
+ * Toward the rim, away from the deck, so nothing here stands in the army's
+ * ranks. Laid out by hand: four objects are a composition, not a pattern.
+ */
+const BASE_SUPPLY: readonly {
+  readonly prop: Prop;
+  readonly x: number;
+  readonly z: number;
+  readonly turn: number;
+}[] = [
+  { prop: 'container-a', x: 3, z: 19, turn: 0.12 },
+  { prop: 'container-b', x: 5, z: -20, turn: -0.2 },
+  { prop: 'tank', x: 13, z: 9, turn: 0 },
+  { prop: 'tank', x: 13, z: -10, turn: 0 },
+];
+
+function BaseSupply({ side }: { readonly side: -1 | 1 }): JSX.Element {
+  const byProp = useMemo(() => {
+    const out = new Map<Prop, Placement[]>();
+    for (const item of BASE_SUPPLY) {
+      const list = out.get(item.prop) ?? [];
+      list.push({
+        // Mirrored by position rather than by a negative scale, for the reason
+        // the army is: a negative scale turns a mesh inside out.
+        position: [side * item.x, 0, item.z],
+        scale: [1, 1, 1],
+        rotation: [0, item.turn, 0],
+      });
+      out.set(item.prop, list);
+    }
+    return out;
+  }, [side]);
+
+  return (
+    <>
+      {[...byProp].map(([prop, placements]) => (
+        <PropField key={prop} prop={prop} placements={placements} />
+      ))}
+    </>
+  );
+}
+
+/**
  * A forward operating base (§38.5).
  *
  * A mast on a footing, at the outer edge of its own staging ground. Deliberately
@@ -1200,6 +1249,11 @@ function ForwardBase({
         <octahedronGeometry args={[4, 0]} />
         <meshBasicMaterial color={accent} />
       </mesh>
+      {/* Landed with it and folded away with it: children of the group the
+          reshuffle scales, so they deploy and retract as the base does (§15). */}
+      <Suspense fallback={null}>
+        <BaseSupply side={side} />
+      </Suspense>
     </group>
   );
 }
