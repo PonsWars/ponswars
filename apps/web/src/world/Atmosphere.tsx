@@ -141,7 +141,7 @@ export function CloudSea(): JSX.Element {
                 // Lit from above: the denser a cloud, the more of its top the
                 // key light reaches.
                 vec3 colour = mix(uShadow, uLit, smoothstep(0.45, 0.95, n));
-                colour += uGlow * exp(-dist / 520.0) * body * 0.55;
+                colour += uGlow * exp(-dist / 300.0) * body * 0.34;
                 // Melting into the horizon, so the sea has no edge.
                 colour = mix(colour, uHorizon, smoothstep(uFade * 0.28, uFade, dist));
                 float alpha = body * uOpacity * (1.0 - smoothstep(uFade * 0.7, uFade, dist));
