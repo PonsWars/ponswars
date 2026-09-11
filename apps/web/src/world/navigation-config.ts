@@ -149,4 +149,6 @@ export const VOID_SKY = {
   top: '#03060a',
   horizon: '#0d2130',
   bottom: '#04080d',
+  /** Cloud gathered at the horizon — the same weather as the sea below it. */
+  wisp: '#1b3d52',
 } as const;

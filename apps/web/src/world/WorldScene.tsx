@@ -29,7 +29,7 @@ import {
   sectorSpin,
 } from './layout.js';
 import { Army } from './Army.js';
-import { CloudSea } from './Atmosphere.js';
+import { CloudSea, NOISE_GLSL } from './Atmosphere.js';
 import { CoreBeam, CoreModel } from './CoreModel.js';
 import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigation-config.js';
 import { DeckProps, PropField, type Prop } from './DeckProps.js';
@@ -1228,13 +1228,16 @@ function Void(): JSX.Element {
           top: { value: new Color(VOID_SKY.top) },
           horizon: { value: new Color(VOID_SKY.horizon) },
           bottom: { value: new Color(VOID_SKY.bottom) },
+          wisp: { value: new Color(VOID_SKY.wisp) },
         },
         vertexShader: `
           varying float vHeight;
+          varying vec3 vDirection;
           void main() {
             // The unit height of this vertex on the sphere, which is all the
             // gradient needs and is stable however large the sphere is.
-            vHeight = normalize(position).y;
+            vDirection = normalize(position);
+            vHeight = vDirection.y;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
           }
         `,
@@ -1242,7 +1245,10 @@ function Void(): JSX.Element {
           uniform vec3 top;
           uniform vec3 horizon;
           uniform vec3 bottom;
+          uniform vec3 wisp;
           varying float vHeight;
+          varying vec3 vDirection;
+          ${NOISE_GLSL}
           void main() {
             // Two mixes rather than one, so the light can gather at the horizon
             // instead of only at an end. A single mix from top to bottom is a
@@ -1250,6 +1256,12 @@ function Void(): JSX.Element {
             vec3 sky = vHeight > 0.0
               ? mix(horizon, top, smoothstep(0.0, 0.55, vHeight))
               : mix(horizon, bottom, smoothstep(0.0, 0.4, -vHeight));
+            // Cloud gathered along the horizon, stretched the way distance
+            // stretches it. The same weather as the sea below, so the two meet
+            // rather than being a sky and a floor.
+            float band = exp(-abs(vHeight) * 7.0);
+            vec2 q = vDirection.xz / (abs(vHeight) + 0.18) * 1.6;
+            sky += wisp * smoothstep(0.5, 0.85, pwFbm(q)) * band * 0.55;
             gl_FragColor = vec4(sky, 1.0);
           }
         `,
