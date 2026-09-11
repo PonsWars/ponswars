@@ -29,6 +29,7 @@ import {
   sectorSpin,
 } from './layout.js';
 import { Army } from './Army.js';
+import { CloudSea } from './Atmosphere.js';
 import { CoreBeam, CoreModel } from './CoreModel.js';
 import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigation-config.js';
 import { DeckProps, PropField, type Prop } from './DeckProps.js';
@@ -1420,6 +1421,7 @@ export function WorldScene(): JSX.Element {
       <WorldLighting />
 
       <Void />
+      <CloudSea />
       <Starfield />
       {/* Between the stars and the islands, so the void has a middle distance. */}
       <Debris />
