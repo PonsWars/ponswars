@@ -33,7 +33,6 @@ import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigati
 import { DeckProps } from './DeckProps.js';
 import { InstancedField, preparedGeometry, type Placement } from './InstancedField.js';
 import { SectorLabel } from './SectorLabel.js';
-import { Tracers } from './Tracers.js';
 import { WorldInput } from './WorldInput.js';
 import { WorldLighting } from './WorldLighting.js';
 
@@ -698,6 +697,7 @@ function Sector({
             seed={terrainSeed(index, 4)}
             momentum={battle.momentum}
             frontline={held}
+            live={live}
           />
           <Army
             side={1}
@@ -706,31 +706,9 @@ function Sector({
             seed={terrainSeed(index, 5)}
             momentum={battle.momentum}
             frontline={held}
+            live={live}
           />
         </Suspense>
-      ) : null}
-
-      {/* Fire crossing the ground between them (§36.2).
-          Only while a battle is live: §22 makes the pick phase a phase nobody
-          is fighting in, and tracers over an empty field would say a fight had
-          started before it had. */}
-      {battle !== undefined && detail !== 'SILHOUETTE' && live ? (
-        <>
-          <Tracers
-            side={-1}
-            accent={leftAccent}
-            detail={detail}
-            frontline={held}
-            seed={terrainSeed(index, 8)}
-          />
-          <Tracers
-            side={1}
-            accent={rightAccent}
-            detail={detail}
-            frontline={held}
-            seed={terrainSeed(index, 9)}
-          />
-        </>
       ) : null}
 
       {/* Supply, fuel and power behind each army (§38.5). A deck with only

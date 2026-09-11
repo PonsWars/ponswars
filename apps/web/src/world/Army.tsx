@@ -1,6 +1,6 @@
 import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef, type JSX } from 'react';
+import { useContext, useEffect, useMemo, useRef, type JSX, type ReactNode } from 'react';
 import {
   AnimationMixer,
   Box3,
@@ -11,13 +11,25 @@ import {
   SkinnedMesh,
   Vector3,
   type AnimationAction,
-  type AnimationClip,
   type Group,
   type Object3D,
 } from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { MomentumState } from '@ponswars/shared-types';
 import type { DetailLevel } from '@ponswars/world-runtime';
+import {
+  CLIPS,
+  leanFor,
+  marching,
+  MODELS,
+  pickClip,
+  postureFor,
+  stanceFor,
+  type Posture,
+  type UnitKind,
+} from './army-rules.js';
+import { FormationContext, type FormationMotion } from './formation-context.js';
+import { Tracers } from './Tracers.js';
 
 /**
  * The armies standing on a sector (§38.3, §38.5, §36.2).
@@ -31,16 +43,15 @@ import type { DetailLevel } from '@ponswars/world-runtime';
  * ## They visualise the battle; they never decide it
  *
  * §13 makes the battlefield a visualisation of authoritative momentum and never
- * a source of it. So an army *reads* momentum and the frontline — the two
- * things the public stream already carries (§48.3) — and turns them into a
- * posture: holding, advancing, or assaulting. Nothing here computes a score,
- * infers a winner, or feeds anything back. It cannot: `ClientBattle` has no
- * score field, and §24 keeps the exact figure off the wire for the whole live
- * battle.
+ * a source of it. What an army does is decided in `army-rules.ts`, from the two
+ * things the public stream already carries (§48.3) — a momentum state and a
+ * normalized frontline — and nothing here computes a score, infers a winner, or
+ * feeds anything back. It cannot: `ClientBattle` has no score field.
  *
  * The rule that keeps it honest is that an army never says anything the
  * frontline marker does not already say. It leans into a push it is winning by
- * a few units — never across the line, which stays the authoritative readout.
+ * a few units — never across the line, which stays the authoritative readout —
+ * and the fire it throws lands on that line and nowhere else.
  *
  * ## What keeps it affordable
  *
@@ -51,17 +62,6 @@ import type { DetailLevel } from '@ponswars/world-runtime';
  * that is a silhouette.
  */
 
-/** Where the models are served from. Built by `tools/build-models.mjs`. */
-const MODELS = {
-  mech: ['/models/units/mech-a.glb', '/models/units/mech-c.glb'],
-  trooper: [
-    '/models/units/trooper-a.glb',
-    '/models/units/trooper-b.glb',
-    '/models/units/trooper-c.glb',
-  ],
-  walker: ['/models/units/walker-large.glb'],
-} as const;
-
 /**
  * How many of each stand on a side, by how close the camera is (§37.6, §82).
  *
@@ -69,18 +69,16 @@ const MODELS = {
  * frame — enough units to read as an army, few enough that five of them
  * together are not the frame budget. A `SILHOUETTE` island is an outline, and
  * an outline has no soldiers in it.
+ *
+ * Drones only up close. They are the smallest thing on the field and the one
+ * furthest from the ground, and at a neighbour's distance a drone is a speck
+ * that costs a skeleton.
  */
-interface Strength {
-  readonly mechs: number;
-  readonly troopers: number;
-  readonly walkers: number;
-}
-
-const STRENGTH: Readonly<Record<DetailLevel, Strength>> = {
-  FULL: { mechs: 2, troopers: 7, walkers: 1 },
-  REDUCED: { mechs: 1, troopers: 2, walkers: 0 },
-  SILHOUETTE: { mechs: 0, troopers: 0, walkers: 0 },
-  CULLED: { mechs: 0, troopers: 0, walkers: 0 },
+const STRENGTH: Readonly<Record<DetailLevel, Readonly<Record<UnitKind, number>>>> = {
+  FULL: { trooper: 7, mech: 2, walker: 1, drone: 2 },
+  REDUCED: { trooper: 2, mech: 1, walker: 0, drone: 0 },
+  SILHOUETTE: { trooper: 0, mech: 0, walker: 0, drone: 0 },
+  CULLED: { trooper: 0, mech: 0, walker: 0, drone: 0 },
 };
 
 /**
@@ -115,7 +113,25 @@ const RANK_SPREAD = 84;
  * the numbers that decide whether an army reads as an army, so they are stated
  * here rather than buried in a scale factor per model.
  */
-const HEIGHT = { trooper: 11, mech: 22, walker: 27 } as const;
+const HEIGHT: Readonly<Record<UnitKind, number>> = { trooper: 11, mech: 22, walker: 27, drone: 7 };
+
+/**
+ * Where a drone flies: above the ranks rather than among them, and never still.
+ *
+ * High enough to clear a mech's head, low enough to read as part of the army it
+ * is flying with rather than as traffic between sectors — which is what the
+ * dropships on the routes are for.
+ */
+const DRONE_HOVER = { lift: 30, sway: 1.6 } as const;
+
+/**
+ * How long one clip takes to become another.
+ *
+ * §114.2's timing classes put a state change in the quarter-second band. Long
+ * enough that the blend is visible as a movement, short enough that an army
+ * reacting to a momentum swing still reads as reacting to it.
+ */
+const CROSSFADE_SECONDS = 0.28;
 
 interface Placement {
   readonly x: number;
@@ -160,62 +176,9 @@ function pseudo(value: number): number {
   return x - Math.floor(x);
 }
 
-/**
- * What an army is doing, from the two things the public stream carries.
- *
- * §48.3 sends a momentum state and a normalized frontline and deliberately no
- * score, so these three postures are everything an army can honestly show. The
- * mapping is written to be read rather than tuned:
- *
- * - `CONTESTED` is a fight neither side is winning. Both assault.
- * - Any other state has a side with the advantage — the frontline says which —
- *   and that side advances while the other holds under fire.
- *
- * `COMEBACK` needs no special case. §13 describes it as a reversal, and the
- * frontline is already where the reversal has got to; the side it now favours
- * is the side advancing, which is exactly what a comeback looks like.
- */
-export type Posture = 'HOLDING' | 'ADVANCING' | 'ASSAULTING';
-
-export function postureFor(side: -1 | 1, momentum: MomentumState, frontline: number): Posture {
-  if (momentum === 'CONTESTED') {
-    return 'ASSAULTING';
-  }
-  // `frontline` is the share held by the LEFT faction, which is `side: -1`.
-  const advantage = side === -1 ? frontline - 0.5 : 0.5 - frontline;
-  return advantage > 0 ? 'ADVANCING' : 'HOLDING';
+function pick(urls: readonly string[], seed: number): string {
+  return urls[Math.floor(pseudo(seed) * urls.length) % urls.length] ?? urls[0] ?? '';
 }
-
-/**
- * The clip each kind of unit plays for a posture.
- *
- * Only clips `tools/build-models.mjs` keeps are named here — the build drops
- * the rest of the rig's vocabulary, so a name that is not in `KEEP_CLIPS`
- * would silently fall back to whatever the file happens to list first.
- */
-const CLIPS: Readonly<Record<Posture, { trooper: string; mech: string }>> = {
-  HOLDING: { trooper: 'Idle_Gun', mech: 'Idle' },
-  ADVANCING: { trooper: 'Walk_Gun', mech: 'Walk' },
-  ASSAULTING: { trooper: 'Run_Gun_Shoot', mech: 'Shoot_Big' },
-};
-
-/**
- * How far an army leans into a push, in world units.
- *
- * Small on purpose. The frontline marker is the readout; this is body language,
- * and an army that walked as far as the line would be a second, competing
- * answer to the question §36.15 says a player must be able to settle instantly.
- */
-const LEAN = 9;
-
-/**
- * How long one posture takes to become another.
- *
- * §114.2's timing classes put a state change in the quarter-second band. Long
- * enough that the blend is visible as a movement, short enough that an army
- * reacting to a momentum swing still reads as reacting to it.
- */
-const CROSSFADE_SECONDS = 0.28;
 
 export function Army({
   side,
@@ -224,6 +187,7 @@ export function Army({
   seed,
   momentum,
   frontline,
+  live,
 }: {
   readonly side: -1 | 1;
   /** The faction's colour. Carried as a rim, never as a coat of paint (§36.5). */
@@ -234,62 +198,71 @@ export function Army({
   readonly momentum: MomentumState;
   /** Share of the field held by the LEFT faction, in `[0, 1]`. */
   readonly frontline: number;
+  /**
+   * Whether the round is being fought (§22).
+   *
+   * An army stands through the pick phase and fires only once the battle is
+   * live — fire over a field nobody is fighting on would say a fight had
+   * started before it had.
+   */
+  readonly live: boolean;
 }): JSX.Element | null {
   // Indexed rather than looked up conditionally: the record covers every
   // member of the union, so a level added to `DetailLevel` fails to compile
   // here rather than silently fielding no army.
-  const strength: Strength = STRENGTH[detail];
+  const strength = STRENGTH[detail];
 
   const placements = useMemo(
     () => ({
       // Infantry at the front, armour behind it. That is the order every
       // delivered sector frame is drawn in, and it is also the readable one:
       // the big silhouettes stay visible over the small ones.
-      troopers: rank(seed + 100, side, strength.troopers, 0, RANK_SPREAD),
-      mechs: rank(seed, side, strength.mechs, 1, RANK_SPREAD * 0.6),
-      walkers: rank(seed + 200, side, strength.walkers, 2, 24),
+      trooper: rank(seed + 100, side, strength.trooper, 0, RANK_SPREAD),
+      mech: rank(seed, side, strength.mech, 1, RANK_SPREAD * 0.6),
+      walker: rank(seed + 200, side, strength.walker, 2, 24),
+      drone: rank(seed + 300, side, strength.drone, 1, RANK_SPREAD * 0.7),
     }),
     [seed, side, strength],
   );
 
   const posture = postureFor(side, momentum, frontline);
 
-  if (strength.mechs + strength.troopers + strength.walkers === 0) {
+  if (strength.trooper + strength.mech + strength.walker + strength.drone === 0) {
     return null;
   }
 
+  const units = (kind: UnitKind, salt: number): JSX.Element[] =>
+    placements[kind].map((placement, index) => (
+      <Unit
+        key={`${kind}-${String(index)}`}
+        kind={kind}
+        url={pick(MODELS[kind], seed + salt + index * 3)}
+        placement={placement}
+        accent={accent}
+        posture={posture}
+        height={HEIGHT[kind]}
+        {...(kind === 'drone' ? { hover: DRONE_HOVER } : {})}
+      />
+    ));
+
   return (
     <Formation side={side} frontline={frontline}>
-      {placements.mechs.map((placement, index) => (
-        <Unit
-          key={`mech-${String(index)}`}
-          url={pick(MODELS.mech, seed + index)}
-          placement={placement}
+      {units('trooper', 0)}
+      {units('mech', 1)}
+      {units('walker', 2)}
+      {units('drone', 4)}
+      {/* The army's fire, inside the formation so it leaves from the front of
+          the army as it actually stands rather than as it stood before it
+          leaned. */}
+      {live ? (
+        <Tracers
+          side={side}
           accent={accent}
-          clip={CLIPS[posture].mech}
-          height={HEIGHT.mech}
+          detail={detail}
+          frontline={frontline}
+          seed={seed + 900}
         />
-      ))}
-      {placements.troopers.map((placement, index) => (
-        <Unit
-          key={`trooper-${String(index)}`}
-          url={pick(MODELS.trooper, seed + index * 3)}
-          placement={placement}
-          accent={accent}
-          clip={CLIPS[posture].trooper}
-          height={HEIGHT.trooper}
-        />
-      ))}
-      {placements.walkers.map((placement, index) => (
-        <Unit
-          key={`walker-${String(index)}`}
-          url={MODELS.walker[0]}
-          placement={placement}
-          accent={accent}
-          clip={CLIPS[posture].mech}
-          height={HEIGHT.walker}
-        />
-      ))}
+      ) : null}
     </Formation>
   );
 }
@@ -302,7 +275,9 @@ export function Army({
  * stream, and a formation that teleported on each one would read as a readout
  * refreshing rather than as ground being taken (§13.4, §36.14).
  *
- * It only ever *follows* the authoritative number and never leads it.
+ * It only ever *follows* the authoritative number and never leads it. What it
+ * has actually done — how far it has leaned and whether it is still moving — is
+ * shared with everything standing in it through `FormationContext`.
  */
 function Formation({
   side,
@@ -311,29 +286,35 @@ function Formation({
 }: {
   readonly side: -1 | 1;
   readonly frontline: number;
-  readonly children: React.ReactNode;
+  readonly children: ReactNode;
 }): JSX.Element {
   const group = useRef<Group | null>(null);
-  const shown = useRef(0);
+  const motion = useMemo<FormationMotion>(
+    () => ({ lean: { current: 0 }, moving: { current: false } }),
+    [],
+  );
 
   useFrame((_, delta) => {
     const node = group.current;
     if (node === null) {
       return;
     }
-    // Positive when this side is winning ground, so a winning army moves
-    // toward the centre and a losing one gives way.
-    const advantage = side === -1 ? frontline - 0.5 : 0.5 - frontline;
-    const target = -side * advantage * 2 * LEAN;
-    shown.current += (target - shown.current) * Math.min(1, delta * 1.6);
-    node.position.x = shown.current;
+    const before = motion.lean.current;
+    const after = before + (leanFor(side, frontline) - before) * Math.min(1, delta * 1.6);
+    motion.lean.current = after;
+    // A frame with no time in it has no speed, and dividing by it would say
+    // the army moved infinitely fast. The previous answer stands.
+    if (delta > 0) {
+      motion.moving.current = marching(motion.moving.current, (after - before) / delta);
+    }
+    node.position.x = after;
   });
 
-  return <group ref={group}>{children}</group>;
-}
-
-function pick(urls: readonly string[], seed: number): string {
-  return urls[Math.floor(pseudo(seed) * urls.length) % urls.length] ?? urls[0] ?? '';
+  return (
+    <FormationContext.Provider value={motion}>
+      <group ref={group}>{children}</group>
+    </FormationContext.Provider>
+  );
 }
 
 /**
@@ -344,21 +325,27 @@ function pick(urls: readonly string[], seed: number): string {
  * the *original* skeleton, so every unit on the field animates as one body.
  */
 function Unit({
+  kind,
   url,
   placement,
   accent,
-  clip,
+  posture,
   height,
+  hover,
 }: {
+  readonly kind: UnitKind;
   readonly url: string;
   readonly placement: Placement;
   readonly accent: string;
-  readonly clip: string;
+  readonly posture: Posture;
   /** How tall this unit stands in world units. See `HEIGHT`. */
   readonly height: number;
+  /** For something that flies: how high above the deck, and how much it bobs. */
+  readonly hover?: { readonly lift: number; readonly sway: number };
 }): JSX.Element {
   const gltf = useGLTF(url);
   const group = useRef<Group | null>(null);
+  const motion = useContext(FormationContext);
 
   const model = useMemo(() => cloneSkinned(gltf.scene), [gltf.scene]);
 
@@ -432,15 +419,13 @@ function Unit({
       if (!(node instanceof Mesh)) {
         return;
       }
-      // The pack's own material, read only for its texture. `node.material` is
-      // typed as a union that includes arrays, and a multi-material export
-      // would take the first — these have one each.
-      // `Mesh.material` is typed loosely enough that reading it directly gives
-      // `any`; taking the value and testing what it actually is keeps the type
-      // honest instead of asserting one.
+      // The pack's own material, read only for its texture. `Mesh.material` is
+      // typed loosely enough that reading it directly gives `any`; taking the
+      // value and testing what it actually is keeps the type honest instead of
+      // asserting one.
       const source: unknown = Array.isArray(node.material) ? node.material[0] : node.material;
       const atlas = source instanceof MeshStandardMaterial ? source.map : null;
-      const material = new MeshStandardMaterial({
+      node.material = new MeshStandardMaterial({
         map: atlas,
         color: new Color('#8ea2ae'),
         metalness: 0.3,
@@ -451,56 +436,32 @@ function Unit({
         // army into a row of lamps.
         emissiveIntensity: 0.14,
       });
-      node.material = material;
       node.castShadow = false;
       node.receiveShadow = false;
     });
   }, [model, accent]);
 
   const mixer = useMemo(() => new AnimationMixer(model), [model]);
+  const available = useMemo(() => gltf.animations.map((clip) => clip.name), [gltf.animations]);
 
-  // The action currently in charge, so the next one can fade in over it rather
-  // than replacing it. A rank that snapped from a walk to a firing pose the
-  // instant momentum changed would read as a slideshow of poses; §114 asks for
-  // motion with intent, and a quarter-second blend is what makes a posture
-  // change look like a decision.
+  // The action in charge and the clip it plays, so the next one can fade in
+  // over it rather than replace it. A rank that snapped from a walk to a
+  // firing pose would read as a slideshow of poses; a quarter-second blend is
+  // what makes a change of stance look like a decision (§114).
   const current = useRef<AnimationAction | null>(null);
+  const playing = useRef<string | null>(null);
 
-  useEffect(() => {
-    const found: AnimationClip | undefined =
-      gltf.animations.find((animation) => animation.name === clip) ?? gltf.animations[0];
-    if (found === undefined) {
-      return;
-    }
-
-    const next = mixer.clipAction(found);
-    const previous = current.current;
-    if (previous === next) {
-      return;
-    }
-
-    next.reset();
-    // Started at a point of its own. Without it a rank breathes in perfect
-    // unison, which reads as one object copied rather than as several soldiers
-    // standing near each other — and it matters most on a walk, where a dozen
-    // legs in lockstep is unmistakable.
-    next.time = pseudo(placement.z + placement.x) * found.duration;
-    next.enabled = true;
-    next.setEffectiveWeight(1);
-    next.play();
-
-    if (previous !== null) {
-      // The old action keeps running through the blend and is stopped by the
-      // mixer when its weight reaches zero.
-      previous.crossFadeTo(next, CROSSFADE_SECONDS, false);
-    }
-    current.current = next;
-  }, [mixer, gltf.animations, clip, placement.x, placement.z]);
+  // Where in each loop this unit starts. Without it a rank breathes in perfect
+  // unison, which reads as one object copied rather than as several soldiers
+  // standing near each other — most of all on a walk, where a dozen legs in
+  // lockstep is unmistakable.
+  const offset = pseudo(placement.z + placement.x);
 
   useEffect(() => {
     return () => {
       mixer.stopAllAction();
       current.current = null;
+      playing.current = null;
     };
   }, [mixer]);
 
@@ -535,14 +496,45 @@ function Unit({
     };
   }, [mixer, model]);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
+    // Decided every frame rather than when a prop changes, because half of the
+    // decision — whether the formation is still moving — changes without any
+    // prop changing at all.
+    const stance = stanceFor(posture, motion?.moving.current ?? false);
+    const name = pickClip(available, CLIPS[kind][stance]);
+    if (name !== undefined && name !== playing.current) {
+      const clip = gltf.animations.find((candidate) => candidate.name === name);
+      if (clip !== undefined) {
+        const next = mixer.clipAction(clip);
+        const previous = current.current;
+        next.reset();
+        next.time = offset * clip.duration;
+        next.enabled = true;
+        next.setEffectiveWeight(1);
+        next.play();
+        if (previous !== null && previous !== next) {
+          // The old action keeps running through the blend and is stopped by
+          // the mixer when its weight reaches zero.
+          previous.crossFadeTo(next, CROSSFADE_SECONDS, false);
+        }
+        current.current = next;
+        playing.current = name;
+      }
+    }
     mixer.update(delta);
+
+    if (hover !== undefined && group.current !== null) {
+      group.current.position.y =
+        DECK_Y +
+        hover.lift +
+        Math.sin(state.clock.elapsedTime * 1.4 + offset * Math.PI * 2) * hover.sway;
+    }
   });
 
   return (
     <group
       ref={group}
-      position={[placement.x, DECK_Y, placement.z]}
+      position={[placement.x, DECK_Y + (hover?.lift ?? 0), placement.z]}
       rotation={[0, placement.turn, 0]}
       scale={placement.scale * fit}
     >
@@ -554,6 +546,8 @@ function Unit({
 // Fetched with the world chunk rather than when a sector first needs one. A
 // unit that appears three seconds after the island it stands on is worse than
 // one that arrives with it.
-for (const url of [...MODELS.mech, ...MODELS.trooper, ...MODELS.walker]) {
-  useGLTF.preload(url);
+for (const urls of Object.values(MODELS)) {
+  for (const url of urls) {
+    useGLTF.preload(url);
+  }
 }

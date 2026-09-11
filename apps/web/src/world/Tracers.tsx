@@ -1,7 +1,8 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef, type JSX } from 'react';
+import { useContext, useMemo, useRef, type JSX } from 'react';
 import { Color, Object3D, type InstancedMesh } from 'three';
 import type { DetailLevel } from '@ponswars/world-runtime';
+import { FormationContext } from './formation-context.js';
 
 /**
  * Fire crossing the contested ground (§36.2, §38.3, §13).
@@ -14,16 +15,25 @@ import type { DetailLevel } from '@ponswars/world-runtime';
  *
  * ## It says nothing the frontline does not
  *
- * Each round travels from a side's own line to the frontline marker and flares
- * there. That is the whole of the information in it, and it is information the
- * marker already carries — §13 makes the battlefield a visualisation of
- * authoritative momentum, so fire that reached past the line, or fell short of
- * it, would be a second and wrong answer to the question the marker settles.
+ * Each round flashes at the front of the army that fired it, crosses to the
+ * frontline marker, and flares there. That is the whole of the information in
+ * it, and it is information the marker already carries — §13 makes the
+ * battlefield a visualisation of authoritative momentum, so fire that reached
+ * past the line, or fell short of it, would be a second and wrong answer to the
+ * question the marker settles.
  *
  * Nothing is hit. There is no damage model here and there must not be one: the
  * outcome of a battle is §12's scoring, computed on the server from market
  * data, and a client that resolved anything on screen would be inventing a
  * fight beside the real one.
+ *
+ * ## Where it is drawn from
+ *
+ * Inside the army's formation group, so a round leaves from the front of the
+ * army as it actually stands — the formation leans toward a push it is winning,
+ * and fire that stayed where the army used to be would leave from inside it.
+ * The line is a place on the ground rather than on the army, so it is taken
+ * back out of the lean.
  *
  * ## Cost
  *
@@ -40,7 +50,7 @@ const ROUNDS: Readonly<Record<DetailLevel, number>> = {
   CULLED: 0,
 };
 
-/** Where a side's fire starts: the inner edge of its own deck. */
+/** Where a side's fire starts: just in front of its first rank, which is at 40. */
 const MUZZLE = 38;
 
 /** Half the width of the ground fire crosses, matching the contested strip. */
@@ -50,12 +60,15 @@ const REACH = 38;
 const LANE_SPREAD = 78;
 
 /**
- * How much of a round's flight is spent as an impact rather than a streak.
+ * How much of each round's cycle is a muzzle flash, and how much an impact.
  *
- * Fire that simply vanished at the line read as rounds falling short. A flare
- * at the end says the two armies are reaching each other, which is the whole
- * claim the tracers are making.
+ * Fire that appeared from nowhere read as a stream from the deck edge rather
+ * than as shots from soldiers, and fire that vanished at the line read as
+ * rounds falling short. A flash at one end and a flare at the other are what
+ * make it read as two armies reaching each other — the whole claim the tracers
+ * are making.
  */
+const MUZZLE_SHARE = 0.08;
 const IMPACT_SHARE = 0.16;
 
 /**
@@ -83,6 +96,10 @@ export function Tracers({
   const count = ROUNDS[detail];
   const mesh = useRef<InstancedMesh | null>(null);
   const step = useMemo(() => new Object3D(), []);
+  const motion = useContext(FormationContext);
+  // Above the bloom threshold on purpose, so the pass that exists for §38.10
+  // picks it up and the air over the field carries the glow.
+  const glow = useMemo(() => new Color(accent).multiplyScalar(1.7), [accent]);
 
   /**
    * One lane and one phase per round, fixed for the life of the field.
@@ -110,26 +127,33 @@ export function Tracers({
       return;
     }
 
-    // Where the line is, in the sector's own coordinates — the same expression
-    // the marker itself is positioned by, so fire cannot stop anywhere else.
-    const line = (frontline - 0.5) * (REACH * 2);
+    // Local to the formation, which has already leaned by `lean`. The muzzle
+    // rides with it for free; the line is a place on the ground, so the lean
+    // comes back out of it — the same expression the marker is positioned by.
+    const lean = motion?.lean.current ?? 0;
+    const line = (frontline - 0.5) * (REACH * 2) - lean;
+    const from = side * MUZZLE;
+    const flight = 1 - MUZZLE_SHARE - IMPACT_SHARE;
 
     for (const [index, lane] of lanes.entries()) {
-      const travel = (state.clock.elapsedTime / FLIGHT + lane.phase) * lane.rate;
-      const along = travel - Math.floor(travel);
+      const cycle = (state.clock.elapsedTime / FLIGHT + lane.phase) * lane.rate;
+      const along = cycle - Math.floor(cycle);
 
-      const from = side * MUZZLE;
-
-      if (along > 1 - IMPACT_SHARE) {
-        // The last stretch of the flight, spent at the line as a flare that
-        // opens and closes. Nothing is hit — §12 decides a battle on the server
-        // from market data, and there is no damage model here to be wrong.
+      if (along < MUZZLE_SHARE) {
+        // The flash at the front of the army, opening and closing where the
+        // round leaves.
+        const flash = Math.sin((along / MUZZLE_SHARE) * Math.PI);
+        step.position.set(from, lane.height, lane.z);
+        step.scale.setScalar(0.4 + flash * 2.2);
+      } else if (along > 1 - IMPACT_SHARE) {
+        // The flare at the line. Nothing is hit — §12 decides a battle on the
+        // server from market data, and there is no damage model here to be
+        // wrong.
         const burst = (along - (1 - IMPACT_SHARE)) / IMPACT_SHARE;
-        const flare = Math.sin(burst * Math.PI);
         step.position.set(line, lane.height, lane.z);
-        step.scale.setScalar(0.6 + flare * 3.4);
+        step.scale.setScalar(0.6 + Math.sin(burst * Math.PI) * 3.4);
       } else {
-        const travel = along / (1 - IMPACT_SHARE);
+        const travel = (along - MUZZLE_SHARE) / flight;
         step.position.set(from + (line - from) * travel, lane.height, lane.z);
         // Stretched along its own flight and thin across it: a round is read as
         // a streak, and a streak is a shape rather than a dot that moved.
@@ -157,10 +181,8 @@ export function Tracers({
       frustumCulled={false}
     >
       <boxGeometry args={[1, 1, 1]} />
-      {/* Basic rather than standard: this is light, not a surface. Above the
-          bloom threshold on purpose, so the pass that exists for §38.10 picks
-          it up and the air over the field carries the glow. */}
-      <meshBasicMaterial color={new Color(accent).multiplyScalar(1.7)} toneMapped={false} />
+      {/* Basic rather than standard: this is light, not a surface. */}
+      <meshBasicMaterial color={glow} toneMapped={false} />
     </instancedMesh>
   );
 }
