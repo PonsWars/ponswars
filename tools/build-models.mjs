@@ -68,6 +68,11 @@ const KEEP_CLIPS = [
   'Shoot_Small',
   'Run_Gun_Shoot',
   'Death',
+  // The drone's own vocabulary. Without these the filter above left it one
+  // clip — `Death` — and a unit that could only play `Death` played it on a
+  // loop, hovering over the army it was meant to be flying with.
+  'Flying_Idle',
+  'Fast_Flying',
 ];
 
 /** What is built, and what each one is for in the world. */
