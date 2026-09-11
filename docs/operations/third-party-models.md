@@ -60,6 +60,17 @@ builds them procedurally in headless Blender — four terraced pieces, 110 kB,
 corridors, and the delivered art shows a terraced citadel. It runs with no
 add-on and no live session, and is committed like any other build tool.
 
+Neither is the Market Core. `tools/blender/build-core.py` builds
+`models/core/market-core.glb` — 468 kB, 4,270 polys of structure and 310 of lit
+banding — because §38.2 makes it the landmark every player orients by and it was
+seven boxes. No pack contains a buttressed spired citadel, and the one structure
+in the world that everything else is positioned relative to is the last thing to
+borrow. Two meshes, `core_body` and `core_bands`, so the client decides what is
+lit; the spire layout is the one the boxes had, so the camera poses tested
+against it still hold. Same headless invocation, plus `--preview out.png`, which
+renders a still with the Workbench engine — that is how it gets looked at before
+it ships.
+
 ## The two directories
 
 Sources are **not** in the repository, exactly like the art masters:
