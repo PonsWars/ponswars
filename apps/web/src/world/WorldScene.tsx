@@ -29,6 +29,7 @@ import {
   sectorSpin,
 } from './layout.js';
 import { Army } from './Army.js';
+import { CoreBeam, CoreModel } from './CoreModel.js';
 import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigation-config.js';
 import { DeckProps, PropField, type Prop } from './DeckProps.js';
 import { InstancedField, preparedGeometry, type Placement } from './InstancedField.js';
@@ -121,23 +122,6 @@ function terrainSeed(index: number, part: number): number {
 }
 
 /**
- * The Market Core's skyline, tallest at the centre.
- *
- * Written out rather than generated, because these are the shape of a landmark
- * rather than a pattern: §38.2 makes the core the thing a player orients by, and
- * a silhouette worth recognising is designed, not sampled from a random seed.
- */
-const CORE_SPIRES: readonly { x: number; z: number; width: number; height: number }[] = [
-  { x: 0, z: 0, width: 34, height: 200 },
-  { x: -46, z: -18, width: 22, height: 138 },
-  { x: 44, z: 12, width: 26, height: 154 },
-  { x: -18, z: 48, width: 20, height: 108 },
-  { x: 22, z: -50, width: 18, height: 122 },
-  { x: -68, z: 44, width: 16, height: 76 },
-  { x: 66, z: -44, width: 15, height: 84 },
-];
-
-/**
  * Reads the reshuffle at whatever instant the caller asks about (§15).
  *
  * Every part of the sequence is drawn from a pure function of elapsed time, so
@@ -176,25 +160,6 @@ function useReshuffleReader(): () => ReshuffleFrame {
   );
 }
 
-/**
- * The bands of light up the core's spires.
- *
- * Derived from `CORE_SPIRES` rather than placed beside it, so a spire that
- * moves or changes height takes its lights with it. Spaced by height rather
- * than by count: a short spire with as many bands as a tall one reads as a
- * different kind of building.
- */
-const CORE_LIGHTS: readonly Placement[] = CORE_SPIRES.flatMap((spire) => {
-  const bands = Math.max(2, Math.round(spire.height / 34));
-  return Array.from({ length: bands }, (_, index) => ({
-    // Evenly up the shaft, stopping short of the roof so the top edge stays a
-    // silhouette against the sky.
-    position: [spire.x, ((index + 1) / (bands + 0.4)) * spire.height, spire.z] as const,
-    scale: [spire.width * 1.04, 2.4, spire.width * 1.04] as const,
-    rotation: [0, 0, 0] as const,
-  }));
-});
-
 function MarketCore(): JSX.Element {
   const core = useRef<Group>(null);
   const beacon = useRef<Mesh>(null);
@@ -228,33 +193,13 @@ function MarketCore(): JSX.Element {
         <meshStandardMaterial color="#0d161d" metalness={0.2} roughness={0.88} />
       </mesh>
 
-      {/* A spire cluster, tallest at the centre. The Market Core is the
-          orientation anchor (§38.2), and a landmark has to be tall enough to
-          find from anywhere in the ring — a sphere reads as an object, a
-          skyline reads as a place. */}
-      {CORE_SPIRES.map((spire, index) => (
-        <mesh key={index} position={[spire.x, spire.height / 2, spire.z]}>
-          <boxGeometry args={[spire.width, spire.height, spire.width]} />
-          <meshStandardMaterial
-            color="#1e3140"
-            metalness={0.22}
-            roughness={0.48}
-            emissive="#0e3040"
-            emissiveIntensity={0.42}
-          />
-        </mesh>
-      ))}
-
-      {/* Lit bands up every spire.
-          §38.2 makes the core the thing a player orients by, and a landmark is
-          found by its light before it is read by its shape. Unlit, the tallest
-          structure in the world was also the dullest object in it — five
-          islands with glowing decks around a grey silhouette. The colour is the
-          core's own: it belongs to no faction, and §38.3 keeps it that way. */}
-      <InstancedField placements={CORE_LIGHTS}>
-        <boxGeometry key="core-band" args={[1, 1, 1]} />
-        <meshBasicMaterial key="core-band-material" color="#4fd8c0" transparent opacity={0.72} />
-      </InstancedField>
+      {/* The core itself, modelled in Blender (§38.2). Suspended on its own so
+          the world never waits on the landmark: the plateau and the beacon are
+          already standing while the structure arrives. */}
+      <Suspense fallback={null}>
+        <CoreModel />
+      </Suspense>
+      <CoreBeam readPulse={() => readReshuffle().corePulse} />
 
       {/* The beacon at the summit. One bright point the eye returns to, and
           the thing that swells while the rest of the world is apart (§15 step
