@@ -161,6 +161,9 @@ export function bearer(authorization: string | undefined): string | null {
   return match?.[1] ?? null;
 }
 
+/** The largest request body the API reads, in bytes. */
+export const MAX_BODY_BYTES = 16_384;
+
 /** Stands in for a write the store refused because the round's picks froze. */
 const LOCKED = Symbol('picks locked');
 
@@ -189,7 +192,13 @@ function correlationId(): string {
 }
 
 export function buildServer(deps: ServerDeps): FastifyInstance {
-  const app = Fastify({ logger: false });
+  const app = Fastify({
+    logger: false,
+    // The largest body this API accepts is a pick: a few hundred bytes. The
+    // framework's default is a mebibyte, parsed as JSON before any route looks
+    // at it — work any visitor could make every instance do, for nothing.
+    bodyLimit: MAX_BODY_BYTES,
+  });
 
   const allowed = new Set(deps.allowedOrigins);
 

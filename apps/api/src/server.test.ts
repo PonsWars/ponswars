@@ -39,7 +39,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryCardHoldings, type CardHolding } from '@ponswars/round-service';
 import { PickStore } from './pick-store.js';
-import { buildServer } from './server.js';
+import { buildServer, MAX_BODY_BYTES } from './server.js';
 
 /**
  * The HTTP surface, exercised as HTTP.
@@ -1215,5 +1215,19 @@ describe('a card the wallet cannot deploy', () => {
 
     expect(pick.statusCode).toBe(201);
     expect(save.statusCode).toBe(200);
+  });
+});
+
+describe('a request body', () => {
+  it('is refused past the limit before any route reads it', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: pickUrl(),
+      headers: { ...AUTH, 'content-type': 'application/json' },
+      payload: JSON.stringify({ ...pickBody(), padding: 'x'.repeat(MAX_BODY_BYTES) }),
+    });
+
+    expect(response.statusCode).toBe(413);
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(0);
   });
 });
