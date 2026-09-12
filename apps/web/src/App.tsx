@@ -3,6 +3,7 @@ import {
   utcTimestamp,
   type FinalizedBattleResult,
 } from '@ponswars/shared-types';
+import type { Profile } from '@ponswars/schemas';
 import { LAYER } from '@ponswars/ui-tokens';
 import { lazy, Suspense, useEffect, useMemo, type JSX } from 'react';
 import { liveEndpoints } from './live/endpoints.js';
@@ -11,14 +12,17 @@ import { cardEffectLine } from './art/GenesisCardFace.js';
 import { Landing } from './landing/Landing.js';
 import { PreviewBanner } from './live/PreviewBanner.js';
 import { fetchBattleResult } from './live/round-client.js';
+import { useLiveProfile, type LiveProfile } from './live/useLiveProfile.js';
 import { useLiveWorld } from './live/useLiveWorld.js';
 import { useWalletSession } from './live/useWalletSession.js';
 import { WalletSessionProvider } from './live/WalletSessionContext.js';
 import type { GenesisOutcome } from './genesis/GenesisReveal.js';
 import { Hud } from './hud/Hud.js';
 import { Presentations, type FinishedBattle } from './presentation/Presentations.js';
+import { GENESIS_UNPUBLISHED, failureCopy, type PersonalData } from './presentation/unpublished.js';
+import { warRoomFrom } from './profile/profile-view.js';
 import type { ProfileData } from './profile/WarRoom.js';
-import { activeWindowView } from './rewards/reward-view.js';
+import { activeWindowView, currentWindowView } from './rewards/reward-view.js';
 import type { PoolStatus } from './rewards/RewardsHub.js';
 import { NavBar } from './hud/NavBar.js';
 import { Overlay } from './presentation/Overlay.js';
@@ -232,20 +236,23 @@ const PLACEHOLDER_GENESIS: GenesisOutcome = {
 
 const PLACEHOLDER_PROFILE: ProfileData = {
   addressFragment: PLACEHOLDER_WALLET.addressFragment,
-  warBalance: PLACEHOLDER_WALLET.warBalance,
-  warHolder: true,
-  // The card the Genesis preview reveals, with one charge spent — same id, same
-  // name, same rarity, same effect. It was a different card under the same
-  // Genesis number, which taught anyone who opened both screens that the
-  // reveal and the profile are unrelated.
-  card: {
-    genesisId: PLACEHOLDER_GENESIS.genesisId,
-    name: PLACEHOLDER_GENESIS.cardName,
-    cardType: PLACEHOLDER_GENESIS.cardType,
-    rarity: PLACEHOLDER_GENESIS.rarity,
-    effect: PLACEHOLDER_GENESIS.effect,
-    usesRemaining: 2,
-    secretTrophy: PLACEHOLDER_GENESIS.secretReservationSecured,
+  holdings: {
+    status: 'PUBLISHED',
+    warBalance: PLACEHOLDER_WALLET.warBalance,
+    warHolder: true,
+    // The card the Genesis preview reveals, with one charge spent — same id,
+    // same name, same rarity, same effect. It was a different card under the
+    // same Genesis number, which taught anyone who opened both screens that the
+    // reveal and the profile are unrelated.
+    card: {
+      genesisId: PLACEHOLDER_GENESIS.genesisId,
+      name: PLACEHOLDER_GENESIS.cardName,
+      cardType: PLACEHOLDER_GENESIS.cardType,
+      rarity: PLACEHOLDER_GENESIS.rarity,
+      effect: PLACEHOLDER_GENESIS.effect,
+      usesRemaining: 2,
+      secretTrophy: PLACEHOLDER_GENESIS.secretReservationSecured,
+    },
   },
   lifetime: {
     battles: 128,
@@ -293,8 +300,22 @@ const PLACEHOLDER_PROFILE: ProfileData = {
 
 const PLACEHOLDER_POOL: PoolStatus = { balance: '12.40' };
 
-/** What a personal page receives while no service publishes its data. */
-const UNPUBLISHED = { published: false } as const;
+/**
+ * A personal page's data from the live profile, for as long as it is loading,
+ * failed or arrived — and asking for a wallet when there is no session.
+ */
+function fromLiveProfile<T>(live: LiveProfile, shape: (profile: Profile) => T): PersonalData<T> {
+  switch (live.kind) {
+    case 'IDLE':
+      return { status: 'SIGNED_OUT' };
+    case 'LOADING':
+      return { status: 'LOADING' };
+    case 'FAILED':
+      return { status: 'FAILED', copy: failureCopy(live.failure), retry: live.retry };
+    case 'READY':
+      return { status: 'READY', value: shape(live.profile) };
+  }
+}
 
 /**
  * A placeholder finalized battle.
@@ -359,6 +380,14 @@ export function App(): JSX.Element {
   // was never told where they are. The session goes in rather than being read
   // there: writes carry it, and so does the socket (§48.2).
   const status = useLiveWorld(walletSession.authorization);
+
+  // The signed-in wallet's record, fetched while a page that shows it is open
+  // and fetched again each time one opens, so a battle that just ended is in it.
+  const liveProfile = useLiveProfile(
+    status.live && (route.kind === 'PROFILE' || route.kind === 'REWARDS')
+      ? walletSession.authorization
+      : null,
+  );
   const lastResults = useSession((state) => state.lastResults);
   const myBattleId = useSession((state) => state.myBattleId);
 
@@ -532,17 +561,20 @@ export function App(): JSX.Element {
         <Presentations
           route={route}
           navigate={navigate}
-          // Preview figures under the preview banner, and nothing invented in a
-          // live round: no service publishes records, distributions or Genesis
-          // claims yet, and the one place in the product that shows a player
-          // their own numbers is the last place to make them up. The result
-          // screen below has always worked this way.
-          profile={status.live ? UNPUBLISHED : { published: true, value: PLACEHOLDER_PROFILE }}
+          // Preview figures under the preview banner, and the signed-in wallet's
+          // own record in a live round — never figures invented for it. The
+          // pool balance and Genesis claims are read from the chain, which
+          // nothing reads yet, so a live round says so rather than guess.
+          profile={
+            status.live
+              ? fromLiveProfile(liveProfile, warRoomFrom)
+              : { status: 'READY', value: PLACEHOLDER_PROFILE }
+          }
           reward={
             status.live
-              ? UNPUBLISHED
+              ? fromLiveProfile(liveProfile, (profile) => currentWindowView(profile.currentWindow))
               : {
-                  published: true,
+                  status: 'READY',
                   value: activeWindowView({
                     distributionId: 42,
                     warPoints: PLACEHOLDER_WALLET.warPoints,
@@ -551,7 +583,13 @@ export function App(): JSX.Element {
                 }
           }
           pool={status.live ? null : PLACEHOLDER_POOL}
-          genesis={status.live ? UNPUBLISHED : { published: true, value: PLACEHOLDER_GENESIS }}
+          genesis={
+            status.live
+              ? walletSession.authorization === null
+                ? { status: 'SIGNED_OUT' }
+                : { status: 'UNPUBLISHED', copy: GENESIS_UNPUBLISHED }
+              : { status: 'READY', value: PLACEHOLDER_GENESIS }
+          }
           result={status.live ? finished : PLACEHOLDER_RESULT}
         />
       ) : null}

@@ -244,10 +244,13 @@ function FairDistributionCap(): JSX.Element {
  * enough that a drifting timer would visibly disagree with itself over a
  * session.
  */
-function WindowCountdown({ closesAt }: { readonly closesAt: number }): JSX.Element {
+function WindowCountdown({ closesAt }: { readonly closesAt: number | null }): JSX.Element {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
+    if (closesAt === null) {
+      return;
+    }
     let timer: ReturnType<typeof setTimeout>;
     const schedule = (): void => {
       const current = Date.now();
@@ -258,7 +261,18 @@ function WindowCountdown({ closesAt }: { readonly closesAt: number }): JSX.Eleme
     return () => {
       clearTimeout(timer);
     };
-  }, []);
+  }, [closesAt]);
+
+  if (closesAt === null) {
+    return (
+      <div>
+        <div style={captionStyle}>NEXT SNAPSHOT</div>
+        <div style={{ fontSize: 13, color: 'var(--pw-text-2)' }}>
+          Not scheduled yet. Your War Points keep counting toward this window until it is.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

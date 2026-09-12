@@ -15,9 +15,8 @@ import {
   type ResultRoute,
   type Route,
 } from '../routing/route.js';
-import { useWalletSessionContext } from '../live/WalletSessionContext.js';
 import { Overlay } from './Overlay.js';
-import { unpublishedCopy, type PersonalPage, type Published } from './unpublished.js';
+import { signedOutCopy, type PersonalData, type PersonalPage } from './unpublished.js';
 
 /**
  * Routes the three presentations that layer over the world (§80.4).
@@ -38,31 +37,64 @@ export function Presentations({
 }: {
   readonly route: PresentationRoute | ResultRoute;
   readonly navigate: (next: Route) => void;
-  readonly profile: Published<ProfileData>;
-  readonly reward: Published<RewardView>;
+  readonly profile: PersonalData<ProfileData>;
+  readonly reward: PersonalData<RewardView>;
   readonly pool: PoolStatus | null;
-  /** `null` inside a published value is a wallet with no claim — a real answer. */
-  readonly genesis: Published<GenesisOutcome | null>;
+  /** `null` inside a ready value is a wallet with no claim — a real answer. */
+  readonly genesis: PersonalData<GenesisOutcome | null>;
   readonly result: FinishedBattle | null;
 }): JSX.Element {
-  const wallet = useWalletSessionContext();
-  const connected = wallet.status.kind === 'CONNECTED';
-
   const close = (): void => {
     navigate(WORLD_ROUTE);
   };
 
-  const unpublished = (page: PersonalPage): JSX.Element => {
-    const copy = unpublishedCopy(page, connected);
-    return (
-      <EmptyState
-        headline={copy.headline}
-        body={copy.body}
-        action="BACK TO THE WORLD →"
-        onAction={close}
-      />
-    );
-  };
+  /**
+   * A personal page in whatever state its record is in.
+   *
+   * Every state but `READY` says what is happening instead of showing a record,
+   * so an empty record can only ever mean a wallet that has not played.
+   */
+  function personal<T>(
+    page: PersonalPage,
+    data: PersonalData<T>,
+    render: (value: T) => JSX.Element,
+  ): JSX.Element {
+    switch (data.status) {
+      case 'READY':
+        return render(data.value);
+      case 'LOADING':
+        return <LoadingState page={page} />;
+      case 'SIGNED_OUT': {
+        const copy = signedOutCopy(page);
+        return (
+          <EmptyState
+            headline={copy.headline}
+            body={copy.body}
+            action="BACK TO THE WORLD →"
+            onAction={close}
+          />
+        );
+      }
+      case 'UNPUBLISHED':
+        return (
+          <EmptyState
+            headline={data.copy.headline}
+            body={data.copy.body}
+            action="BACK TO THE WORLD →"
+            onAction={close}
+          />
+        );
+      case 'FAILED':
+        return (
+          <EmptyState
+            headline={data.copy.headline}
+            body={data.copy.body}
+            action="TRY AGAIN"
+            onAction={data.retry}
+          />
+        );
+    }
+  }
 
   switch (route.kind) {
     case 'PROFILE':
@@ -73,7 +105,9 @@ export function Presentations({
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
-          {profile.published ? <WarRoom profile={profile.value} /> : unpublished('PROFILE')}
+          {personal('PROFILE', profile, (value) => (
+            <WarRoom profile={value} />
+          ))}
         </Overlay>
       );
     case 'REWARDS':
@@ -84,11 +118,9 @@ export function Presentations({
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
-          {reward.published ? (
-            <RewardsPresentation view={reward.value} pool={pool} />
-          ) : (
-            unpublished('REWARDS')
-          )}
+          {personal('REWARDS', reward, (value) => (
+            <RewardsPresentation view={value} pool={pool} />
+          ))}
         </Overlay>
       );
     case 'ABOUT':
@@ -151,19 +183,19 @@ export function Presentations({
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
-          {!genesis.published ? (
-            unpublished('GENESIS')
-          ) : genesis.value === null ? (
-            // §42.14: say what is actually true rather than showing an empty
-            // ceremony. A wallet with no Genesis claim has nothing to reveal.
-            <EmptyState
-              headline="NO GENESIS CLAIM ON THIS WALLET"
-              body="Genesis Cards are revealed once, to the wallet that holds the claim. Nothing here is hidden from you — there is nothing on this wallet to open."
-              action="BACK TO THE WORLD →"
-              onAction={close}
-            />
-          ) : (
-            <GenesisReveal outcome={genesis.value} onDone={close} />
+          {personal('GENESIS', genesis, (value) =>
+            value === null ? (
+              // §42.14: say what is actually true rather than showing an empty
+              // ceremony. A wallet with no Genesis claim has nothing to reveal.
+              <EmptyState
+                headline="NO GENESIS CLAIM ON THIS WALLET"
+                body="Genesis Cards are revealed once, to the wallet that holds the claim. Nothing here is hidden from you — there is nothing on this wallet to open."
+                action="BACK TO THE WORLD →"
+                onAction={close}
+              />
+            ) : (
+              <GenesisReveal outcome={value} onDone={close} />
+            ),
           )}
         </Overlay>
       );
@@ -219,6 +251,29 @@ function RewardsPresentation({
         advance(claim === 'FAILED' ? 'READY_TO_CLAIM' : 'CONFIRM_IN_WALLET');
       }}
     />
+  );
+}
+
+/**
+ * A record on its way (§42.14).
+ *
+ * Says what is being fetched rather than spinning, and holds the page's place
+ * so the record does not arrive into a layout that jumps.
+ */
+function LoadingState({ page }: { readonly page: PersonalPage }): JSX.Element {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)', maxWidth: 560 }}
+    >
+      <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>
+        {page === 'REWARDS' ? 'READING YOUR WINDOW…' : 'READING YOUR RECORD…'}
+      </h2>
+      <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.55 }}>
+        From the battles you have played and the War Points they earned.
+      </p>
+    </div>
   );
 }
 

@@ -3,6 +3,7 @@ import {
   qualifiesForDistribution,
   REWARD_WEIGHT_SCALE,
   rewardWeight,
+  utcTimestamp,
   type UtcTimestamp,
 } from '@ponswars/shared-types';
 
@@ -41,8 +42,15 @@ interface WindowCommon {
 
 export interface ActiveWindowView extends WindowCommon {
   readonly kind: 'ACTIVE';
-  /** When the 24-hour window closes (§16.2). */
-  readonly closesAt: UtcTimestamp;
+  /**
+   * When the 24-hour window closes (§16.2), or `null` when no snapshot has been
+   * scheduled yet.
+   *
+   * §16.2 starts a window's War Points after the previous snapshot, so they
+   * accrue whether or not the next one is on the calendar. A countdown to a
+   * snapshot nobody has scheduled would be a deadline this product invented.
+   */
+  readonly closesAt: UtcTimestamp | null;
 }
 
 export interface FinalizedWindowView extends WindowCommon {
@@ -83,6 +91,29 @@ export function activeWindowView(input: ActiveWindowInput): ActiveWindowView {
     kind: 'ACTIVE',
     ...common(input.distributionId, input.warPoints),
     closesAt: input.closesAt,
+  };
+}
+
+/**
+ * The window a live profile describes (§16.2, §69.9).
+ *
+ * Labelled by the distribution the operator opened when there is one, and as
+ * the current window otherwise — the War Points in it are real either way.
+ */
+export function currentWindowView(input: {
+  readonly warPoints: number;
+  /** As the profile contract carries it: epoch milliseconds. */
+  readonly window: { readonly distributionId: string; readonly closesAt: number } | null;
+}): ActiveWindowView {
+  const base = common(0, input.warPoints);
+  return {
+    kind: 'ACTIVE',
+    ...base,
+    label:
+      input.window === null
+        ? 'CURRENT DISTRIBUTION WINDOW'
+        : `REWARDS DISTRIBUTION ${input.window.distributionId.toUpperCase()}`,
+    closesAt: input.window === null ? null : utcTimestamp(input.window.closesAt),
   };
 }
 

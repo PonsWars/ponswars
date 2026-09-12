@@ -38,8 +38,11 @@ export interface LifetimeStats {
   readonly battles: number;
   readonly wins: number;
   readonly losses: number;
-  /** Win rate in basis points, so the client never divides (§66.3). */
-  readonly winRateBps: number;
+  /**
+   * Win rate in basis points, so the client never divides (§66.3). `null`
+   * before any battle is decided — a new player has no rate, not a rate of zero.
+   */
+  readonly winRateBps: number | null;
   readonly upsets: number;
   readonly majorUpsets: number;
   readonly cardAssistedWins: number;
@@ -68,11 +71,24 @@ export interface BiggestUpset {
   readonly roundId: string;
 }
 
+/**
+ * What the wallet holds on chain: its `$WAR`, and its Genesis card (§34.1, §34.2).
+ *
+ * Either published or said not to be. An unclaimed card and a card nobody has
+ * looked up are different facts, and `card: null` could only ever say the first.
+ */
+export type Holdings =
+  | { readonly status: 'UNPUBLISHED' }
+  | {
+      readonly status: 'PUBLISHED';
+      readonly warBalance: string;
+      readonly warHolder: boolean;
+      readonly card: GenesisCardView | null;
+    };
+
 export interface ProfileData {
   readonly addressFragment: string;
-  readonly warBalance: string;
-  readonly warHolder: boolean;
-  readonly card: GenesisCardView | null;
+  readonly holdings: Holdings;
   readonly lifetime: LifetimeStats;
   readonly history: readonly BattleHistoryRow[];
   readonly mostBacked: MostBacked | null;
@@ -94,7 +110,7 @@ export function WarRoom({ profile }: { readonly profile: ProfileData }): JSX.Ele
         }}
       >
         <Identity profile={profile} />
-        <GenesisCardPanel card={profile.card} />
+        <GenesisCardPanel holdings={profile.holdings} />
       </div>
 
       <Lifetime stats={profile.lifetime} />
@@ -124,14 +140,24 @@ function Identity({ profile }: { readonly profile: ProfileData }): JSX.Element {
       <div className="pw-tabular" style={{ ...readoutStyle, fontSize: 22 }}>
         {profile.addressFragment}
       </div>
-      <div style={{ display: 'flex', gap: 'var(--pw-space-4)' }}>
-        <Field caption="$WAR" value={profile.warBalance} />
-        <Field
-          caption="STATUS"
-          value={profile.warHolder ? 'WAR HOLDER ✓' : 'NOT A HOLDER'}
-          accent={profile.warHolder ? 'var(--pw-accent)' : 'var(--pw-text-3)'}
-        />
-      </div>
+      {profile.holdings.status === 'PUBLISHED' ? (
+        <div style={{ display: 'flex', gap: 'var(--pw-space-4)' }}>
+          <Field caption="$WAR" value={profile.holdings.warBalance} />
+          <Field
+            caption="STATUS"
+            value={profile.holdings.warHolder ? 'WAR HOLDER ✓' : 'NOT A HOLDER'}
+            accent={profile.holdings.warHolder ? 'var(--pw-accent)' : 'var(--pw-text-3)'}
+          />
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 'var(--pw-space-1)' }}>
+          <Field caption="$WAR" value="NOT PUBLISHED" accent="var(--pw-text-3)" />
+          <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--pw-text-3)' }}>
+            Balances are read from the chain, and this server does not read it yet. Your record
+            below is complete.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -144,7 +170,21 @@ function Identity({ profile }: { readonly profile: ProfileData }): JSX.Element {
  * hidden, because §7 makes Genesis a one-time non-transferable record rather
  * than a consumable that disappears when spent.
  */
-function GenesisCardPanel({ card }: { readonly card: GenesisCardView | null }): JSX.Element {
+function GenesisCardPanel({ holdings }: { readonly holdings: Holdings }): JSX.Element {
+  if (holdings.status === 'UNPUBLISHED') {
+    return (
+      <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
+        <div style={captionStyle}>GENESIS CARD</div>
+        <div style={{ ...readoutStyle, color: 'var(--pw-text-3)' }}>NOT PUBLISHED YET</div>
+        <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--pw-text-3)' }}>
+          Genesis claims are read from the chain. Whether this wallet holds a card is not something
+          this page will guess.
+        </p>
+      </div>
+    );
+  }
+
+  const { card } = holdings;
   if (card === null) {
     return (
       <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
@@ -252,7 +292,10 @@ function Lifetime({ stats }: { readonly stats: LifetimeStats }): JSX.Element {
         <Field caption="BATTLES" value={String(stats.battles)} />
         <Field caption="WINS" value={String(stats.wins)} />
         <Field caption="LOSSES" value={String(stats.losses)} />
-        <Field caption="WIN RATE" value={formatBps(stats.winRateBps)} />
+        <Field
+          caption="WIN RATE"
+          value={stats.winRateBps === null ? '—' : formatBps(stats.winRateBps)}
+        />
         <Field caption="UPSETS" value={String(stats.upsets)} />
         <Field caption="MAJOR UPSETS" value={String(stats.majorUpsets)} />
         <Field caption="CARD-ASSISTED" value={String(stats.cardAssistedWins)} />

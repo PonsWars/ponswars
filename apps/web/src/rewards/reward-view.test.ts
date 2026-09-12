@@ -10,6 +10,7 @@ import {
   canTransitionClaim,
   claimCopy,
   CLAIM_STATES,
+  currentWindowView,
   finalizedWindowView,
   formatRewardWeight,
   formatWindowCountdown,
@@ -191,5 +192,38 @@ describe('the claim flow', () => {
     const copy = claimCopy('FAILED');
     expect(copy.headline).toBe('CLAIM NOT COMPLETED');
     expect(copy.detail).toBe('Your allocation is still available. Try again.');
+  });
+});
+
+describe('the current window, from a live profile', () => {
+  it('counts War Points toward a window before any snapshot is scheduled', () => {
+    // §16.2: a window's War Points begin after the previous snapshot, whether
+    // or not the next one is on the calendar. There is no deadline to show.
+    const view = currentWindowView({ warPoints: 64, window: null });
+
+    expect(view).toMatchObject({
+      kind: 'ACTIVE',
+      label: 'CURRENT DISTRIBUTION WINDOW',
+      warPoints: 64,
+      qualified: true,
+      closesAt: null,
+    });
+  });
+
+  it('names the scheduled distribution and counts down to it', () => {
+    const view = currentWindowView({
+      warPoints: 12,
+      window: { distributionId: 'dist-043', closesAt: 1_800_086_400_000 },
+    });
+
+    expect(view.label).toBe('REWARDS DISTRIBUTION DIST-043');
+    expect(view.closesAt).toBe(utcTimestamp(1_800_086_400_000));
+    expect(view).toMatchObject({ qualified: false, wpToQualify: MIN_QUALIFYING_WP - 12 });
+  });
+
+  it('still has no allocation to render', () => {
+    expect(Object.keys(currentWindowView({ warPoints: 900, window: null }))).not.toContain(
+      'allocation',
+    );
   });
 });
