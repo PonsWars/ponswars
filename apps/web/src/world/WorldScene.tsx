@@ -15,7 +15,7 @@ import {
 import { useGLTF } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { BackSide, Box3, Color, ShaderMaterial, Vector3 } from 'three';
+import { BackSide, Box3, Color, DataTexture, ShaderMaterial, Vector3 } from 'three';
 import type { BufferGeometry, Mesh } from 'three';
 import type { Group, PerspectiveCamera, PointLight } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
@@ -1350,6 +1350,34 @@ function Starfield(): JSX.Element {
     return points;
   }, []);
 
+  // A soft round disc for every star. Points are squares unless told otherwise,
+  // and at three pixels on a one-to-one desktop screen a square passes for a
+  // dot — on a phone's doubled pixels it is a visible white square, and the
+  // whole sky reads as a screen full of dead pixels.
+  const disc = useMemo(() => {
+    const size = 32;
+    const data = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const distance = Math.hypot(x + 0.5 - size / 2, y + 0.5 - size / 2) / (size / 2);
+        // A bright core, a soft shoulder, and nothing at the sprite's edge.
+        const value = Math.round(255 * Math.max(0, 1 - distance) ** 1.6);
+        const offset = (y * size + x) * 4;
+        data.fill(value, offset, offset + 4);
+      }
+    }
+    const texture = new DataTexture(data, size, size);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
+  useEffect(
+    () => () => {
+      disc.dispose();
+    },
+    [disc],
+  );
+
   return (
     <points>
       <bufferGeometry>
@@ -1358,11 +1386,15 @@ function Starfield(): JSX.Element {
       {/* `fog={false}`: the fog exists to fade the *world*, and a sky that
           faded with it would leave the far side of the scene empty. */}
       <pointsMaterial
-        size={3.2}
-        color="#8fa8bd"
+        // Larger than the square it replaces, because a soft disc covers less
+        // of its sprite than a hard one: the same star at the same brightness.
+        size={4.4}
+        color="#a4bccf"
         sizeAttenuation={false}
+        alphaMap={disc}
         transparent
-        opacity={0.55}
+        depthWrite={false}
+        opacity={0.7}
         fog={false}
       />
     </points>
