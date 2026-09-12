@@ -17,6 +17,7 @@ import {
   rosterSchema,
   serviceStatusSchema,
   myPickSchema,
+  profileSchema,
   pickRequestSchema,
   pickResponseSchema,
 } from '@ponswars/schemas';
@@ -45,6 +46,7 @@ import {
   wrongChain,
   type ErrorResponse,
 } from './errors.js';
+import type { PlayerRecordSource } from '@ponswars/player-service';
 import { PicksLockedError, type PickRepository } from '@ponswars/round-service';
 
 /**
@@ -120,6 +122,14 @@ export interface ServerDeps {
    * one — the one deployments actually run — impossible to write.
    */
   readonly finalizedResult: (battleId: string) => Promise<FinalizedBattleResult | null>;
+  /**
+   * The connected wallet's record (§69.9).
+   *
+   * A source rather than a store, for the same reason `finalizedResult` is a
+   * lookup: a record is derived from what finalization wrote, and this server
+   * only reads it.
+   */
+  readonly playerRecords: PlayerRecordSource;
 }
 
 /**
@@ -654,6 +664,32 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     }
 
     return reply.code(200).send({ cardDecision: updated.cardDecision });
+  });
+
+  /**
+   * `GET /v1/profile` (§69.9, §34).
+   *
+   * The signed-in wallet's own record, and nobody else's: the wallet is the one
+   * the session proves, never a parameter. A profile is personal, so it is
+   * marked private — a shared cache that stored one would serve it to whoever
+   * asked next.
+   */
+  app.get('/v1/profile', async (request, reply) => {
+    const wallet = await deps.walletOf(request.headers.authorization);
+    if (wallet === null) {
+      return send(reply, unauthenticated(correlationId()));
+    }
+
+    const record = await deps.playerRecords.recordOf(wallet);
+    void reply.header('cache-control', 'private, no-store');
+    return reply.send(
+      profileSchema.parse({
+        ...record,
+        // Balance, Genesis, card and claimable rewards are the chain's to
+        // answer, and nothing reads the chain yet (§59.3).
+        holdings: { status: 'UNPUBLISHED' },
+      }),
+    );
   });
 
   /**

@@ -24,6 +24,7 @@ import {
 import {
   PostgresAuthStore,
   PostgresPickStore,
+  PostgresPlayerRecords,
   PostgresRoundStore,
   readFinalizedResult,
 } from '@ponswars/store-postgres';
@@ -196,6 +197,8 @@ async function main(): Promise<void> {
     // link has to answer after a restart, on an instance that never ran the
     // battle. Reading it from memory would have made both of those a 404.
     finalizedResult: (battleId) => readFinalizedResult(database, battleId),
+    // Derived from the ledgers finalization wrote, on every request (§49.2).
+    playerRecords: new PostgresPlayerRecords(database),
     picks,
     config: CONFIG,
     now,

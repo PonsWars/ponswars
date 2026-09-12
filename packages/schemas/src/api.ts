@@ -162,6 +162,93 @@ export const cardDecisionRequestSchema = z
   .strict();
 
 // ---------------------------------------------------------------------------
+// Profile (§69.9, §34)
+// ---------------------------------------------------------------------------
+
+const countSchema = z.int().nonnegative();
+
+const historyOutcomeSchema = z.enum(['WIN', 'UPSET_VICTORY', 'MAJOR_UPSET', 'LOSS', 'VOID']);
+
+/**
+ * `GET /v1/profile` — the connected wallet's own record (§69.9).
+ *
+ * Everything in it is derived from what finalization wrote: locked picks,
+ * results and the War Point ledger. §69.9 also lists the wallet's `$WAR`
+ * balance, Genesis state, card and claimable rewards; those are read from the
+ * chain, no service publishes them yet, and `holdings` says exactly that rather
+ * than answering `null` — which a client would read as "no card".
+ *
+ * No estimated payout, for the reason `currentRewardsSchema` gives: §16.2 and
+ * §110.3 forbid one during an open window.
+ */
+export const profileSchema = z
+  .object({
+    wallet: walletAddressSchema,
+    lifetime: z
+      .object({
+        battles: countSchema,
+        wins: countSchema,
+        losses: countSchema,
+        winRateBps: z.int().min(0).max(10_000).nullable(),
+        upsets: countSchema,
+        majorUpsets: countSchema,
+        cardAssistedWins: countSchema,
+        warPoints: countSchema,
+      })
+      .strict(),
+    currentWindow: z
+      .object({
+        warPoints: countSchema,
+        qualified: z.boolean(),
+        /** `sqrt(WP)` scaled, as a string for the same reason amounts are. */
+        weight: baseUnitsSchema,
+        window: z
+          .object({ distributionId: distributionIdSchema, closesAt: utcTimestampSchema })
+          .strict()
+          .nullable(),
+      })
+      .strict(),
+    history: z
+      .array(
+        z
+          .object({
+            roundId: roundIdSchema,
+            battleId: battleIdSchema,
+            left: activeTickerSchema,
+            right: activeTickerSchema,
+            backed: activeTickerSchema,
+            outcome: historyOutcomeSchema,
+            warPoints: countSchema,
+            cardDeployed: z.boolean(),
+            settledAt: utcTimestampSchema,
+          })
+          .strict(),
+      )
+      .max(100),
+    mostBacked: z
+      .object({
+        ticker: activeTickerSchema,
+        battles: countSchema,
+        winRateBps: z.int().min(0).max(10_000),
+      })
+      .strict()
+      .nullable(),
+    biggestUpset: z
+      .object({
+        roundId: roundIdSchema,
+        winner: activeTickerSchema,
+        loser: activeTickerSchema,
+        outcome: z.enum(['UPSET_VICTORY', 'MAJOR_UPSET']),
+      })
+      .strict()
+      .nullable(),
+    holdings: z.object({ status: z.literal('UNPUBLISHED') }).strict(),
+  })
+  .strict();
+
+export type Profile = z.infer<typeof profileSchema>;
+
+// ---------------------------------------------------------------------------
 // Auth (§47.3)
 // ---------------------------------------------------------------------------
 

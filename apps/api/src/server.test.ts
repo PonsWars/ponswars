@@ -19,6 +19,7 @@ import {
   authSessionSchema,
   battleResultSchema,
   currentRoundSchema,
+  profileSchema,
   rosterSchema,
   serviceStatusSchema,
 } from '@ponswars/schemas';
@@ -30,7 +31,9 @@ import {
   type FinalizedBattleResult,
   walletAddress,
   type UtcTimestamp,
+  type WalletAddress,
 } from '@ponswars/shared-types';
+import { playerRecord, type SettledPick } from '@ponswars/player-service';
 import type { FastifyInstance } from 'fastify';
 import { privateKeyToAccount } from 'viem/accounts';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -126,9 +129,15 @@ let picks: PickStore;
 let auth: AuthService;
 let now: UtcTimestamp;
 let app: FastifyInstance;
+/** Wallets the record source was asked about, so a test can see whose was read. */
+let asked: WalletAddress[] = [];
+/** What the record source derives each record from. */
+let settledPicks: SettledPick[] = [];
 
 beforeEach(() => {
   round = openRound();
+  asked = [];
+  settledPicks = [];
   finalized = new Map();
   auth = new AuthService({ store: new MemoryAuthStore(), policy: AUTH_POLICY, now: () => now });
   picks = new PickStore();
@@ -144,6 +153,14 @@ beforeEach(() => {
     // §45.2 and belongs to the auth service; these tests are about the routes.
     walletOf: (authorization) => Promise.resolve(authorization === undefined ? null : WALLET),
     auth,
+    playerRecords: {
+      recordOf: (who) => {
+        asked.push(who);
+        return Promise.resolve(
+          playerRecord({ wallet: who, settled: settledPicks, windowWarPoints: 64, window: null }),
+        );
+      },
+    },
   });
 });
 
@@ -428,6 +445,10 @@ function startingServer(): FastifyInstance {
     now: () => now,
     walletOf: () => Promise.resolve(null),
     auth,
+    playerRecords: {
+      recordOf: () =>
+        Promise.reject(new Error('a starting server has no signed-in wallet to read')),
+    },
   });
 }
 
@@ -1065,5 +1086,67 @@ describe('a pick write that lands after the picks froze', () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({ code: 'PICKS_CLOSED' });
+  });
+});
+
+describe('GET /v1/profile', () => {
+  it('needs a signed-in wallet', async () => {
+    const response = await app.inject({ method: 'GET', url: '/v1/profile' });
+
+    expect(response.statusCode).toBe(401);
+    expect(asked).toEqual([]);
+  });
+
+  it('reads the record of the wallet the session proves, and nobody else', async () => {
+    // There is no wallet parameter to change. A profile route that took one
+    // would be a way to read anyone's record.
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/profile?wallet=0x0000000000000000000000000000000000000001',
+      headers: AUTH,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(asked).toEqual([WALLET]);
+    expect(profileSchema.parse(response.json()).wallet).toBe(WALLET);
+  });
+
+  it('answers with the published contract, and says the chain holdings are unpublished', async () => {
+    const battle = round.battles[0];
+    if (battle === undefined) {
+      throw new Error('round has no battles');
+    }
+    settledPicks = [
+      {
+        roundId: round.roundId,
+        battleId: battle.setup.battleId,
+        left: battle.setup.left,
+        right: battle.setup.right,
+        backed: battle.setup.left,
+        cardDeployed: true,
+        settledAt: round.clock.battleEndAt,
+        warPoints: 12,
+        settlement: { kind: 'DECIDED', winner: battle.setup.left, winnerConfidence: 'EVEN' },
+      },
+    ];
+
+    const body = profileSchema.parse(
+      (await app.inject({ method: 'GET', url: '/v1/profile', headers: AUTH })).json(),
+    );
+
+    expect(body.lifetime).toMatchObject({
+      battles: 1,
+      wins: 1,
+      cardAssistedWins: 1,
+      warPoints: 12,
+    });
+    expect(body.currentWindow).toMatchObject({ warPoints: 64, qualified: true, window: null });
+    expect(body.holdings).toEqual({ status: 'UNPUBLISHED' });
+  });
+
+  it('is never kept by a shared cache', async () => {
+    const response = await app.inject({ method: 'GET', url: '/v1/profile', headers: AUTH });
+
+    expect(response.headers['cache-control']).toBe('private, no-store');
   });
 });

@@ -59,6 +59,9 @@ importers:
       '@ponswars/battle-engine':
         specifier: workspace:*
         version: link:../../packages/battle-engine
+      '@ponswars/player-service':
+        specifier: workspace:*
+        version: link:../../packages/player-service
       '@ponswars/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime
@@ -121,6 +124,9 @@ importers:
       '@ponswars/market-data':
         specifier: workspace:*
         version: link:../../packages/market-data
+      '@ponswars/player-service':
+        specifier: workspace:*
+        version: link:../../packages/player-service
       '@ponswars/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime

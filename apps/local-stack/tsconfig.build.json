@@ -16,6 +16,7 @@
     { "path": "../../packages/market-data/tsconfig.build.json" },
     { "path": "../../packages/realtime/tsconfig.build.json" },
     { "path": "../../packages/round-service/tsconfig.build.json" },
+    { "path": "../../packages/player-service/tsconfig.build.json" },
     { "path": "../api/tsconfig.build.json" },
     { "path": "../gateway/tsconfig.build.json" }
   ]

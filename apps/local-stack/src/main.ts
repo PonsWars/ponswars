@@ -1,4 +1,5 @@
 import { bearer, buildServer, PickStore } from '@ponswars/api';
+import { MemoryPlayerRecords } from '@ponswars/player-service';
 import { AuthService, MemoryAuthStore, type AuthPolicy } from '@ponswars/auth';
 import {
   CURRENT_ENGINE_VERSIONS,
@@ -197,6 +198,9 @@ async function main(): Promise<void> {
           .flatMap((finalization) => finalization.results)
           .find((result) => result.battleId === battleId) ?? null,
       ),
+    // From the same finalizations, through the same derivation a deployment
+    // uses — a record in the local stack follows the rules production does.
+    playerRecords: new MemoryPlayerRecords(() => store.finalizations),
     picks,
     config: CONFIG,
     now,

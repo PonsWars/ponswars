@@ -22,6 +22,7 @@
   "dependencies": {
     "@ponswars/auth": "workspace:*",
     "@ponswars/battle-engine": "workspace:*",
+    "@ponswars/player-service": "workspace:*",
     "@ponswars/realtime": "workspace:*",
     "@ponswars/round-service": "workspace:*",
     "@ponswars/schemas": "workspace:*",

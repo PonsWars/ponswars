@@ -17,6 +17,7 @@
     "@ponswars/battle-math": "workspace:*",
     "@ponswars/gateway": "workspace:*",
     "@ponswars/market-data": "workspace:*",
+    "@ponswars/player-service": "workspace:*",
     "@ponswars/realtime": "workspace:*",
     "@ponswars/round-service": "workspace:*",
     "@ponswars/shared-types": "workspace:*"
