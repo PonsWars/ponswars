@@ -45,7 +45,7 @@ import {
   wrongChain,
   type ErrorResponse,
 } from './errors.js';
-import type { PickStore } from './pick-store.js';
+import { PicksLockedError, type PickRepository } from '@ponswars/round-service';
 
 /**
  * The HTTP surface (§47).
@@ -63,7 +63,7 @@ import type { PickStore } from './pick-store.js';
 export interface ServerDeps {
   /** The round in play, or `null` before one is loaded. */
   readonly currentRound: () => RoundEngineState | null;
-  readonly picks: PickStore;
+  readonly picks: PickRepository;
   readonly config: EngineConfig;
   /**
    * Server time (§23.5).
@@ -135,6 +135,28 @@ export function bearer(authorization: string | undefined): string | null {
   }
   const match = /^Bearer (.+)$/.exec(authorization.trim());
   return match?.[1] ?? null;
+}
+
+/** Stands in for a write the store refused because the round's picks froze. */
+const LOCKED = Symbol('picks locked');
+
+/**
+ * A pick write, with the store's lock refusal turned into a value.
+ *
+ * The phase is checked before every write, but that check and the round's lock
+ * are two moments, and a write can land between them. The store refuses it
+ * (§22); the player is owed the same answer as one who arrived a second later —
+ * picks are closed — rather than a server error for having been unlucky.
+ */
+async function lockedAs<T>(write: Promise<T>): Promise<T | typeof LOCKED> {
+  try {
+    return await write;
+  } catch (error: unknown) {
+    if (error instanceof PicksLockedError) {
+      return LOCKED;
+    }
+    throw error;
+  }
 }
 
 /** Correlation id for one request, so an error can be traced (§110.5). */
@@ -486,21 +508,26 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     // lock — so an existing pick in *this* battle is a change, and one in a
     // different battle is also a change. Only a second concurrent identity
     // would be a conflict, which cannot happen with one wallet.
-    const existing = deps.picks.find(toRoundId(roundId), wallet);
+    const existing = await deps.picks.find(toRoundId(roundId), wallet);
     if (existing !== null && existing.clientRequestId === pick.clientRequestId) {
       // A retry of the same request. Idempotent by §66.6.
       return reply.code(200).send(pickResponseSchema.parse({ recorded: true, replayed: true }));
     }
 
-    const result = deps.picks.submit({
-      wallet,
-      roundId: toRoundId(pick.roundId),
-      battleId: toBattleId(pick.battleId),
-      backedTicker: pick.backedTicker,
-      cardDecision: pick.cardDecision,
-      receivedAt: deps.now(),
-      clientRequestId: toClientRequestId(pick.clientRequestId),
-    });
+    const result = await lockedAs(
+      deps.picks.submit({
+        wallet,
+        roundId: toRoundId(pick.roundId),
+        battleId: toBattleId(pick.battleId),
+        backedTicker: pick.backedTicker,
+        cardDecision: pick.cardDecision,
+        receivedAt: deps.now(),
+        clientRequestId: toClientRequestId(pick.clientRequestId),
+      }),
+    );
+    if (result === LOCKED) {
+      return send(reply, picksClosed(id));
+    }
 
     // Parsed on the way out, like the round is. §66.2 asks for explicit schemas
     // on payloads, and a response nobody validates is the half of the contract
@@ -523,7 +550,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     }
 
     const { roundId } = request.params as { roundId: string };
-    const existing = deps.picks.find(toRoundId(roundId), wallet);
+    const existing = await deps.picks.find(toRoundId(roundId), wallet);
     if (existing === null) {
       return reply.code(200).send(myPickSchema.parse({ pick: null }));
     }
@@ -570,7 +597,11 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       return send(reply, picksClosed(id));
     }
 
-    return reply.code(200).send({ withdrawn: deps.picks.withdraw(toRoundId(roundId), wallet) });
+    const withdrawn = await lockedAs(deps.picks.withdraw(toRoundId(roundId), wallet));
+    if (withdrawn === LOCKED) {
+      return send(reply, picksClosed(id));
+    }
+    return reply.code(200).send({ withdrawn });
   });
 
   /**
@@ -609,12 +640,12 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       return send(reply, picksClosed(id));
     }
 
-    const updated = deps.picks.decideCard(
-      toRoundId(roundId),
-      wallet,
-      parsed.data.decision,
-      deps.now(),
+    const updated = await lockedAs(
+      deps.picks.decideCard(toRoundId(roundId), wallet, parsed.data.decision, deps.now()),
     );
+    if (updated === LOCKED) {
+      return send(reply, picksClosed(id));
+    }
     if (updated === null) {
       // Nothing to arm. A decision without a pick is not a smaller pick; §40.7
       // puts the card after the side, and saying so is more useful than

@@ -205,7 +205,7 @@ describe('PUT /v1/rounds/:roundId/pick', () => {
       payload: pickBody(),
     });
     expect(response.statusCode).toBe(201);
-    expect(picks.count(toRoundId(ROUND_ID))).toBe(1);
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(1);
   });
 
   it('refuses a request with no wallet', async () => {
@@ -215,7 +215,7 @@ describe('PUT /v1/rounds/:roundId/pick', () => {
       payload: pickBody(),
     });
     expect(response.statusCode).toBe(401);
-    expect(picks.count(toRoundId(ROUND_ID))).toBe(0);
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(0);
   });
 
   it('accepts a pick one millisecond before the lock', async () => {
@@ -241,7 +241,7 @@ describe('PUT /v1/rounds/:roundId/pick', () => {
       payload: pickBody(),
     });
     expect(response.statusCode).toBe(409);
-    expect(picks.count(toRoundId(ROUND_ID))).toBe(0);
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(0);
   });
 
   it('tells a player whose pick missed the lock that nothing was spent', async () => {
@@ -335,7 +335,7 @@ describe('PUT /v1/rounds/:roundId/pick', () => {
     expect(first.statusCode).toBe(201);
     expect(retry.statusCode).toBe(200);
     expect(retry.json()).toMatchObject({ replayed: true });
-    expect(picks.count(toRoundId(ROUND_ID))).toBe(1);
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(1);
   });
 
   it('allows a pick to be changed until the lock', async () => {
@@ -362,8 +362,8 @@ describe('PUT /v1/rounds/:roundId/pick', () => {
 
     expect(changed.statusCode).toBe(201);
     expect(changed.json()).toMatchObject({ changed: true });
-    expect(picks.count(toRoundId(ROUND_ID))).toBe(1);
-    expect(picks.find(toRoundId(ROUND_ID), WALLET)?.backedTicker).toBe(battle.setup.right);
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(1);
+    expect((await picks.find(toRoundId(ROUND_ID), WALLET))?.backedTicker).toBe(battle.setup.right);
   });
 });
 
@@ -560,13 +560,13 @@ describe('cross-origin access', () => {
 describe('DELETE /v1/rounds/:roundId/pick', () => {
   it('withdraws a pick during the phase', async () => {
     await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: pickBody() });
-    expect(picks.count(toRoundId(ROUND_ID))).toBe(1);
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(1);
 
     const response = await app.inject({ method: 'DELETE', url: pickUrl(), headers: AUTH });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ withdrawn: true });
-    expect(picks.count(toRoundId(ROUND_ID))).toBe(0);
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(0);
   });
 
   it('succeeds when there was nothing to withdraw', async () => {
@@ -589,7 +589,7 @@ describe('DELETE /v1/rounds/:roundId/pick', () => {
 
     expect(response.statusCode).toBe(409);
     expect(apiErrorSchema.parse(response.json()).code).toBe('PICKS_CLOSED');
-    expect(picks.count(toRoundId(ROUND_ID))).toBe(1);
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(1);
   });
 
   it('needs a wallet', async () => {
@@ -606,7 +606,7 @@ describe('DELETE /v1/rounds/:roundId/pick', () => {
     const again = await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: body });
 
     expect(again.statusCode).toBe(201);
-    expect(picks.count(toRoundId(ROUND_ID))).toBe(1);
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(1);
   });
 });
 
@@ -644,7 +644,7 @@ describe('PUT /v1/rounds/:roundId/card-decision', () => {
       payload: decisionBody('USE'),
     });
 
-    const stored = picks.find(toRoundId(ROUND_ID), WALLET);
+    const stored = await picks.find(toRoundId(ROUND_ID), WALLET);
     expect(stored?.battleId).toBe(battle?.setup.battleId);
     expect(stored?.backedTicker).toBe(battle?.setup.left);
     expect(stored?.cardDecision).toBe('USE');
@@ -1018,5 +1018,52 @@ describe('signing in with a wallet', () => {
     });
 
     expect(response.headers['access-control-allow-methods']).toContain('DELETE');
+  });
+});
+
+describe('a pick write that lands after the picks froze', () => {
+  // The route checks the phase from the clock, and the loop freezes the picks a
+  // moment later — two instants a request can fall between. The store refuses
+  // the write (§22); the player is owed the answer they would have had a second
+  // later, not a server error.
+
+  beforeEach(async () => {
+    await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: pickBody() });
+    // Frozen while the clock still says Pick Phase.
+    await picks.lockedPicks(toRoundId(ROUND_ID));
+  });
+
+  it('refuses a new pick as closed', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: pickUrl(),
+      headers: AUTH,
+      payload: pickBody({
+        clientRequestId: 'req-late',
+        backedTicker: round.battles[0]?.setup.right,
+      }),
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: 'PICKS_CLOSED' });
+  });
+
+  it('refuses a withdrawal as closed', async () => {
+    const response = await app.inject({ method: 'DELETE', url: pickUrl(), headers: AUTH });
+
+    expect(response.statusCode).toBe(409);
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(1);
+  });
+
+  it('refuses a card decision as closed', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/v1/rounds/${ROUND_ID}/card-decision`,
+      headers: AUTH,
+      payload: { roundId: ROUND_ID, decision: 'USE', clientRequestId: 'req-card-late' },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: 'PICKS_CLOSED' });
   });
 });
