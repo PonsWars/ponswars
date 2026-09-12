@@ -318,7 +318,8 @@ function MostBackedPanel({ stat }: { readonly stat: MostBacked }): JSX.Element {
       <div style={captionStyle}>MOST BACKED</div>
       <div style={{ ...readoutStyle, fontSize: 20 }}>{stat.ticker}</div>
       <div className="pw-tabular" style={{ fontSize: 13, color: 'var(--pw-text-2)' }}>
-        {stat.battles} Battles · {formatBps(stat.winRateBps)} Win Rate
+        {stat.battles} {stat.battles === 1 ? 'Battle' : 'Battles'} · {formatBps(stat.winRateBps)}{' '}
+        Win Rate
       </div>
       <div style={{ ...captionStyle, color: 'var(--pw-text-3)' }}>
         HISTORICAL ONLY — NO EFFECT ON MATCHMAKING OR REWARDS
