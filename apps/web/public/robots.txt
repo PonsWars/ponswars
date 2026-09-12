@@ -1,0 +1,5 @@
+# PonsWars is watchable by anyone without a wallet (§5), and every route is a
+# shareable page (§80.4). Nothing here is private to crawlers: a player's own
+# record is served only to their signed-in session, never at a public URL.
+User-agent: *
+Allow: /
