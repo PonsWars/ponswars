@@ -1,0 +1,29 @@
+{
+  "name": "@ponswars/player-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A player's record, derived from locked picks, results and the War Point ledger. Nothing here is a counter.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/battle-engine": "workspace:*",
+    "@ponswars/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "@ponswars/battle-math": "workspace:*"
+  }
+}

@@ -280,6 +280,19 @@ importers:
         specifier: workspace:*
         version: link:../shared-types
 
+  packages/player-service:
+    dependencies:
+      '@ponswars/battle-engine':
+        specifier: workspace:*
+        version: link:../battle-engine
+      '@ponswars/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+    devDependencies:
+      '@ponswars/battle-math':
+        specifier: workspace:*
+        version: link:../battle-math
+
   packages/pons-indexer:
     dependencies:
       '@ponswars/shared-types':
