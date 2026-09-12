@@ -1,4 +1,4 @@
-import { bearer, buildServer, PickStore } from '@ponswars/api';
+import { bearer, buildServer } from '@ponswars/api';
 import { AuthService } from '@ponswars/auth';
 import {
   CURRENT_ENGINE_VERSIONS,
@@ -23,6 +23,7 @@ import {
 } from '@ponswars/shared-types';
 import {
   PostgresAuthStore,
+  PostgresPickStore,
   PostgresRoundStore,
   readFinalizedResult,
 } from '@ponswars/store-postgres';
@@ -124,7 +125,10 @@ async function main(): Promise<void> {
     maxConnections: 10,
   });
   const store = new PostgresRoundStore(database);
-  const picks = new PickStore();
+  // In the database, beside the round they belong to. They were in this
+  // process's memory, so a restart during Pick Phase lost every pick of the
+  // round while each player who made one had been told it was recorded.
+  const picks = new PostgresPickStore(database);
 
   /**
    * Who a request is from (§45.2).
