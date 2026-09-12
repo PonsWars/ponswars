@@ -138,7 +138,10 @@ function usesLabelFor(card: CardHolding): string {
 export function cardStateLabel(state: CardState): string {
   switch (state) {
     case 'NO_CARD':
-      return 'NO GENESIS CARD';
+      // On record, because that is all it can say. A card is known once its
+      // Genesis claim is recorded, and a holder whose claim is not recorded yet
+      // does hold one — the server refuses to deploy it all the same.
+      return 'NO CARD ON RECORD';
     case 'DEPLETED':
       return 'DEPLETED';
     case 'UNDECIDED':
