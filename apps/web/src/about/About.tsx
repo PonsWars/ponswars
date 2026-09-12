@@ -134,7 +134,10 @@ export function About({ onNavigate }: { readonly onNavigate: (next: Route) => vo
         <ol
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+            // Narrow enough that all five steps share one row in the page's 960:
+            // at 190 the fifth fell to a row of its own, which reads as an
+            // afterthought on the step that pays.
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
             gap: 'var(--pw-space-3)',
             listStyle: 'none',
             margin: 0,
