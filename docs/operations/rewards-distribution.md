@@ -19,6 +19,41 @@ Each step is a point of no return in a different way:
 - **CLOSED** ends claiming against that window. Unclaimed rewards are never
   swept (`RewardsDistributor` has a test named for it).
 
+## Opening a window
+
+A window opens at an instant the operator chooses and lasts exactly 24 hours
+(§16.2). One is open at a time, and an identifier is never reused — the claim
+contract commits to it inside every Merkle leaf, so it is a whole number.
+
+```bash
+node apps/server/dist/distribution.js open --id 42 --start 2026-09-14T00:00:00Z
+```
+
+The start must carry its timezone. An instant without one is midnight wherever
+the shell happens to be, and a day of players lands in the wrong window.
+
+War Points earned before a window opens are not lost: they belong to whichever
+window's snapshot claims them first.
+
+## Taking the snapshot
+
+```bash
+node apps/server/dist/distribution.js snapshot --id 42 --pool-balance <base units> --minimum-claim <base units> --out snapshot-42.json
+```
+
+It refuses a window whose 24 hours are not over. Otherwise, in one transaction,
+it claims every War Point no earlier snapshot claimed, fixes the pool balance
+and the 80% split, records who qualified, and writes `snapshot-42.json` — the
+exact input the next step recomputes from. It will not overwrite an existing
+file, and it claims the file before touching the database, so a snapshot is
+never taken without its standings landing on disk.
+
+**The pool balance is read by you, from the Rewards Distribution wallet, at
+the moment you run this.** Nothing reads the chain yet (§59.3 leaves the RPC
+provider open). When something does, it supplies this one number and the step
+is otherwise unchanged. Both amounts are base units: whole numbers, no decimal
+point, which is why the command refuses one.
+
 ## Before the snapshot
 
 The snapshot is the moment the pool balance is read. §35.3 says the UI may show

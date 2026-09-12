@@ -138,15 +138,16 @@ the chain until an RPC provider is chosen.
 
 ## Operator tools
 
-Three commands, each one a step an incident runbook tells someone to take. A
+Four commands, each one a step a runbook tells someone to take. A
 runbook step nobody can follow is worse than an absent one, because it reads as
 covered.
 
-| Command                                | Answers                                                    |
-| -------------------------------------- | ---------------------------------------------------------- |
-| `pnpm run replay <recording.json>`     | Does this round reproduce, hash for hash? (§26)            |
-| `pnpm run audit:distribution <snap>`   | Is this allocation safe to publish? (§16, §17)             |
-| `pnpm run audit:genesis <record.json>` | Does this wallet's Genesis outcome recompute? (§45.4, §76) |
+| Command                                 | Answers                                                      |
+| --------------------------------------- | ------------------------------------------------------------ |
+| `pnpm run replay <recording.json>`      | Does this round reproduce, hash for hash? (§26)              |
+| `node apps/server/dist/distribution.js` | Opens a 24-hour window, or snapshots one into `<snap>` (§16) |
+| `pnpm run audit:distribution <snap>`    | Is this allocation safe to publish? (§16, §17)               |
+| `pnpm run audit:genesis <record.json>`  | Does this wallet's Genesis outcome recompute? (§45.4, §76)   |
 
 Each takes only the inputs its answer is derived from, and each refuses a file
 that carries the answer with it — a snapshot holding allocations, or a recording
