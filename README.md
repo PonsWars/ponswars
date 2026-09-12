@@ -124,9 +124,17 @@ every write carries — one signature, not one per pick (§45.2). Watching needs
 none of it: §5 makes spectating the whole product, so nothing is behind the
 button except the ability to play.
 
-The local stack keeps sessions in memory, so restarting it signs everyone out.
-A deployment keeps them in PostgreSQL, where they survive a deploy and can be
-revoked.
+The local stack keeps sessions, picks and finished rounds in memory, so
+restarting it signs everyone out and forgets every record. A deployment keeps
+all three in PostgreSQL: sessions survive a deploy and can be revoked, a pick
+made during Pick Phase survives a restart before lock, and a player's record is
+read back from the ledgers finalization wrote.
+
+Once signed in, **PROFILE** and **REWARDS** show the wallet's own record from
+`GET /v1/profile` — battles, wins, upsets, War Points and the current
+distribution window. What only the chain can answer (the `$WAR` balance, the
+Genesis card, the pool balance) reads as not published, because nothing reads
+the chain until an RPC provider is chosen.
 
 ## Operator tools
 
