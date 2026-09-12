@@ -126,7 +126,7 @@ const RANK_SPREAD = 84;
  * the numbers that decide whether an army reads as an army, so they are stated
  * here rather than buried in a scale factor per model.
  */
-const HEIGHT: Readonly<Record<UnitKind, number>> = { trooper: 11, mech: 22, walker: 27, drone: 7 };
+const HEIGHT: Readonly<Record<UnitKind, number>> = { trooper: 14, mech: 25, walker: 31, drone: 10 };
 
 /**
  * Where a drone flies: above the ranks rather than among them, and never still.
@@ -135,7 +135,7 @@ const HEIGHT: Readonly<Record<UnitKind, number>> = { trooper: 11, mech: 22, walk
  * is flying with rather than as traffic between sectors — which is what the
  * dropships on the routes are for.
  */
-const DRONE_HOVER = { lift: 30, sway: 1.6 } as const;
+const DRONE_HOVER = { lift: 40, sway: 1.8 } as const;
 
 /**
  * How long one clip takes to become another.
