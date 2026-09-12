@@ -146,6 +146,27 @@ afterEach(async () => {
   await pg.close();
 });
 
+/** Records a Genesis claim and a card with charges for a wallet. */
+async function holdCard(who: WalletAddress): Promise<void> {
+  const tag = who.slice(-4);
+  await db.query('INSERT INTO wallet_profiles (wallet) VALUES ($1) ON CONFLICT DO NOTHING', [who]);
+  await db.query('INSERT INTO genesis_requests (request_id, wallet) VALUES ($1, $2)', [
+    `request-${tag}`,
+    who,
+  ]);
+  await db.query(
+    `INSERT INTO genesis_claims (genesis_id, wallet, request_id, seed, slot, secret_available,
+                                 rarity, card, initial_uses, rng_version)
+     VALUES ($1, $2, $3, 'seed', 1, false, 'RARE', 'BULL_RUN', 3, 'genesis-rng-v1')`,
+    [`genesis-${tag}`, who, `request-${tag}`],
+  );
+  await db.query(
+    `INSERT INTO cards (card_instance_id, wallet, genesis_id, rarity, card, initial_uses, remaining_uses)
+     VALUES ($1, $2, $3, 'RARE', 'BULL_RUN', 3, 3)`,
+    [`card-${tag}`, who, `genesis-${tag}`],
+  );
+}
+
 /**
  * Plays one round through the stores.
  *
@@ -175,6 +196,12 @@ async function playRound(): Promise<{ finalization: RoundFinalization; round: Ro
   const rounds = new PostgresRoundStore(db);
   const picks = new PostgresPickStore(db);
   await rounds.saveState(opened);
+
+  // Every wallet holds a card, so the ones that arm theirs deploy it. A card
+  // nobody holds is locked as saved and earns no assist.
+  for (let holder = 1; holder <= 10; holder += 1) {
+    await holdCard(wallet(holder));
+  }
 
   const battles = opened.battles.map((battle) => battle.setup);
   let n = 0;

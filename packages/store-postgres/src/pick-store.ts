@@ -149,6 +149,7 @@ export class PostgresPickStore implements PickRepository {
           WHERE round_id = $1 AND locked_at IS NULL`,
         [roundId],
       );
+      await deployCards(tx, roundId);
 
       // What was locked, not what the row says now — after this they are the
       // same, and the locked columns are the ones that cannot change. Ordered
@@ -224,6 +225,63 @@ export class PostgresPickStore implements PickRepository {
       [roundId],
     );
     return Number(rows[0]?.['picks'] ?? 0);
+  }
+}
+
+/**
+ * Deploys the round's armed cards, spending one charge each (§3.2, §40.7).
+ *
+ * Inside the exclusive round lock, in three steps whose order is the point:
+ *
+ * 1. An armed card the wallet cannot spend — no card on record, or no charge
+ *    left — is locked as saved. The API refuses to arm one, but this is the
+ *    frozen set the engine scores, and a card that is not there must not reach
+ *    it by any route: the engine would credit it with support and a card assist
+ *    like a real one.
+ * 2. Every remaining armed card is recorded as deployed in the usage ledger.
+ *    The ledger allows one deployment per wallet per round, so a lock read again
+ *    after a restart records nothing new.
+ * 3. Only the cards step 2 actually recorded lose a charge — which is what makes
+ *    spending exactly-once rather than once per attempt.
+ */
+async function deployCards(tx: SqlExecutor, roundId: RoundId): Promise<void> {
+  await tx.query(
+    `UPDATE player_picks p
+        SET locked_card_decision = 'SAVE', updated_at = now()
+      WHERE p.round_id = $1
+        AND p.locked_card_decision = 'USE'
+        AND NOT EXISTS (
+          SELECT 1 FROM card_usage_ledger l
+           WHERE l.wallet = p.wallet AND l.round_id = p.round_id AND l.event = 'DEPLOY'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM cards c WHERE c.wallet = p.wallet AND c.remaining_uses > 0
+        )`,
+    [roundId],
+  );
+
+  const { rows } = await tx.query(
+    `INSERT INTO card_usage_ledger (card_instance_id, wallet, round_id, battle_id, event, delta)
+     SELECT c.card_instance_id, p.wallet, p.round_id, p.locked_battle_id, 'DEPLOY', -1
+       FROM player_picks p
+       JOIN cards c ON c.wallet = p.wallet
+      WHERE p.round_id = $1 AND p.locked_card_decision = 'USE'
+     ON CONFLICT DO NOTHING
+     RETURNING card_instance_id`,
+    [roundId],
+  );
+
+  for (const row of rows) {
+    // `depleted_at` is set in the same statement that spends the last charge;
+    // the table requires the two to agree.
+    await tx.query(
+      `UPDATE cards
+          SET remaining_uses = remaining_uses - 1,
+              depleted_at = CASE WHEN remaining_uses = 1 THEN now() ELSE NULL END,
+              updated_at = now()
+        WHERE card_instance_id = $1`,
+      [text(row['card_instance_id'])],
+    );
   }
 }
 

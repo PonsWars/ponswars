@@ -1,5 +1,12 @@
 import { PGlite } from '@electric-sql/pglite';
-import { createRound, type RoundEngineState } from '@ponswars/battle-engine';
+import {
+  createRound,
+  CURRENT_ENGINE_VERSIONS,
+  finalizeRound,
+  lockRound,
+  type EngineConfig,
+  type RoundEngineState,
+} from '@ponswars/battle-engine';
 import {
   RATIO_SCALE,
   clockForRound,
@@ -11,6 +18,7 @@ import { PicksLockedError, type SubmittedPick } from '@ponswars/round-service';
 import {
   ACTIVE_TICKERS,
   clientRequestId,
+  milliseconds,
   roundId as toRoundId,
   utcTimestamp,
   type WalletAddress,
@@ -19,6 +27,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PostgresCardHoldings } from './card-holdings.js';
 import { PostgresPickStore } from './pick-store.js';
 import { PostgresRoundStore } from './round-store.js';
 import type { SqlDatabase, SqlRow } from './sql.js';
@@ -248,19 +257,18 @@ describe('the lock', () => {
   it('freezes the set the engine reads, in one order', async () => {
     await store.submit(pick(wallet(3), 'c', { battle: 1 }));
     await store.submit(pick(wallet(1), 'a', { battle: 0 }));
-    await store.submit({
-      ...pick(wallet(2), 'b', { battle: 2, side: 'right' }),
-      cardDecision: 'USE',
-    });
+    await store.submit(pick(wallet(2), 'b', { battle: 2, side: 'right' }));
 
     const locked = await store.lockedPicks(round.roundId);
 
+    // Cards at lock have their own tests below; this one is the order and the
+    // columns the engine is handed.
     expect(locked.map((entry) => entry.wallet)).toEqual([wallet(1), wallet(2), wallet(3)]);
     expect(locked[1]).toEqual({
       wallet: wallet(2),
       battleId: round.battles[2]?.setup.battleId,
       backedTicker: round.battles[2]?.setup.right,
-      cardDeployed: true,
+      cardDeployed: false,
     });
   });
 
@@ -306,5 +314,177 @@ describe('the lock', () => {
     await expect(
       store.submit({ ...pick(wallet(1), 'req-1'), roundId: toRoundId(roundIdFor(9)) }),
     ).rejects.toBeInstanceOf(PicksLockedError);
+  });
+});
+
+describe('a card at lock (§3.2, §40.7)', () => {
+  const CONFIG: EngineConfig = {
+    scoring: {
+      priceEdgeDivisor: 2n * RATIO_SCALE,
+      volumeEdgeDivisor: 1n * RATIO_SCALE,
+      ponsEdgeDivisor: 20n * RATIO_SCALE,
+      cardEdgeDivisor: 10n * RATIO_SCALE,
+    },
+    momentum: { push: 100_000n, surge: 200_000n, dominance: 400_000n, comeback: 300_000n },
+    victory: { narrowMargin: 4_000_000n, decisiveMargin: 30_000_000n },
+    finalization: { maxWait: milliseconds(5_000) },
+    versions: CURRENT_ENGINE_VERSIONS,
+    cardSupportTiers: { medium: 100n, high: 1_000n, max: 10_000n },
+  };
+
+  /** Records a Genesis claim and its card, as the claim flow would. */
+  async function seedCard(who: WalletAddress, remaining: number): Promise<void> {
+    const n = who.slice(-4);
+    await db.query('INSERT INTO wallet_profiles (wallet) VALUES ($1) ON CONFLICT DO NOTHING', [
+      who,
+    ]);
+    await db.query('INSERT INTO genesis_requests (request_id, wallet) VALUES ($1, $2)', [
+      `request-${n}`,
+      who,
+    ]);
+    await db.query(
+      `INSERT INTO genesis_claims (genesis_id, wallet, request_id, seed, slot, secret_available,
+                                   rarity, card, initial_uses, rng_version)
+       VALUES ($1, $2, $3, 'seed', 1, false, 'RARE', 'BULL_RUN', 3, 'genesis-rng-v1')`,
+      [`genesis-${n}`, who, `request-${n}`],
+    );
+    await db.query(
+      `INSERT INTO cards (card_instance_id, wallet, genesis_id, rarity, card, initial_uses,
+                          remaining_uses, depleted_at)
+       VALUES ($1, $2, $3, 'RARE', 'BULL_RUN', 3, $4, $5)`,
+      [
+        `card-${n}`,
+        who,
+        `genesis-${n}`,
+        remaining,
+        remaining === 0 ? new Date().toISOString() : null,
+      ],
+    );
+  }
+
+  const armed = (who: WalletAddress, key: string, battle = 0): SubmittedPick => ({
+    ...pick(who, key, { battle }),
+    cardDecision: 'USE',
+  });
+
+  async function remaining(who: WalletAddress): Promise<unknown> {
+    const { rows } = await db.query(
+      'SELECT remaining_uses, depleted_at FROM cards WHERE wallet = $1',
+      [who],
+    );
+    return rows[0];
+  }
+
+  it('deploys a held card and spends exactly one charge, however often the lock is read', async () => {
+    await seedCard(wallet(1), 3);
+    await store.submit(armed(wallet(1), 'a'));
+
+    const first = await store.lockedPicks(round.roundId);
+    await store.lockedPicks(round.roundId);
+    await new PostgresPickStore(db).lockedPicks(round.roundId);
+
+    expect(first[0]?.cardDeployed).toBe(true);
+    expect(await remaining(wallet(1))).toEqual({ remaining_uses: 2, depleted_at: null });
+    const ledger = await db.query(`SELECT event, delta FROM card_usage_ledger WHERE wallet = $1`, [
+      wallet(1),
+    ]);
+    expect(ledger.rows).toEqual([{ event: 'DEPLOY', delta: -1 }]);
+  });
+
+  it('marks the card depleted in the statement that spends its last charge', async () => {
+    await seedCard(wallet(1), 1);
+    await store.submit(armed(wallet(1), 'a'));
+
+    const locked = await store.lockedPicks(round.roundId);
+
+    expect(locked[0]?.cardDeployed).toBe(true);
+    const card = (await remaining(wallet(1))) as { remaining_uses: number; depleted_at: unknown };
+    expect(card.remaining_uses).toBe(0);
+    expect(card.depleted_at).not.toBeNull();
+  });
+
+  it('locks an armed card nobody holds as saved, so the engine never credits it', async () => {
+    // The API refuses to arm one; this is the frozen set the engine scores, and
+    // a card must not reach it by any route — a pick written before the check
+    // existed, or by anything that bypasses the API.
+    await store.submit(armed(wallet(2), 'b'));
+
+    const locked = await store.lockedPicks(round.roundId);
+
+    expect(locked[0]?.cardDeployed).toBe(false);
+    const { rows } = await db.query(
+      'SELECT locked_card_decision FROM player_picks WHERE wallet = $1',
+      [wallet(2)],
+    );
+    expect(rows[0]).toEqual({ locked_card_decision: 'SAVE' });
+  });
+
+  it('locks an armed card with no charge left as saved, and spends nothing', async () => {
+    await seedCard(wallet(3), 0);
+    await store.submit(armed(wallet(3), 'c'));
+
+    const locked = await store.lockedPicks(round.roundId);
+
+    expect(locked[0]?.cardDeployed).toBe(false);
+    expect((await remaining(wallet(3))) as { remaining_uses: number }).toMatchObject({
+      remaining_uses: 0,
+    });
+  });
+
+  it('is refunded once when its battle voids (§4.4)', async () => {
+    await seedCard(wallet(1), 3);
+    await store.submit(armed(wallet(1), 'a'));
+    const rounds = new PostgresRoundStore(db);
+    const locked = lockRound(
+      { ...round, state: 'PICK_OPEN' },
+      round.clock.lockAt,
+      await store.lockedPicks(round.roundId),
+    );
+    await rounds.saveState(locked);
+    // No battle is ever scored, so every one of them voids.
+    const finalization = finalizeRound(
+      locked,
+      round.clock.battleEndAt,
+      `0x${'ab'.repeat(32)}`,
+      CONFIG,
+    );
+    expect(finalization.voided).toContain(round.battles[0]?.setup.battleId);
+
+    await rounds.saveFinalization(finalization);
+    await rounds.saveFinalization(finalization);
+
+    expect(await remaining(wallet(1))).toEqual({ remaining_uses: 3, depleted_at: null });
+    const ledger = await db.query(
+      `SELECT event, delta FROM card_usage_ledger WHERE wallet = $1 ORDER BY entry_id`,
+      [wallet(1)],
+    );
+    expect(ledger.rows).toEqual([
+      { event: 'DEPLOY', delta: -1 },
+      { event: 'VOID_REFUND', delta: 1 },
+    ]);
+  });
+});
+
+describe('card holdings', () => {
+  it('answers from the cards table, and nothing for a wallet with no card', async () => {
+    const holdings = new PostgresCardHoldings(db);
+    await db.query('INSERT INTO wallet_profiles (wallet) VALUES ($1)', [wallet(7)]);
+    await db.query("INSERT INTO genesis_requests (request_id, wallet) VALUES ('r7', $1)", [
+      wallet(7),
+    ]);
+    await db.query(
+      `INSERT INTO genesis_claims (genesis_id, wallet, request_id, seed, slot, secret_available,
+                                   rarity, card, initial_uses, rng_version)
+       VALUES ('g7', $1, 'r7', 'seed', 7, false, 'EPIC', 'WAR_MACHINE', 5, 'genesis-rng-v1')`,
+      [wallet(7)],
+    );
+    await db.query(
+      `INSERT INTO cards (card_instance_id, wallet, genesis_id, rarity, card, initial_uses, remaining_uses)
+       VALUES ('c7', $1, 'g7', 'EPIC', 'WAR_MACHINE', 5, 4)`,
+      [wallet(7)],
+    );
+
+    expect(await holdings.cardOf(wallet(7))).toEqual({ cardInstanceId: 'c7', remainingUses: 4 });
+    expect(await holdings.cardOf(wallet(8))).toBeNull();
   });
 });
