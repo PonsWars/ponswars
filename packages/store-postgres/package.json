@@ -29,6 +29,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@ponswars/battle-math": "workspace:*",
+    "@ponswars/rewards-math": "workspace:*",
     "viem": "^2.56.3"
   }
 }
