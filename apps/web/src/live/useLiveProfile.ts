@@ -4,15 +4,15 @@ import { liveEndpoints, type LiveEndpoints } from './endpoints.js';
 import { fetchProfile, type ProfileFailure, type ProfileResult } from './profile-client.js';
 
 /**
- * The signed-in wallet's record, for as long as a page wants it (§69.9).
+ * The signed-in wallet's record (§69.9).
  *
- * `authorization` is `null` whenever nobody is asking — no session, or no page
- * showing a record — and the hook then reads nothing. Handing it a session
- * fetches the record, and handing it the same session again later fetches it
- * again: a player who opens their profile after a battle ends has to see that
- * battle, and a record cached from the last visit would not have it. The last
- * record stays on screen while the new one loads, rather than blanking a page
- * the player is already reading.
+ * `authorization` is `null` whenever there is nothing to read for — no session,
+ * or no live round — and the hook then reads nothing. With a session it reads
+ * the record, and reads it again whenever `refresh` changes: a player who opens
+ * their profile after a battle ends has to see that battle, and the War Points
+ * in the bar have to move when a round pays out. The last record stays on
+ * screen while the new one loads, rather than blanking a page the player is
+ * already reading.
  */
 
 export type LiveProfile =
@@ -21,7 +21,14 @@ export type LiveProfile =
   | { readonly kind: 'READY'; readonly profile: Profile }
   | { readonly kind: 'FAILED'; readonly failure: ProfileFailure; readonly retry: () => void };
 
-export function useLiveProfile(authorization: string | null): LiveProfile {
+export function useLiveProfile(
+  authorization: string | null,
+  /**
+   * Changes whenever the record may have changed — a round finalized, a page
+   * that shows it opened — and every change reads it again.
+   */
+  refresh: string,
+): LiveProfile {
   const endpoints = useMemo<LiveEndpoints | null>(() => liveEndpoints(import.meta.env), []);
   const [attempt, setAttempt] = useState(0);
   const [latest, setLatest] = useState<{
@@ -43,7 +50,7 @@ export function useLiveProfile(authorization: string | null): LiveProfile {
     return () => {
       controller.abort();
     };
-  }, [authorization, endpoints, attempt]);
+  }, [authorization, endpoints, attempt, refresh]);
 
   const retry = useCallback(() => {
     setAttempt((count) => count + 1);

@@ -74,9 +74,9 @@ export function useWalletSession(): WalletSession {
       setWallet({
         addressFragment: fragment(next.wallet),
         // §7.9: unknown rather than zero. The balance needs a chain client and
-        // the RPC vendor is an OPEN decision (§59.3); War Points need the
-        // profile endpoint, which is not built. A zero shown to somebody who
-        // holds a million $WAR is worse than an honest dash.
+        // the RPC vendor is an OPEN decision (§59.3); War Points arrive when
+        // the wallet's record has been read. A zero shown to somebody who holds
+        // a million $WAR is worse than an honest dash.
         warBalance: null,
         warPoints: null,
       });

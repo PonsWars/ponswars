@@ -131,8 +131,8 @@ export interface WalletSummary {
   /**
    * Current-window War Points (§16.2). A whole count, not a token amount.
    *
-   * `null` for the same reason as the balance: the profile endpoint that would
-   * answer it is not built, and zero is a number somebody would believe.
+   * `null` until the wallet's record has been read — zero is a number somebody
+   * would believe.
    */
   readonly warPoints: number | null;
 }
@@ -263,6 +263,14 @@ interface SessionState {
   setQuality: (tier: QualityTier) => void;
   setReducedMotion: (reduced: boolean) => void;
   setWallet: (wallet: WalletSummary | null) => void;
+  /**
+   * The connected wallet's current-window War Points, once its record is read.
+   *
+   * Only the one field. The session owns who is connected and the record owns
+   * what they have earned; letting the record rewrite the whole summary would
+   * let a slow response for a wallet that has since signed out bring it back.
+   */
+  setWalletWarPoints: (warPoints: number) => void;
   /**
    * Applies the authoritative round, and starts a reshuffle if it is a new one.
    *
@@ -401,6 +409,13 @@ export const useSession = create<SessionState>((set, get) => ({
 
   setWallet: (wallet) => {
     set({ wallet });
+  },
+
+  setWalletWarPoints: (warPoints) => {
+    const { wallet } = get();
+    if (wallet !== null && wallet.warPoints !== warPoints) {
+      set({ wallet: { ...wallet, warPoints } });
+    }
   },
 
   setRound: (round, at) => {

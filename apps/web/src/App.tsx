@@ -381,14 +381,28 @@ export function App(): JSX.Element {
   // there: writes carry it, and so does the socket (§48.2).
   const status = useLiveWorld(walletSession.authorization);
 
-  // The signed-in wallet's record, fetched while a page that shows it is open
-  // and fetched again each time one opens, so a battle that just ended is in it.
-  const liveProfile = useLiveProfile(
-    status.live && (route.kind === 'PROFILE' || route.kind === 'REWARDS')
-      ? walletSession.authorization
-      : null,
-  );
   const lastResults = useSession((state) => state.lastResults);
+  const setWalletWarPoints = useSession((state) => state.setWalletWarPoints);
+
+  // The signed-in wallet's record: read on sign-in, again when a round
+  // finalizes, and again when a page that shows it opens — so the War Points in
+  // the bar move when a round pays out, and a battle that just ended is on the
+  // profile.
+  const liveProfile = useLiveProfile(
+    status.live ? walletSession.authorization : null,
+    `${route.kind === 'PROFILE' || route.kind === 'REWARDS' ? route.kind : 'WORLD'}|${Object.keys(
+      lastResults,
+    )
+      .sort()
+      .join(',')}`,
+  );
+  const readWarPoints =
+    liveProfile.kind === 'READY' ? liveProfile.profile.currentWindow.warPoints : null;
+  useEffect(() => {
+    if (readWarPoints !== null) {
+      setWalletWarPoints(readWarPoints);
+    }
+  }, [readWarPoints, setWalletWarPoints]);
   const myBattleId = useSession((state) => state.myBattleId);
 
   /**

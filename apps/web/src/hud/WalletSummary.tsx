@@ -30,7 +30,7 @@ export function WalletSummary(): JSX.Element | null {
       {/*
         An em dash rather than a zero for a figure nobody has read yet (§42.14).
         The balance needs a chain client and the RPC vendor is OPEN (§59.3); War
-        Points need the profile endpoint, which is not built. Showing `0` to
+        Points show once the wallet's record has been read. Showing `0` to
         somebody holding a million $WAR would be a placeholder read as fact.
       */}
       <Field caption="$WAR" value={wallet.warBalance ?? '—'} />
