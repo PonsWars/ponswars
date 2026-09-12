@@ -148,19 +148,32 @@ export async function runRounds(options: DriverOptions): Promise<void> {
     say({ kind: 'RESUMED', round: resumed });
   }
 
-  // Rounds are contiguous (§3.1): each opens where the last ended, so the
-  // schedule never drifts even if a finalization runs late. An identifier this
-  // codebase did not produce resumes at zero *and says so*, because the
-  // alternative is opening round zero on top of a live sequence unnoticed.
-  let index = resumed === null ? 0 : (roundIndexOf(resumed.roundId) ?? 0);
-  let clock = resumed?.clock ?? clockForRound(now(), 0, now());
+  // Where the sequence stands. A round still in flight is resumed; a finalized
+  // one is history, and the next round is the one after it — never round zero
+  // again. Reopening at zero was what this did, and against a durable store it
+  // was the worst thing it could do: the new round took the identifiers of the
+  // first round ever played, its upserts rewrote that finalized history, and
+  // the War Point ledger's idempotency index — keyed on those same battle ids —
+  // silently refused every award the new round made.
+  let index = resumed === null ? (stored === null ? 0 : indexOf(stored) + 1) : indexOf(resumed);
+  let clock =
+    resumed?.clock ??
+    clockForRound(
+      // Contiguous with the round before it (§3.1) where that is still ahead,
+      // and from now where it is not: a server that was down for an hour does
+      // not owe anybody the rounds that never ran, and opening one whose Pick
+      // Phase ended while it was down would take picks nobody could make.
+      stored === null ? now() : latest(nextRoundOpensAt(stored.clock), now()),
+      0,
+      now(),
+    );
   let round = resumed ?? (await openRound(index, clock, ports.marketData, now(), options));
 
   // Announced only when it is new. A resumed round was announced when it
   // opened, and §48.3's `ROUND_OPENED` means a round has opened rather than
   // that a server has restarted.
   if (resumed === null) {
-    await announceRoundOpened(round, ports.publisher);
+    await persistOpened(round, ports);
     say({ kind: 'OPENED', round });
   }
   options.onRound(round);
@@ -184,8 +197,8 @@ export async function runRounds(options: DriverOptions): Promise<void> {
       index += 1;
       clock = clockForRound(nextRoundOpensAt(clock), 0, now());
       round = await openRound(index, clock, ports.marketData, now(), options);
+      await persistOpened(round, ports);
       options.onRound(round);
-      await announceRoundOpened(round, ports.publisher);
       previousState = round.state;
       say({ kind: 'OPENED', round });
       continue;
@@ -200,6 +213,47 @@ export async function runRounds(options: DriverOptions): Promise<void> {
         : Math.max(pollDelay(result.action, now(), milliseconds(1_000)), 100);
     await sleep(delay, signal);
   }
+}
+
+/**
+ * Saves a round that has just opened, then announces it.
+ *
+ * Saved at open rather than first at lock. Until lock the round existed only in
+ * this process, so a restart during Pick Phase lost it: the store's latest was
+ * still the round before, a different round opened in its place, and every pick
+ * made against the lost one referred to a round that no longer existed. Picks
+ * are stored against the round's row, so the row has to be there before the
+ * first one arrives.
+ *
+ * Saved before it is announced, for the same reason `stepRound` persists before
+ * it publishes: nothing a client is told about should be missing after a crash.
+ */
+async function persistOpened(round: RoundEngineState, ports: RoundPorts): Promise<void> {
+  await ports.store.saveState(round);
+  await announceRoundOpened(round, ports.publisher);
+}
+
+/**
+ * The index of a round this driver opened.
+ *
+ * Throws for an identifier it did not produce. Rounds are contiguous (§3.1), so
+ * the next index is the only answer that keeps history intact, and there is no
+ * safe guess at it: starting from zero on top of an unknown sequence is how
+ * finalized rounds get overwritten.
+ */
+function indexOf(round: RoundEngineState): number {
+  const index = roundIndexOf(round.roundId);
+  if (index === null) {
+    throw new Error(
+      `The stored round ${round.roundId} was not produced by this driver; refusing to guess where the sequence continues.`,
+    );
+  }
+  return index;
+}
+
+/** The later of two instants. */
+function latest(a: UtcTimestamp, b: UtcTimestamp): UtcTimestamp {
+  return a > b ? a : b;
 }
 
 /** A sleep that gives up when the signal does. */
