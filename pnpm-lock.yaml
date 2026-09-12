@@ -363,6 +363,9 @@ importers:
       '@ponswars/battle-engine':
         specifier: workspace:*
         version: link:../battle-engine
+      '@ponswars/player-service':
+        specifier: workspace:*
+        version: link:../player-service
       '@ponswars/round-service':
         specifier: workspace:*
         version: link:../round-service
