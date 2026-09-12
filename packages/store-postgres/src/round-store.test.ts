@@ -29,7 +29,7 @@ import {
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PostgresRoundStore, readFinalizedResult } from './round-store.js';
 import type { SqlDatabase, SqlRow } from './sql.js';
 
@@ -49,6 +49,12 @@ import type { SqlDatabase, SqlRow } from './sql.js';
  */
 
 const MIGRATIONS = join(dirname(fileURLToPath(import.meta.url)), '../../../database/migrations');
+
+// A real PostgreSQL, compiled to WebAssembly, with every migration applied
+// before each test: two to three seconds apiece on a quiet machine, and past
+// vitest's five-second default on a busy one. The limit is raised for this file
+// rather than for the whole suite, so a pure test that hangs still fails fast.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 const EPOCH = utcTimestamp(1_800_000_000_000);
 const SEED = `0x${'9f'.repeat(32)}`;
