@@ -213,10 +213,10 @@ describe('the current window, from a live profile', () => {
   it('names the scheduled distribution and counts down to it', () => {
     const view = currentWindowView({
       warPoints: 12,
-      window: { distributionId: 'dist-043', closesAt: 1_800_086_400_000 },
+      window: { distributionId: '43', closesAt: 1_800_086_400_000 },
     });
 
-    expect(view.label).toBe('REWARDS DISTRIBUTION DIST-043');
+    expect(view.label).toBe('REWARDS DISTRIBUTION #043');
     expect(view.closesAt).toBe(utcTimestamp(1_800_086_400_000));
     expect(view).toMatchObject({ qualified: false, wpToQualify: MIN_QUALIFYING_WP - 12 });
   });

@@ -112,9 +112,21 @@ export function currentWindowView(input: {
     label:
       input.window === null
         ? 'CURRENT DISTRIBUTION WINDOW'
-        : `REWARDS DISTRIBUTION ${input.window.distributionId.toUpperCase()}`,
+        : windowLabel(input.window.distributionId),
     closesAt: input.window === null ? null : utcTimestamp(input.window.closesAt),
   };
+}
+
+/**
+ * A distribution's label, as §35.1 writes it: `REWARDS DISTRIBUTION #042`.
+ *
+ * Identifiers are whole numbers — the claim contract commits to them — and
+ * anything else is shown as it is rather than dressed up as one.
+ */
+function windowLabel(distributionId: string): string {
+  return /^\d+$/.test(distributionId)
+    ? `REWARDS DISTRIBUTION #${String(Number(distributionId)).padStart(3, '0')}`
+    : `REWARDS DISTRIBUTION ${distributionId}`;
 }
 
 export function finalizedWindowView(input: FinalizedWindowInput): FinalizedWindowView {
