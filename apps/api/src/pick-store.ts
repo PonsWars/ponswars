@@ -1,5 +1,11 @@
 import type { LockedPick } from '@ponswars/battle-engine';
-import { PicksLockedError, type PickRepository, type SubmittedPick } from '@ponswars/round-service';
+import {
+  PicksLockedError,
+  canDeploy,
+  type CardHoldings,
+  type PickRepository,
+  type SubmittedPick,
+} from '@ponswars/round-service';
 import type { CardDecision, RoundId, UtcTimestamp, WalletAddress } from '@ponswars/shared-types';
 
 export type { SubmittedPick } from '@ponswars/round-service';
@@ -36,6 +42,12 @@ export class PickStore implements PickRepository {
   /** Rounds whose picks have been read for the engine, and are frozen. */
   private readonly locked = new Set<string>();
 
+  /**
+   * @param cards Who can deploy a card at lock. Required: a store that deployed
+   *   every armed card without asking would credit cards nobody holds.
+   */
+  constructor(private readonly cards: CardHoldings) {}
+
   submit(
     pick: SubmittedPick,
   ): Promise<{ readonly stored: SubmittedPick; readonly replayed: boolean }> {
@@ -68,22 +80,28 @@ export class PickStore implements PickRepository {
    * second kind of it. Ordered by wallet, as the database orders it, so the
    * same picks reach the engine in the same order whichever store holds them.
    */
-  lockedPicks(roundId: RoundId): Promise<readonly LockedPick[]> {
+  async lockedPicks(roundId: RoundId): Promise<readonly LockedPick[]> {
     this.locked.add(roundId);
     const round = this.byRound.get(roundId);
     if (round === undefined) {
-      return Promise.resolve([]);
+      return [];
     }
-    return Promise.resolve(
-      [...round.values()]
-        .sort((a, b) => (a.wallet < b.wallet ? -1 : a.wallet > b.wallet ? 1 : 0))
-        .map((pick) => ({
-          wallet: pick.wallet,
-          battleId: pick.battleId,
-          backedTicker: pick.backedTicker,
-          cardDeployed: pick.cardDecision === 'USE',
-        })),
+    const picks = [...round.values()].sort((a, b) =>
+      a.wallet < b.wallet ? -1 : a.wallet > b.wallet ? 1 : 0,
     );
+    // Asked again at lock, not trusted from when the card was armed: the card
+    // is deployed now, and only if it can be now (§40.7).
+    const deployable = await Promise.all(
+      picks.map(async (pick) =>
+        pick.cardDecision === 'USE' ? canDeploy(await this.cards.cardOf(pick.wallet)) : false,
+      ),
+    );
+    return picks.map((pick, index) => ({
+      wallet: pick.wallet,
+      battleId: pick.battleId,
+      backedTicker: pick.backedTicker,
+      cardDeployed: deployable[index] === true,
+    }));
   }
 
   withdraw(roundId: RoundId, wallet: WalletAddress): Promise<boolean> {

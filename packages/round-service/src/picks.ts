@@ -87,3 +87,29 @@ export class PicksLockedError extends Error {
     this.name = 'PicksLockedError';
   }
 }
+
+/**
+ * The Genesis card a wallet holds, as the record knows it (§6, §7, §40.7).
+ */
+export interface CardHolding {
+  readonly cardInstanceId: string;
+  readonly remainingUses: number;
+}
+
+/**
+ * Who holds a card with a charge to spend.
+ *
+ * A pick may arm a card only if the wallet holds one with a charge left, and a
+ * card is deployed at lock only if it still does. The engine credits a deployed
+ * card with support and a win with a card assist (§11), so this is the check
+ * that stands between a request saying `USE` and War Points — and War Points
+ * are what the rewards pool is divided by.
+ */
+export interface CardHoldings {
+  cardOf(wallet: WalletAddress): Promise<CardHolding | null>;
+}
+
+/** Whether a holding can be deployed: it exists and has a charge left. */
+export function canDeploy(holding: CardHolding | null): boolean {
+  return holding !== null && holding.remainingUses > 0;
+}

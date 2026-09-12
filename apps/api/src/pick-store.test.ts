@@ -1,4 +1,4 @@
-import { PicksLockedError } from '@ponswars/round-service';
+import { MemoryCardHoldings, PicksLockedError } from '@ponswars/round-service';
 import {
   battleId,
   clientRequestId,
@@ -39,7 +39,7 @@ describe('the in-memory pick store', () => {
   it('scopes a request key to its wallet', async () => {
     // It was keyed on the request key alone, so one wallet's key answered
     // another wallet's request as a replay and recorded nothing for it.
-    const store = new PickStore();
+    const store = new PickStore(new MemoryCardHoldings());
     await store.submit(pick(wallet(1), 'shared'));
 
     expect(await store.submit(pick(wallet(2), 'shared'))).toMatchObject({ replayed: false });
@@ -47,7 +47,7 @@ describe('the in-memory pick store', () => {
   });
 
   it('keeps the newer decision when a superseded request is retried', async () => {
-    const store = new PickStore();
+    const store = new PickStore(new MemoryCardHoldings());
     await store.submit(pick(wallet(1), 'first', 'NVDA'));
     await store.submit(pick(wallet(1), 'second', 'TSLA'));
 
@@ -56,7 +56,7 @@ describe('the in-memory pick store', () => {
   });
 
   it('refuses every change once the picks have been read for the engine', async () => {
-    const store = new PickStore();
+    const store = new PickStore(new MemoryCardHoldings());
     await store.submit(pick(wallet(1), 'first'));
     await store.lockedPicks(ROUND);
 
@@ -68,7 +68,7 @@ describe('the in-memory pick store', () => {
   });
 
   it('hands the engine its picks ordered by wallet, as the database does', async () => {
-    const store = new PickStore();
+    const store = new PickStore(new MemoryCardHoldings());
     await store.submit(pick(wallet(9), 'a'));
     await store.submit(pick(wallet(2), 'b'));
     await store.submit(pick(wallet(5), 'c'));
@@ -76,5 +76,34 @@ describe('the in-memory pick store', () => {
     const locked = await store.lockedPicks(ROUND);
 
     expect(locked.map((entry) => entry.wallet)).toEqual([wallet(2), wallet(5), wallet(9)]);
+  });
+});
+
+describe('a card at lock', () => {
+  const armed = (who: WalletAddress, key: string): SubmittedPick => ({
+    ...pick(who, key),
+    cardDecision: 'USE',
+  });
+
+  it('is deployed only for a wallet that still holds a card with a charge left', async () => {
+    const store = new PickStore(
+      new MemoryCardHoldings(
+        new Map([
+          [wallet(1), { cardInstanceId: 'card-1', remainingUses: 2 }],
+          [wallet(2), { cardInstanceId: 'card-2', remainingUses: 0 }],
+        ]),
+      ),
+    );
+    await store.submit(armed(wallet(1), 'a'));
+    await store.submit(armed(wallet(2), 'b'));
+    await store.submit(armed(wallet(3), 'c'));
+
+    const locked = await store.lockedPicks(ROUND);
+
+    expect(locked.map((entry) => [entry.wallet, entry.cardDeployed])).toEqual([
+      [wallet(1), true],
+      [wallet(2), false],
+      [wallet(3), false],
+    ]);
   });
 });

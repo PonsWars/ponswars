@@ -9,6 +9,7 @@ import {
 import { RATIO_SCALE, type ConfidenceCalibration } from '@ponswars/battle-math';
 import { startSocketServer } from '@ponswars/gateway';
 import {
+  MemoryCardHoldings,
   MemoryRoundStore,
   runRounds,
   type DriverEvent,
@@ -151,7 +152,10 @@ const AUTH_POLICY: AuthPolicy = {
 };
 
 async function main(): Promise<void> {
-  const picks = new PickStore();
+  // No card holdings: the local stack records no Genesis claims, so no wallet
+  // can arm a card here — exactly as in production until claims are recorded.
+  const cards = new MemoryCardHoldings();
+  const picks = new PickStore(cards);
   const store = new MemoryRoundStore();
   const market = new SyntheticMarket();
   const auth = new AuthService({ store: new MemoryAuthStore(), policy: AUTH_POLICY, now });
@@ -201,6 +205,7 @@ async function main(): Promise<void> {
     // From the same finalizations, through the same derivation a deployment
     // uses — a record in the local stack follows the rules production does.
     playerRecords: new MemoryPlayerRecords(() => store.finalizations),
+    cards,
     picks,
     config: CONFIG,
     now,

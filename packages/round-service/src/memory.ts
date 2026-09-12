@@ -1,7 +1,8 @@
 import type { LockedPick, RoundEngineState, RoundFinalization } from '@ponswars/battle-engine';
 import { emit, EMPTY_SEQUENCER, type Channel, type Envelope } from '@ponswars/realtime';
 import type { ConfidenceLookback } from '@ponswars/battle-math';
-import type { ActiveTicker, RoundId, UtcTimestamp } from '@ponswars/shared-types';
+import type { ActiveTicker, RoundId, UtcTimestamp, WalletAddress } from '@ponswars/shared-types';
+import type { CardHolding, CardHoldings } from './picks.js';
 import type {
   ChainPort,
   MarketDataPort,
@@ -155,4 +156,19 @@ export function memoryPorts(input: {
     publisher: new MemoryPublisher(),
     store: new MemoryRoundStore(),
   };
+}
+
+/**
+ * Card holdings from a fixed table.
+ *
+ * Empty by default, which is exactly true of anything that has not read a
+ * Genesis claim: no wallet holds a card the record does not know about, so
+ * nobody can arm one. A test that needs a holder seeds one.
+ */
+export class MemoryCardHoldings implements CardHoldings {
+  constructor(private readonly holdings: ReadonlyMap<WalletAddress, CardHolding> = new Map()) {}
+
+  cardOf(wallet: WalletAddress): Promise<CardHolding | null> {
+    return Promise.resolve(this.holdings.get(wallet) ?? null);
+  }
 }

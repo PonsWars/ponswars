@@ -158,6 +158,24 @@ export function noPickToDecide(correlationId: string): ErrorResponse {
 }
 
 /**
+ * A card was asked for that this wallet cannot deploy (§6, §40.7, §40.9).
+ *
+ * No card on record, or one with no charge left. The pick itself is untouched —
+ * saying so is the point, because a player told only "refused" will assume
+ * their whole pick went with it.
+ */
+export function noCardToUse(correlationId: string): ErrorResponse {
+  return error(
+    409,
+    'NO_CARD_TO_USE',
+    'This wallet holds no Genesis Card with a charge left to use.',
+    true,
+    'Keep the card saved. Your pick stands without it, and nothing was spent.',
+    correlationId,
+  );
+}
+
+/**
  * The request needs a wallet and none was proven (§48.2).
  *
  * Spectating needs no wallet at all (§5), so this only ever applies to writes.

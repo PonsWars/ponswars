@@ -36,6 +36,7 @@ import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import {
   battleNotInRound,
   invalidRequest,
+  noCardToUse,
   noPickToDecide,
   resultNotFound,
   picksClosed,
@@ -47,7 +48,12 @@ import {
   type ErrorResponse,
 } from './errors.js';
 import type { PlayerRecordSource } from '@ponswars/player-service';
-import { PicksLockedError, type PickRepository } from '@ponswars/round-service';
+import {
+  PicksLockedError,
+  canDeploy,
+  type CardHoldings,
+  type PickRepository,
+} from '@ponswars/round-service';
 
 /**
  * The HTTP surface (§47).
@@ -130,6 +136,14 @@ export interface ServerDeps {
    * only reads it.
    */
   readonly playerRecords: PlayerRecordSource;
+  /**
+   * Who holds a Genesis card with a charge to spend (§6, §40.7).
+   *
+   * Asked before any request that arms one. A card a wallet does not hold earns
+   * support and a card assist exactly like a real one if it reaches the engine,
+   * so it must not get as far as being recorded.
+   */
+  readonly cards: CardHoldings;
 }
 
 /**
@@ -513,6 +527,9 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     if (pick.backedTicker !== battle.setup.left && pick.backedTicker !== battle.setup.right) {
       return send(reply, tickerNotInBattle(pick.backedTicker, id));
     }
+    if (pick.cardDecision === 'USE' && !canDeploy(await deps.cards.cardOf(wallet))) {
+      return send(reply, noCardToUse(id));
+    }
 
     // §4.2 is one pick per wallet per round, and §27.6 allows changing it until
     // lock — so an existing pick in *this* battle is a change, and one in a
@@ -648,6 +665,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const action = nextRoundAction(round, deps.now(), deps.config.finalization.maxWait);
     if (action.kind !== 'ACCEPT_PICKS') {
       return send(reply, picksClosed(id));
+    }
+
+    if (parsed.data.decision === 'USE' && !canDeploy(await deps.cards.cardOf(wallet))) {
+      return send(reply, noCardToUse(id));
     }
 
     const updated = await lockedAs(

@@ -37,6 +37,7 @@ import { playerRecord, type SettledPick } from '@ponswars/player-service';
 import type { FastifyInstance } from 'fastify';
 import { privateKeyToAccount } from 'viem/accounts';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { MemoryCardHoldings, type CardHolding } from '@ponswars/round-service';
 import { PickStore } from './pick-store.js';
 import { buildServer } from './server.js';
 
@@ -133,6 +134,11 @@ let app: FastifyInstance;
 let asked: WalletAddress[] = [];
 /** What the record source derives each record from. */
 let settledPicks: SettledPick[] = [];
+/**
+ * Who holds a card. The signed-in wallet holds one with charges left unless a
+ * test takes it away, so the card flow is exercised as a holder meets it.
+ */
+let holdings: Map<WalletAddress, CardHolding>;
 
 beforeEach(() => {
   round = openRound();
@@ -140,7 +146,9 @@ beforeEach(() => {
   settledPicks = [];
   finalized = new Map();
   auth = new AuthService({ store: new MemoryAuthStore(), policy: AUTH_POLICY, now: () => now });
-  picks = new PickStore();
+  holdings = new Map([[WALLET, { cardInstanceId: 'card-1', remainingUses: 3 }]]);
+  const cards = new MemoryCardHoldings(holdings);
+  picks = new PickStore(cards);
   now = utcTimestamp(EPOCH + 30_000);
   app = buildServer({
     currentRound: () => round,
@@ -153,6 +161,7 @@ beforeEach(() => {
     // §45.2 and belongs to the auth service; these tests are about the routes.
     walletOf: (authorization) => Promise.resolve(authorization === undefined ? null : WALLET),
     auth,
+    cards,
     playerRecords: {
       recordOf: (who) => {
         asked.push(who);
@@ -445,6 +454,7 @@ function startingServer(): FastifyInstance {
     now: () => now,
     walletOf: () => Promise.resolve(null),
     auth,
+    cards: new MemoryCardHoldings(),
     playerRecords: {
       recordOf: () =>
         Promise.reject(new Error('a starting server has no signed-in wallet to read')),
@@ -1148,5 +1158,62 @@ describe('GET /v1/profile', () => {
     const response = await app.inject({ method: 'GET', url: '/v1/profile', headers: AUTH });
 
     expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+});
+
+describe('a card the wallet cannot deploy', () => {
+  // A card that reaches the engine earns support and a card assist whether or
+  // not anyone holds it, and War Points divide the rewards pool. So arming one
+  // is refused unless the wallet holds a card with a charge left.
+
+  it('is refused when a pick arms it with no card on record, and nothing is recorded', async () => {
+    holdings.delete(WALLET);
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: pickUrl(),
+      headers: AUTH,
+      payload: pickBody({ cardDecision: 'USE' }),
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: 'NO_CARD_TO_USE', stateIsSafe: true });
+    expect(await picks.count(toRoundId(ROUND_ID))).toBe(0);
+  });
+
+  it('is refused when the card has no charge left', async () => {
+    holdings.set(WALLET, { cardInstanceId: 'card-1', remainingUses: 0 });
+    await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: pickBody() });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/v1/rounds/${ROUND_ID}/card-decision`,
+      headers: AUTH,
+      payload: { roundId: ROUND_ID, decision: 'USE', clientRequestId: 'req-card-empty' },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: 'NO_CARD_TO_USE' });
+    expect((await picks.find(toRoundId(ROUND_ID), WALLET))?.cardDecision).toBe('SAVE');
+  });
+
+  it('never stands in the way of saving the card, or of a pick without one', async () => {
+    holdings.delete(WALLET);
+
+    const pick = await app.inject({
+      method: 'PUT',
+      url: pickUrl(),
+      headers: AUTH,
+      payload: pickBody({ cardDecision: 'SAVE' }),
+    });
+    const save = await app.inject({
+      method: 'PUT',
+      url: `/v1/rounds/${ROUND_ID}/card-decision`,
+      headers: AUTH,
+      payload: { roundId: ROUND_ID, decision: 'SAVE', clientRequestId: 'req-card-save' },
+    });
+
+    expect(pick.statusCode).toBe(201);
+    expect(save.statusCode).toBe(200);
   });
 });

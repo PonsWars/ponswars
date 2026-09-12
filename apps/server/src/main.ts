@@ -23,6 +23,7 @@ import {
 } from '@ponswars/shared-types';
 import {
   PostgresAuthStore,
+  PostgresCardHoldings,
   PostgresPickStore,
   PostgresPlayerRecords,
   PostgresRoundStore,
@@ -199,6 +200,9 @@ async function main(): Promise<void> {
     finalizedResult: (battleId) => readFinalizedResult(database, battleId),
     // Derived from the ledgers finalization wrote, on every request (§49.2).
     playerRecords: new PostgresPlayerRecords(database),
+    // From the cards table. Until Genesis claims are recorded from the chain it
+    // is empty, and no wallet can arm a card it has not been shown to hold.
+    cards: new PostgresCardHoldings(database),
     picks,
     config: CONFIG,
     now,
