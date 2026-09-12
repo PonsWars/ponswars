@@ -29,6 +29,16 @@ import { parseClientMessage, type ServerMessage } from './protocol.js';
  * exists.
  */
 
+/**
+ * How many channels one connection may follow.
+ *
+ * A client watching everything it can use follows the world, the round, five
+ * battles and its own wallet — eight. This is four times that, and it exists
+ * because every subscription is state this process keeps for as long as the
+ * connection lives.
+ */
+export const MAX_SUBSCRIPTIONS = 32;
+
 /** How a frame reaches one client. The socket binding supplies this. */
 export type Send = (connectionId: string, frame: string) => void;
 
@@ -83,6 +93,15 @@ export class Gateway implements PublisherPort {
 
     switch (message.type) {
       case 'SUBSCRIBE': {
+        const channels = this.hub.connections[connectionId]?.channels ?? [];
+        if (!channels.includes(message.channel) && channels.length >= MAX_SUBSCRIPTIONS) {
+          this.reply(connectionId, {
+            type: 'ERROR',
+            code: 'TOO_MANY_SUBSCRIPTIONS',
+            message: `A connection may follow at most ${String(MAX_SUBSCRIPTIONS)} channels. Unsubscribe from one first.`,
+          });
+          return;
+        }
         const result = subscribe(this.hub, connectionId, message.channel);
         this.hub = result.state;
 

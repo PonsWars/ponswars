@@ -84,8 +84,8 @@ export function startSocketServer(options: SocketServerOptions): RunningSocketSe
 
   const wss =
     options.server === undefined
-      ? new WebSocketServer({ port: options.port ?? 0 })
-      : new WebSocketServer({ server: options.server });
+      ? new WebSocketServer({ port: options.port ?? 0, maxPayload: MAX_FRAME_BYTES })
+      : new WebSocketServer({ server: options.server, maxPayload: MAX_FRAME_BYTES });
 
   // Attached to an existing server, binding is the caller's business and
   // already done; `ws` emits no `listening` of its own in that case, so waiting
@@ -111,6 +111,8 @@ export function startSocketServer(options: SocketServerOptions): RunningSocketSe
     sockets.set(connectionId, socket);
 
     let opened = false;
+    /** Frames received and not yet handled. */
+    let pending = 0;
 
     /**
      * Frames handled strictly in order, including the ones that wait.
@@ -166,11 +168,25 @@ export function startSocketServer(options: SocketServerOptions): RunningSocketSe
     };
 
     socket.on('message', (data) => {
+      // A client sending faster than frames can be handled is not one the
+      // protocol has any use for — it sends a handful of frames a minute — and
+      // every frame waiting in the queue is memory held for it. Past the limit
+      // the connection is closed rather than the queue allowed to grow.
+      if (pending >= MAX_PENDING_FRAMES) {
+        socket.close(1008, 'too many frames');
+        return;
+      }
+      pending += 1;
       const raw = decodeFrame(data);
       // Chained, never awaited here: the handler is synchronous, and the queue
       // is what carries the order. A failure is swallowed rather than left to
       // poison every frame behind it.
-      queue = queue.then(() => handle(raw)).catch(() => undefined);
+      queue = queue
+        .then(() => handle(raw))
+        .catch(() => undefined)
+        .finally(() => {
+          pending -= 1;
+        });
     });
 
     const forget = (): void => {
@@ -215,6 +231,19 @@ export function startSocketServer(options: SocketServerOptions): RunningSocketSe
  * messages large enough to be split, which is exactly the kind of bug that
  * survives every small test and fails in production.
  */
+/**
+ * The largest frame a client may send, in bytes.
+ *
+ * Every client frame is a few dozen bytes — a channel name, a session token, a
+ * timestamp. Left unset, the socket library accepts frames of 100 MiB, which
+ * would let any visitor make this process allocate that much at will. A frame
+ * over the limit closes the connection with 1009 before it is buffered.
+ */
+export const MAX_FRAME_BYTES = 4_096;
+
+/** Frames a connection may have waiting before it is closed as a flood. */
+export const MAX_PENDING_FRAMES = 64;
+
 export function decodeFrame(data: RawData): string {
   if (Array.isArray(data)) {
     return Buffer.concat(data).toString('utf8');

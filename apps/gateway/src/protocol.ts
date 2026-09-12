@@ -1,4 +1,4 @@
-import type { Channel } from '@ponswars/realtime';
+import { isChannel, type Channel } from '@ponswars/realtime';
 
 /**
  * What a client may send, and what it gets back (§48, §70.1).
@@ -80,6 +80,10 @@ export function parseClientMessage(raw: string): ClientMessage | { readonly erro
       const channel = message['channel'];
       if (typeof channel !== 'string' || channel.length === 0) {
         return { error: `${message['type']} needs a channel.` };
+      }
+      // Not echoed back: the value is whatever the client sent, of any length.
+      if (!isChannel(channel)) {
+        return { error: `${message['type']} names a channel this server does not publish.` };
       }
       return { type: message['type'], channel };
     }

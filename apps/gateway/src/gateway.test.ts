@@ -1,7 +1,7 @@
 import { battleChannel, walletChannel, WORLD_CHANNEL, type Envelope } from '@ponswars/realtime';
 import { utcTimestamp, walletAddress } from '@ponswars/shared-types';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Gateway } from './gateway.js';
+import { Gateway, MAX_SUBSCRIPTIONS } from './gateway.js';
 import type { ServerMessage } from './protocol.js';
 
 /**
@@ -204,5 +204,42 @@ describe('liveness', () => {
     gateway.open('c1', null);
     gateway.receive('c1', frame({ type: 'PING', sentAt: 'soon' }));
     expect(lastTo('c1')).toMatchObject({ type: 'ERROR' });
+  });
+});
+
+describe('limits', () => {
+  it('refuses a channel the server does not publish, without keeping it', () => {
+    gateway.open('c1', null);
+
+    gateway.receive('c1', frame({ type: 'SUBSCRIBE', channel: 'made-up:channel' }));
+
+    expect(lastTo('c1')).toMatchObject({ type: 'ERROR', code: 'BAD_FRAME' });
+  });
+
+  it('caps how many channels one connection follows', () => {
+    gateway.open('c1', null);
+    for (let n = 0; n < MAX_SUBSCRIPTIONS; n += 1) {
+      gateway.receive('c1', frame({ type: 'SUBSCRIBE', channel: battleChannel(`b-${String(n)}`) }));
+    }
+    expect(lastTo('c1')).toMatchObject({ type: 'SUBSCRIBED' });
+
+    gateway.receive('c1', frame({ type: 'SUBSCRIBE', channel: battleChannel('one-too-many') }));
+    expect(lastTo('c1')).toMatchObject({ type: 'ERROR', code: 'TOO_MANY_SUBSCRIPTIONS' });
+
+    // A channel it already follows is still answered, at the cap.
+    gateway.receive('c1', frame({ type: 'SUBSCRIBE', channel: battleChannel('b-0') }));
+    expect(lastTo('c1')).toMatchObject({ type: 'SUBSCRIBED' });
+  });
+
+  it('makes room again after an unsubscribe', () => {
+    gateway.open('c1', null);
+    for (let n = 0; n < MAX_SUBSCRIPTIONS; n += 1) {
+      gateway.receive('c1', frame({ type: 'SUBSCRIBE', channel: battleChannel(`b-${String(n)}`) }));
+    }
+    gateway.receive('c1', frame({ type: 'UNSUBSCRIBE', channel: battleChannel('b-0') }));
+
+    gateway.receive('c1', frame({ type: 'SUBSCRIBE', channel: battleChannel('replacement') }));
+
+    expect(lastTo('c1')).toMatchObject({ type: 'SUBSCRIBED' });
   });
 });

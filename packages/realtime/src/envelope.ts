@@ -35,6 +35,22 @@ export const battleChannel = (battleId: string): Channel => `battle:${battleId}`
 export const walletChannel = (wallet: WalletAddress): Channel => `wallet:${wallet}`;
 
 /**
+ * Whether a string names a channel this protocol defines (§48.1).
+ *
+ * The world, a round, a battle, or a wallet — and nothing else. A server that
+ * accepted any string as a channel would keep a subscription to whatever a
+ * client invented, and a client can invent them faster than a server can
+ * store them.
+ */
+export function isChannel(value: string): boolean {
+  return (
+    value === WORLD_CHANNEL ||
+    /^(round|battle):[A-Za-z0-9_-]{1,96}$/.test(value) ||
+    /^wallet:0x[0-9a-f]{40}$/.test(value)
+  );
+}
+
+/**
  * Whether a session may subscribe to a channel.
  *
  * §48.2: a private channel *"requires authenticated session ownership of that

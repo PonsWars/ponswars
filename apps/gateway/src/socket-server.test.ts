@@ -3,7 +3,13 @@ import { utcTimestamp, walletAddress } from '@ponswars/shared-types';
 import type { AddressInfo } from 'node:net';
 import WebSocket, { type RawData } from 'ws';
 import { afterEach, describe, expect, it } from 'vitest';
-import { decodeFrame, startSocketServer, type RunningSocketServer } from './socket-server.js';
+import {
+  decodeFrame,
+  MAX_FRAME_BYTES,
+  MAX_PENDING_FRAMES,
+  startSocketServer,
+  type RunningSocketServer,
+} from './socket-server.js';
 
 /**
  * The socket binding, over a real socket.
@@ -419,5 +425,68 @@ describe('decoding a frame', () => {
     const full = Buffer.from('{"m":"€"}', 'utf8');
     const fragments: RawData = [full.subarray(0, 6), full.subarray(6)];
     expect(decodeFrame(fragments)).toBe('{"m":"€"}');
+  });
+});
+
+describe('a connection that abuses the socket', () => {
+  /** Resolves with the close code the server sent. */
+  function closed(socket: WebSocket): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error('The connection was not closed within two seconds.'));
+      }, 2_000);
+      socket.once('close', (code) => {
+        clearTimeout(timer);
+        resolve(code);
+      });
+    });
+  }
+
+  it('is closed for a frame larger than any the protocol sends (1009)', async () => {
+    // Left unset, the socket library accepted frames of 100 MiB.
+    const { url } = start(() => null);
+    const socket = await client(url);
+    const done = closed(socket);
+
+    socket.send('x'.repeat(MAX_FRAME_BYTES + 1));
+
+    expect(await done).toBe(1009);
+  });
+
+  it('is closed when it floods frames faster than they can be handled (1008)', async () => {
+    // The session lookup is held open, so every frame queues behind it — the
+    // same position a flood from a fast client puts the queue in.
+    let release: () => void = () => undefined;
+    running = startSocketServer({
+      port: 0,
+      now: () => AT,
+      walletOf: () =>
+        new Promise((resolve) => {
+          release = () => {
+            resolve(null);
+          };
+        }),
+    });
+    const address = running.wss.address() as AddressInfo;
+    const socket = await client(`ws://127.0.0.1:${String(address.port)}`);
+    const done = closed(socket);
+
+    for (let n = 0; n <= MAX_PENDING_FRAMES; n += 1) {
+      socket.send(JSON.stringify({ type: 'PING', sentAt: n }));
+    }
+
+    expect(await done).toBe(1008);
+    release();
+  });
+
+  it('keeps an ordinary client that sends a few frames', async () => {
+    const { url } = start(() => null);
+    const socket = await client(url);
+
+    socket.send(JSON.stringify({ type: 'SUBSCRIBE', channel: WORLD_CHANNEL }));
+    socket.send(JSON.stringify({ type: 'PING', sentAt: 1 }));
+
+    expect(await nextFrames(socket, 2)).toMatchObject([{ type: 'SUBSCRIBED' }, { type: 'PONG' }]);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
   });
 });

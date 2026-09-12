@@ -4,6 +4,7 @@ import {
   battleChannel,
   emit,
   EMPTY_SEQUENCER,
+  isChannel,
   maySubscribe,
   PROTOCOL_VERSION,
   roundChannel,
@@ -45,6 +46,36 @@ const feed = (envelopes: readonly Envelope<{ n: number }>[]): ReceiverState => {
   }
   return state;
 };
+
+describe('what a channel is', () => {
+  it('is the world, a round, a battle or a wallet', () => {
+    for (const channel of [
+      WORLD_CHANNEL,
+      roundChannel('round-0000000412'),
+      BATTLE,
+      walletChannel(WALLET),
+    ]) {
+      expect(isChannel(channel), channel).toBe(true);
+    }
+  });
+
+  it('is nothing a client invents', () => {
+    // A server that kept a subscription to any string would keep as many as a
+    // client cared to send.
+    for (const channel of [
+      '',
+      'worlds',
+      'battle:',
+      `battle:${'x'.repeat(97)}`,
+      'battle:round 1',
+      'admin:everything',
+      `wallet:${WALLET.toUpperCase()}`,
+      'wallet:0xabc',
+    ]) {
+      expect(isChannel(channel), channel).toBe(false);
+    }
+  });
+});
 
 describe('channel authorisation', () => {
   it('leaves public channels open', () => {
