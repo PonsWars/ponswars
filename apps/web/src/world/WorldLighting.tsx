@@ -105,7 +105,11 @@ function Environment(): null {
     panel(ENVIRONMENT.ground, [0, -8, 0], [22, 0.2, 22]);
 
     const pmrem = new PMREMGenerator(gl);
-    const target = pmrem.fromScene(source, 0.05);
+    // The widest blur the generator can take without clipping. It samples at
+    // most 20 taps across three standard deviations, and 0.05 asked for 25 —
+    // the extra width was being thrown away with a console warning on every
+    // load. 0.04 is the blur that was actually being drawn, asked for honestly.
+    const target = pmrem.fromScene(source, 0.04);
     scene.environment = target.texture;
     scene.environmentIntensity = ENVIRONMENT.intensity;
 
