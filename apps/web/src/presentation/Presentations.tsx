@@ -15,7 +15,9 @@ import {
   type ResultRoute,
   type Route,
 } from '../routing/route.js';
+import { useWalletSessionContext } from '../live/WalletSessionContext.js';
 import { Overlay } from './Overlay.js';
+import { unpublishedCopy, type PersonalPage, type Published } from './unpublished.js';
 
 /**
  * Routes the three presentations that layer over the world (§80.4).
@@ -36,14 +38,30 @@ export function Presentations({
 }: {
   readonly route: PresentationRoute | ResultRoute;
   readonly navigate: (next: Route) => void;
-  readonly profile: ProfileData;
-  readonly reward: RewardView;
+  readonly profile: Published<ProfileData>;
+  readonly reward: Published<RewardView>;
   readonly pool: PoolStatus | null;
-  readonly genesis: GenesisOutcome | null;
+  /** `null` inside a published value is a wallet with no claim — a real answer. */
+  readonly genesis: Published<GenesisOutcome | null>;
   readonly result: FinishedBattle | null;
 }): JSX.Element {
+  const wallet = useWalletSessionContext();
+  const connected = wallet.status.kind === 'CONNECTED';
+
   const close = (): void => {
     navigate(WORLD_ROUTE);
+  };
+
+  const unpublished = (page: PersonalPage): JSX.Element => {
+    const copy = unpublishedCopy(page, connected);
+    return (
+      <EmptyState
+        headline={copy.headline}
+        body={copy.body}
+        action="BACK TO THE WORLD →"
+        onAction={close}
+      />
+    );
   };
 
   switch (route.kind) {
@@ -55,7 +73,7 @@ export function Presentations({
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
-          <WarRoom profile={profile} />
+          {profile.published ? <WarRoom profile={profile.value} /> : unpublished('PROFILE')}
         </Overlay>
       );
     case 'REWARDS':
@@ -66,7 +84,11 @@ export function Presentations({
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
-          <RewardsPresentation view={reward} pool={pool} />
+          {reward.published ? (
+            <RewardsPresentation view={reward.value} pool={pool} />
+          ) : (
+            unpublished('REWARDS')
+          )}
         </Overlay>
       );
     case 'ABOUT':
@@ -129,7 +151,9 @@ export function Presentations({
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
-          {genesis === null ? (
+          {!genesis.published ? (
+            unpublished('GENESIS')
+          ) : genesis.value === null ? (
             // §42.14: say what is actually true rather than showing an empty
             // ceremony. A wallet with no Genesis claim has nothing to reveal.
             <EmptyState
@@ -139,7 +163,7 @@ export function Presentations({
               onAction={close}
             />
           ) : (
-            <GenesisReveal outcome={genesis} onDone={close} />
+            <GenesisReveal outcome={genesis.value} onDone={close} />
           )}
         </Overlay>
       );

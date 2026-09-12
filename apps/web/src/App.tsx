@@ -293,6 +293,9 @@ const PLACEHOLDER_PROFILE: ProfileData = {
 
 const PLACEHOLDER_POOL: PoolStatus = { balance: '12.40' };
 
+/** What a personal page receives while no service publishes its data. */
+const UNPUBLISHED = { published: false } as const;
+
 /**
  * A placeholder finalized battle.
  *
@@ -529,14 +532,26 @@ export function App(): JSX.Element {
         <Presentations
           route={route}
           navigate={navigate}
-          profile={PLACEHOLDER_PROFILE}
-          reward={activeWindowView({
-            distributionId: 42,
-            warPoints: PLACEHOLDER_WALLET.warPoints,
-            closesAt: utcTimestamp(Date.now() + 6 * 3_600_000 + 42 * 60_000 + 18_000),
-          })}
-          pool={PLACEHOLDER_POOL}
-          genesis={PLACEHOLDER_GENESIS}
+          // Preview figures under the preview banner, and nothing invented in a
+          // live round: no service publishes records, distributions or Genesis
+          // claims yet, and the one place in the product that shows a player
+          // their own numbers is the last place to make them up. The result
+          // screen below has always worked this way.
+          profile={status.live ? UNPUBLISHED : { published: true, value: PLACEHOLDER_PROFILE }}
+          reward={
+            status.live
+              ? UNPUBLISHED
+              : {
+                  published: true,
+                  value: activeWindowView({
+                    distributionId: 42,
+                    warPoints: PLACEHOLDER_WALLET.warPoints,
+                    closesAt: utcTimestamp(Date.now() + 6 * 3_600_000 + 42 * 60_000 + 18_000),
+                  }),
+                }
+          }
+          pool={status.live ? null : PLACEHOLDER_POOL}
+          genesis={status.live ? UNPUBLISHED : { published: true, value: PLACEHOLDER_GENESIS }}
           result={status.live ? finished : PLACEHOLDER_RESULT}
         />
       ) : null}
