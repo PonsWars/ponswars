@@ -91,14 +91,27 @@ const STRENGTH: Readonly<Record<DetailLevel, Readonly<Record<UnitKind, number>>>
  * undo.
  *
  * The district sits at `x = side * 62` with a deck 48 wide and 96 deep whose
- * surface is at `y = 21`. So a side's ranks run from its inner edge —
- * `side * 40` — backward into its own ground.
+ * surface is at `y = 21`. Its buildings stand on the outer half of that deck
+ * (`ARMY_GROUND` in `WorldScene.tsx`), so the army's ground runs from the inner
+ * edge at 38 to 62 — and every rank has to stand inside it, or it stands in a
+ * building.
  */
 const DECK_Y = 21;
-/** Distance from the sector's centre line to the first rank. */
-const FRONT_RANK = 40;
-/** How much further back each rank behind it stands. */
-const RANK_SPACING = 14;
+/**
+ * Distance from the sector's centre line to the first rank.
+ *
+ * Just behind the standards at 41, so the banners fly in front of the army
+ * rather than out of the middle of its front rank.
+ */
+const FRONT_RANK = 45;
+/**
+ * How much further back each rank behind it stands.
+ *
+ * The walker is the one heavy unit and stands in the second rank between the
+ * two mechs rather than behind them: a third rank would put it at the district's
+ * wall.
+ */
+const RANK_SPACING = 9;
 /** How wide a rank spreads along the deck. Inside the deck's 96. */
 const RANK_SPREAD = 84;
 
@@ -219,7 +232,7 @@ export function Army({
       // the big silhouettes stay visible over the small ones.
       trooper: rank(seed + 100, side, strength.trooper, 0, RANK_SPREAD),
       mech: rank(seed, side, strength.mech, 1, RANK_SPREAD * 0.6),
-      walker: rank(seed + 200, side, strength.walker, 2, 24),
+      walker: rank(seed + 200, side, strength.walker, 1, 24),
       drone: rank(seed + 300, side, strength.drone, 1, RANK_SPREAD * 0.7),
     }),
     [seed, side, strength],

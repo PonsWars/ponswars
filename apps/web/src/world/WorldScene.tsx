@@ -73,7 +73,8 @@ const SEGMENTS: Readonly<Record<DetailLevel, number>> = {
 const DISTRICT_DECK = 10;
 
 const DISTRICT_SHAPE: DistrictShape = {
-  halfWidth: 22,
+  // The outer half of the deck only. See `ARMY_GROUND`.
+  halfWidth: 11,
   halfDepth: 45,
   // Derived, not chosen. `SECTOR_SKYLINE_HEIGHT` is what the camera poses keep
   // clear of, and a peak set independently of it is the same fact written in
@@ -85,10 +86,31 @@ const DISTRICT_SHAPE: DistrictShape = {
   spacing: 1.4,
 };
 
+/**
+ * The strip of each deck kept clear for the army, along the edge facing the
+ * fight.
+ *
+ * The district used to fill its whole deck and the army was placed on the same
+ * deck, so every rank stood inside the buildings: a trooper eleven units tall
+ * among towers of forty, visible as a coloured smudge between walls. Every
+ * delivered battlefield frame draws the opposite — the army drawn up in front of
+ * its city, the skyline behind it. So the deck is split: the inner 24 units are
+ * parade ground, and the district is generated into the outer 24.
+ *
+ * `Army.tsx` draws its ranks inside this strip, and the two numbers are the same
+ * fact about the same deck.
+ */
+export const ARMY_GROUND = 24;
+
+/** Where the district's envelope is centred inside its deck, outward of the army. */
+const DISTRICT_SETBACK = ARMY_GROUND / 2;
+
 /** How much of a district gets built at each detail level (§82.2). */
 const DISTRICT_DENSITY: Readonly<Record<DetailLevel, number>> = {
-  FULL: 17,
-  REDUCED: 7,
+  // Fewer than the whole deck took, for half the ground. The generator places
+  // what fits and stops, so a count past that is only wasted attempts.
+  FULL: 13,
+  REDUCED: 6,
   SILHOUETTE: 0,
   CULLED: 0,
 };
@@ -822,43 +844,51 @@ function District({
         <meshBasicMaterial color={accent} transparent opacity={0.5} />
       </mesh>
 
-      {PIECES.map((piece) => (
-        <PieceField key={`mass-${piece}`} piece={piece} placements={built.masses.get(piece) ?? []}>
-          {/* Barely metallic, and that is not a compromise. A metal has no
-              diffuse response at all — it is entirely what it reflects — so in
-              a dark void raising metalness makes a surface *darker*, not
-              richer. Pushing these to 0.45 once the environment existed put the
-              district back to the near-black it started at, for the opposite
-              reason.
+      {/* Outward of the army's ground: the city stands behind the ranks, not
+          around them. */}
+      <group position={[side * DISTRICT_SETBACK, 0, 0]}>
+        {PIECES.map((piece) => (
+          <PieceField
+            key={`mass-${piece}`}
+            piece={piece}
+            placements={built.masses.get(piece) ?? []}
+          >
+            {/* Barely metallic, and that is not a compromise. A metal has no
+                diffuse response at all — it is entirely what it reflects — so in
+                a dark void raising metalness makes a surface *darker*, not
+                richer. Pushing these to 0.45 once the environment existed put the
+                district back to the near-black it started at, for the opposite
+                reason.
 
-              The probe gives them a sheen along their lit edges. What lights
-              them is the key. */}
-          <meshStandardMaterial
-            key={`mass-material-${piece}`}
-            color="#2b4152"
-            metalness={0.18}
-            roughness={0.52}
-            emissive="#0d2634"
-            emissiveIntensity={0.34}
-          />
-        </PieceField>
-      ))}
+                The probe gives them a sheen along their lit edges. What lights
+                them is the key. */}
+            <meshStandardMaterial
+              key={`mass-material-${piece}`}
+              color="#2b4152"
+              metalness={0.18}
+              roughness={0.52}
+              emissive="#0d2634"
+              emissiveIntensity={0.34}
+            />
+          </PieceField>
+        ))}
 
-      {PIECES.map((piece) => (
-        <InstancedField key={`crown-${piece}`} placements={built.crowns.get(piece) ?? []}>
-          {/* A plain box, whatever the wall behind it is. The band is read as
-              light rather than as a shape, and matching the silhouette of a
-              terraced tower would cost a second geometry per piece for
-              something nobody looks at directly. */}
-          <boxGeometry key={`crown-geometry-${piece}`} args={[1, 1, 1]} />
-          <meshBasicMaterial
-            key={`crown-material-${piece}`}
-            color={accent}
-            transparent
-            opacity={0.85}
-          />
-        </InstancedField>
-      ))}
+        {PIECES.map((piece) => (
+          <InstancedField key={`crown-${piece}`} placements={built.crowns.get(piece) ?? []}>
+            {/* A plain box, whatever the wall behind it is. The band is read as
+                light rather than as a shape, and matching the silhouette of a
+                terraced tower would cost a second geometry per piece for
+                something nobody looks at directly. */}
+            <boxGeometry key={`crown-geometry-${piece}`} args={[1, 1, 1]} />
+            <meshBasicMaterial
+              key={`crown-material-${piece}`}
+              color={accent}
+              transparent
+              opacity={0.85}
+            />
+          </InstancedField>
+        ))}
+      </group>
 
       {/* The army's standards, along the edge it faces the fight from.
           Every delivered battlefield frame hangs these either side of a sector,
