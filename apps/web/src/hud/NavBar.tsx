@@ -1,8 +1,9 @@
-import type { JSX } from 'react';
+import { useEffect, useRef, type JSX } from 'react';
 import { PonsWarsMark, PonsWarsWordmark } from '../art/PonsWarsMark.js';
 import { pathFor, type Route } from '../routing/route.js';
 import { WalletConnect } from './WalletConnect.js';
 import { captionStyle, panelStyle } from './styles.js';
+import { useNarrowViewport } from './useNarrowViewport.js';
 
 /**
  * One navigation bar, on every surface (§80.4, and every delivered mockup).
@@ -44,6 +45,26 @@ export function NavBar({
   /** The wallet summary, or anything else that belongs at the right edge. */
   readonly children?: JSX.Element | null;
 }): JSX.Element {
+  const narrow = useNarrowViewport();
+  const destinations = useRef<HTMLDivElement | null>(null);
+
+  // Where you are, scrolled into sight. On a phone the row scrolls and the
+  // later destinations start off the edge; arriving on the rewards page with
+  // its own tab hidden is a bar that does not say where you are.
+  useEffect(() => {
+    const row = destinations.current;
+    const here = row?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (row === null || here === null || here === undefined) {
+      return;
+    }
+    const hidden =
+      here.offsetLeft < row.scrollLeft ||
+      here.offsetLeft + here.offsetWidth > row.scrollLeft + row.clientWidth;
+    if (hidden) {
+      row.scrollLeft = Math.max(0, here.offsetLeft - (row.clientWidth - here.offsetWidth) / 2);
+    }
+  }, [current.kind, narrow]);
+
   return (
     <nav
       aria-label="PonsWars"
@@ -52,7 +73,7 @@ export function NavBar({
         pointerEvents: 'auto',
         display: 'flex',
         alignItems: 'center',
-        gap: 'var(--pw-space-4)',
+        gap: narrow ? 'var(--pw-space-1) var(--pw-space-3)' : 'var(--pw-space-4)',
         padding: 'var(--pw-space-2) var(--pw-space-3)',
         flexWrap: 'wrap',
         // The bar is laid out inside rows that distribute their children to
@@ -84,9 +105,24 @@ export function NavBar({
       </a>
 
       <div
+        ref={destinations}
         style={{
           display: 'flex',
           gap: 'var(--pw-space-1)',
+          // On a phone: a row of its own under the mark and the wallet, the full
+          // width of the bar. Left to wrap on its own it took the second line
+          // and pushed the wallet onto a third, right-aligned under nothing —
+          // a bar a third of the screen tall with a hole in the middle of it.
+          ...(narrow
+            ? {
+                order: 2,
+                flexBasis: '100%',
+                // The row scrolls, and a hard cut through a word reads as a
+                // clipping bug. A fade at the edge reads as more to come.
+                maskImage: 'linear-gradient(to right, #000 82%, transparent)',
+                WebkitMaskImage: 'linear-gradient(to right, #000 82%, transparent)',
+              }
+            : {}),
           // One row that scrolls, rather than a block that wraps into a column.
           // Seven destinations wrapped at phone width turn the bar into a
           // menu the height of the screen, over the world it is supposed to
@@ -141,6 +177,7 @@ export function NavBar({
       <div
         style={{
           marginLeft: 'auto',
+          ...(narrow ? { order: 1 } : {}),
           display: 'flex',
           alignItems: 'center',
           gap: 'var(--pw-space-3)',
@@ -148,7 +185,7 @@ export function NavBar({
         }}
       >
         {children}
-        <WalletConnect />
+        <WalletConnect compact={narrow} />
       </div>
     </nav>
   );
