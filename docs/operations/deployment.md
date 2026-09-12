@@ -152,6 +152,24 @@ the last round it saw, forever.
   browser to a deployment that no longer exists. Everything under `/assets/` is
   immutable for a year, because a changed file is a different URL.
 
+## What the service bounds, and what the edge must
+
+The service bounds what one connection can make it hold: a request body is at
+most 16 KiB, a WebSocket frame at most 4 KiB, a socket may follow at most 32
+channels and have at most 64 frames waiting, and a card can only be armed by a
+wallet that holds one.
+
+What it cannot bound is **how many requests one client sends**. That needs the
+client's real address, and behind a load balancer or CDN the address this
+process sees is the proxy's — so the limit belongs to whatever sits in front of
+it, which is the hosting decision still open. Until one is in place, the edge
+must rate-limit at least:
+
+- `POST /v1/auth/challenge` — every request stores a challenge row until it
+  expires and the hourly prune removes it, so an unlimited client grows the
+  table as fast as it can send;
+- WebSocket upgrades — each connection holds a socket and its subscriptions.
+
 ## Verifying a deployment
 
 ```bash
