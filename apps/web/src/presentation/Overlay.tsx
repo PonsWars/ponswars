@@ -62,7 +62,13 @@ export function Overlay({
   useEffect(() => {
     // Focus moves into the presentation when it opens, so a keyboard or screen
     // reader user is not left several tabs behind the thing that just appeared.
-    panel.current?.focus();
+    //
+    // Without scrolling to it. Focusing an element scrolls its container until
+    // the element is in view, and the content sits below the bar and the title
+    // — so every presentation opened scrolled past its own navigation and
+    // heading, undoing the return to the top above. On a phone that hid the
+    // bar entirely.
+    panel.current?.focus({ preventScroll: true });
 
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
