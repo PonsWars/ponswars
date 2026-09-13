@@ -170,6 +170,16 @@ export class GenesisFlow {
     this.#deps = deps;
   }
 
+  /**
+   * The card this wallet was dealt, or `null` — from the record alone.
+   *
+   * No chain read and nothing finished: for a page that shows a card beside
+   * other things (a profile), where a pending claim is not this page's to move.
+   */
+  async claimOf(wallet: WalletAddress): Promise<GenesisClaim | null> {
+    return (await this.#deps.repository.find(wallet))?.claim ?? null;
+  }
+
   /** Where this wallet's claim has got to, finishing it if its block is now final. */
   async status(wallet: WalletAddress): Promise<GenesisStatus> {
     const stored = await this.#deps.repository.find(wallet);

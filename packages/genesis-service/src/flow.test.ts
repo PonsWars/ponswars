@@ -185,6 +185,20 @@ describe('finishing a claim', () => {
     expect(await repository.find(WALLET)).toBeNull();
   });
 
+  it('reads a dealt card from the record, without touching the chain', async () => {
+    const { genesis, blocks } = flow({ balances: holding(MILLION) });
+    await genesis.request(WALLET);
+    expect(await genesis.claimOf(WALLET)).toBeNull();
+
+    blocks.finalized = Number.MAX_SAFE_INTEGER;
+    const ready = await genesis.status(WALLET);
+    if (ready.kind !== 'READY') throw new Error('expected a card');
+    blocks.asked.length = 0;
+
+    expect(await genesis.claimOf(WALLET)).toEqual(ready.claim);
+    expect(blocks.asked).toEqual([]);
+  });
+
   it('says NONE for a wallet that never asked, without reading its balance', async () => {
     const { genesis, readBalances } = flow();
 
