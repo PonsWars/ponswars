@@ -17,6 +17,7 @@ import {
 } from '@ponswars/round-service';
 import {
   milliseconds,
+  ROBINHOOD_CHAIN_TESTNET_ID,
   utcTimestamp,
   type UtcTimestamp,
   type WalletAddress,
@@ -146,9 +147,10 @@ const AUTH_POLICY: AuthPolicy = {
   sessionTtlMs: 86_400_000,
   domain: 'localhost:5173',
   uri: 'http://localhost:5173',
-  // Base Sepolia. The stack signs nothing on chain; what this decides is which
-  // chain a signature must name, and a local default has to be *a* chain.
-  chainId: 84_532,
+  // Robinhood Chain Testnet, the network PonsWars runs on. The stack signs
+  // nothing on chain; what this decides is which chain a signature must name,
+  // and a local default is the testnet rather than mainnet.
+  chainId: ROBINHOOD_CHAIN_TESTNET_ID,
 };
 
 async function main(): Promise<void> {
