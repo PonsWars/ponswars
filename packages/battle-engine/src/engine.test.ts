@@ -284,6 +284,22 @@ describe('finalization', () => {
     expect(outcome.state.state).toBe('FINALIZED');
   });
 
+  it('records the block hash that broke a dead heat, and only then (§12.7)', () => {
+    // Identical sides: level through every market component.
+    const tied = finalize(drive([tick(70_000)]));
+    if (tied.kind !== 'FINALIZED') throw new Error('expected a result');
+    expect(tied.result.tiebreakStep).toBe('chainDerived');
+    expect(tied.result.tiebreakBlockHash).toBe(BLOCK);
+
+    // Decided by the market: the hash was handed in and is not recorded.
+    const decided = finalize(
+      drive([tick(70_000), tick(300_000, { left: side({ windowReturn: 80_000n }) })]),
+    );
+    if (decided.kind !== 'FINALIZED') throw new Error('expected a result');
+    expect(decided.result.tiebreakStep).toBeUndefined();
+    expect(decided.result).not.toHaveProperty('tiebreakBlockHash');
+  });
+
   it('stamps the five algorithm versions', () => {
     // §73.1: five versions so a replay knows which combination produced a
     // result. A single number would force every historical battle to be

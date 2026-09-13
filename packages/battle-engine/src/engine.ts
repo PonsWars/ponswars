@@ -403,6 +403,11 @@ export function finalizeBattle(
     },
     victoryLabel,
     ...(resolution.tiebreakStep === undefined ? {} : { tiebreakStep: resolution.tiebreakStep }),
+    // Only the chain-derived step read the hash; any other result records none,
+    // so a stored hash always means the chain decided it.
+    ...(resolution.tiebreakStep === 'chainDerived' && finalizedBlockHash !== null
+      ? { tiebreakBlockHash: finalizedBlockHash }
+      : {}),
     scoringEngineVersion: versionTag(config.versions),
     finalizedAt: at,
     evidenceHash: state.evidenceHash,
