@@ -56,11 +56,11 @@ it, and it is the record of which contracts a network runs.
 ```bash
 cast call <vault> 'REWARD_AMOUNT()(uint256)' --rpc-url robinhood_testnet
 cast call <distributor> 'REWARD_TOKEN()(address)' --rpc-url robinhood_testnet
-cast call <distributor> 'hasRole(bytes32,address)(bool)' 0x00 <admin> --rpc-url robinhood_testnet
+cast call <distributor> 'hasRole(bytes32,address)(bool)' \n  0x0000000000000000000000000000000000000000000000000000000000000000 <admin> --rpc-url robinhood_testnet
 ```
 
-`REWARD_AMOUNT` is `0.2 × 10^decimals`. The admin holds role `0x00`; the
-deploying key holds nothing.
+`REWARD_AMOUNT` is `0.2 × 10^decimals`. The admin holds the all-zero admin role;
+the deploying key holds nothing.
 
 ## Grant the operational roles
 
