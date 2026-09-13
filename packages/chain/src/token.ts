@@ -1,11 +1,11 @@
-import { chainLabel } from '@ponswars/shared-types';
+import { chainLabel, type WalletAddress } from '@ponswars/shared-types';
 
 /** An ERC-20 token on Robinhood Chain, for the two things PonsWars reads from one. */
 export interface TokenReader {
   readonly address: `0x${string}`;
   decimals(): Promise<number>;
   /** In base units, at the latest block. */
-  balanceOf(wallet: `0x${string}`): Promise<bigint>;
+  balanceOf(wallet: WalletAddress): Promise<bigint>;
 }
 
 /**

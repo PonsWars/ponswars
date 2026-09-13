@@ -40,7 +40,8 @@ export function robinhoodChainRpc(url: string): RobinhoodChainRpc {
           address,
           abi: erc20Abi,
           functionName: 'balanceOf',
-          args: [wallet],
+          // A `WalletAddress` is a checked, lowercased 20-byte hex address.
+          args: [wallet as `0x${string}`],
         }),
     }),
   };
