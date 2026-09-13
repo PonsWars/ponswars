@@ -15,7 +15,9 @@ import {
   resolveRequest,
   warThreshold,
   type GenesisRequest,
+  type ResolvedGenesis,
   type RevealableGenesis,
+  type SecretReservation,
 } from './genesis-service.js';
 
 /**
@@ -55,6 +57,11 @@ export interface GenesisClaim {
   readonly seed: string;
   readonly secretAvailable: boolean;
   readonly rarityTableVersion: string;
+  /**
+   * The vault transaction that reserved a Secret's reward (§76.5), present
+   * exactly when the card is a Secret.
+   */
+  readonly secretReservationTx: string | null;
   readonly finalizedAt: UtcTimestamp;
 }
 
@@ -89,6 +96,26 @@ export interface GenesisChain {
   finalizedBlock(
     number: number,
   ): Promise<{ readonly number: number; readonly hash: string } | null>;
+}
+
+/**
+ * The Secret Stock Vault, for the two things a Secret reveal needs (§8.3, §8.4).
+ *
+ * `reserve` sets the reward aside for one wallet on chain. It answers
+ * `UNCOVERED` when the vault no longer holds a reward's worth — a designed
+ * state, not a fault — and throws for anything else, which the flow treats as
+ * try again. It is idempotent per wallet: a reservation already on chain for
+ * that wallet is returned rather than refused, so a crash between the
+ * transaction and the database costs nothing.
+ */
+export interface SecretVault {
+  isCovered(): Promise<boolean>;
+  reserve(
+    wallet: WalletAddress,
+  ): Promise<
+    | { readonly kind: 'RESERVED'; readonly reservation: SecretReservation }
+    | { readonly kind: 'UNCOVERED' }
+  >;
 }
 
 export type GenesisStatus =
@@ -131,11 +158,11 @@ export interface GenesisFlowDeps {
   readonly warBalanceOf: (wallet: WalletAddress) => Promise<BaseUnits>;
   readonly warDecimals: TokenDecimals;
   /**
-   * Whether a Secret result could be revealed right now (§8.3, §8.4): the vault
-   * covers a reward *and* this service can reserve it. Read at the moment a
-   * result is resolved, never cached.
+   * The vault this service reserves Secret rewards in, or `null` when it holds
+   * no key that can. Without one, Secret is unavailable (§8.3): its band deals
+   * Legendary, and the rarity table records that it did.
    */
-  readonly secretAvailable: () => Promise<boolean>;
+  readonly secretVault: SecretVault | null;
   readonly now: () => UtcTimestamp;
 }
 
@@ -236,11 +263,11 @@ export class GenesisFlow {
 
     const pending = stored.request;
     if (pending.state === 'COMMITTED') {
-      // Committed and not recorded: a Secret whose reward was never reserved.
-      // It is not resolved again here — the coverage it was resolved under is
-      // part of its outcome (§8.3), and re-reading coverage now could turn the
-      // same entropy into a different card. Recovery is an operator's (§76.5).
-      return { kind: 'SECRET_RESERVATION_PENDING', requestId: pending.requestId };
+      // Committed and not recorded: a Secret whose reservation did not land.
+      // Only a Secret is ever committed without being recorded, so it resolves
+      // under the funded table again — the same slot, the same Secret — and the
+      // reservation is retried (§76.5, docs/operations/secret-vault.md).
+      return this.#reveal(resolveRequest(pending, true), true);
     }
     if (pending.state !== 'PENDING') {
       throw new Error(
@@ -260,16 +287,57 @@ export class GenesisFlow {
     }
     const request = commitEntropy(pending, block, this.#deps.now());
 
-    const resolved = resolveRequest(request, await fromChain(() => this.#deps.secretAvailable()));
-    // No reservation is ever passed: nothing in this service can reserve a
-    // Secret reward yet, which is why `secretAvailable` must say so and a Secret
-    // is unreachable. Should one resolve anyway, the gate below holds it back.
-    const outcome = finalizeGenesis(resolved, this.#deps.now(), null);
-    if (outcome.kind === 'RESERVATION_FAILED') {
-      await this.#deps.repository.commit(outcome.request);
-      return { kind: 'SECRET_RESERVATION_PENDING', requestId: request.requestId };
+    // Coverage is read now, at resolution (§8.3), and never cached.
+    const vault = this.#deps.secretVault;
+    const secretAvailable = vault === null ? false : await fromChain(() => vault.isCovered());
+    return this.#reveal(resolveRequest(request, secretAvailable), false);
+  }
+
+  /**
+   * Records a resolved card — reserving a Secret's reward first (§8.4).
+   *
+   * - Not a Secret: recorded directly.
+   * - A Secret, reserved: recorded with its reservation, and only then shown.
+   * - A Secret, and the vault is out of coverage — the race §8.4 describes for
+   *   the last reward: the same entropy is resolved again under the disabled
+   *   table, which deals Legendary and says so on the claim.
+   * - A Secret, and the reservation failed for any other reason: the commit is
+   *   kept, nothing is shown, and the next read tries the reservation again.
+   */
+  async #reveal(resolved: ResolvedGenesis, alreadyCommitted: boolean): Promise<GenesisStatus> {
+    const { request } = resolved;
+    let reservation: SecretReservation | null = null;
+    let card = resolved;
+
+    if (resolved.outcome.rarity === 'SECRET') {
+      const vault = this.#deps.secretVault;
+      let reserved: Awaited<ReturnType<SecretVault['reserve']>> | null = null;
+      if (vault !== null) {
+        try {
+          reserved = await vault.reserve(request.wallet);
+        } catch {
+          reserved = null;
+        }
+      }
+      if (reserved === null) {
+        if (!alreadyCommitted) {
+          await this.#deps.repository.commit(request);
+        }
+        return { kind: 'SECRET_RESERVATION_PENDING', requestId: request.requestId };
+      }
+      if (reserved.kind === 'UNCOVERED') {
+        card = resolveRequest(request, false);
+      } else {
+        reservation = reserved.reservation;
+      }
     }
 
+    const outcome = finalizeGenesis(card, this.#deps.now(), reservation);
+    if (outcome.kind === 'RESERVATION_FAILED') {
+      // Unreachable: a Secret reaches here only with its reservation. Held back
+      // all the same, rather than recorded without one.
+      return { kind: 'SECRET_RESERVATION_PENDING', requestId: request.requestId };
+    }
     const claim = await this.#deps.repository.record(outcome.request, outcome.result);
     return { kind: 'READY', claim };
   }

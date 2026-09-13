@@ -63,6 +63,7 @@ export class MemoryGenesisRepository implements GenesisRepository {
       seed: result.seed,
       secretAvailable: result.secretAvailable,
       rarityTableVersion: result.rarityTableVersion,
+      secretReservationTx: result.secretReservation?.reservationTx ?? null,
       finalizedAt: result.finalizedAt,
     };
     this.#records.set(request.wallet, { request, claim });

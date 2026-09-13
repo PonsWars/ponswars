@@ -12,6 +12,7 @@ import {
   GenesisChainError,
   GenesisFlow,
   type GenesisChain,
+  type SecretVault,
 } from './flow.js';
 import {
   commitEntropy,
@@ -49,7 +50,7 @@ function chain(): GenesisChain & { head: number; finalized: number; asked: numbe
 function flow(
   options: {
     balances?: ReadonlyMap<WalletAddress, BaseUnits>;
-    secretAvailable?: boolean;
+    vault?: SecretVault | null;
     repository?: MemoryGenesisRepository;
     chain?: ReturnType<typeof chain>;
   } = {},
@@ -66,7 +67,7 @@ function flow(
       return Promise.resolve(options.balances?.get(wallet) ?? baseUnits(0n));
     },
     warDecimals: WAR,
-    secretAvailable: () => Promise.resolve(options.secretAvailable ?? false),
+    secretVault: options.vault ?? null,
     now: () => utcTimestamp((now += 1_000)),
   });
   return { genesis, repository, blocks, readBalances };
@@ -206,13 +207,53 @@ describe('finishing a claim', () => {
     expect(readBalances).toEqual([]);
   });
 
-  it('holds back a Secret it cannot reserve, and deals Legendary while Secret is off (§8.3, §76.5)', async () => {
-    // Find a wallet whose draw lands in the Secret band when Secret is on.
+  it('reads a dealt card with no reservation when it is not a Secret', async () => {
+    const { genesis, blocks } = flow({ balances: holding(MILLION) });
+    blocks.finalized = Number.MAX_SAFE_INTEGER;
+
+    const dealt = await genesis.request(WALLET);
+    if (dealt.kind !== 'READY') throw new Error(`expected a card, got ${dealt.kind}`);
+    expect(dealt.claim.secretReservationTx).toBeNull();
+  });
+});
+
+describe('a Secret draw (§8.3, §8.4, §76.5)', () => {
+  const RESERVATION_TX = `0x${'5e'.repeat(32)}`;
+
+  /** A vault a test scripts: whether it is covered, and what each reserve does. */
+  function vault(covered: boolean, answers: ('RESERVE' | 'UNCOVERED' | 'THROW')[]) {
+    const reserved: WalletAddress[] = [];
+    const port: SecretVault = {
+      isCovered: () => Promise.resolve(covered),
+      reserve: (wallet) => {
+        reserved.push(wallet);
+        const answer = answers.shift() ?? 'THROW';
+        if (answer === 'THROW') {
+          return Promise.reject(new Error('RPC endpoint timed out'));
+        }
+        return Promise.resolve(
+          answer === 'UNCOVERED'
+            ? { kind: 'UNCOVERED' }
+            : {
+                kind: 'RESERVED',
+                reservation: {
+                  entitlementId: `secret-${wallet}`,
+                  amount: baseUnits(200_000n),
+                  reservationTx: RESERVATION_TX,
+                },
+              },
+        );
+      },
+    };
+    return { port, reserved };
+  }
+
+  /** A chain whose target block is final, and a wallet whose draw there is a Secret. */
+  function secretDraw() {
     const blocks = chain();
     blocks.finalized = Number.MAX_SAFE_INTEGER;
     const target = blocks.head + ENTROPY_TARGET_DISTANCE;
-    let secretWallet: WalletAddress | null = null;
-    for (let index = 0; index < 20_000 && secretWallet === null; index += 1) {
+    for (let index = 0; index < 20_000; index += 1) {
       const wallet = `0x${index.toString(16).padStart(40, '0')}` as WalletAddress;
       const request = commitEntropy(
         openRequest(genesisRequestId(wallet), wallet, target, utcTimestamp(0)),
@@ -220,25 +261,80 @@ describe('finishing a claim', () => {
         utcTimestamp(0),
       );
       if (resolveRequest(request, true).outcome.rarity === 'SECRET') {
-        secretWallet = wallet;
+        return { blocks, wallet, balances: new Map([[wallet, MILLION]]) };
       }
     }
-    if (secretWallet === null) throw new Error('no Secret draw in the search range');
-    const balances = new Map([[secretWallet, MILLION]]);
+    throw new Error('no Secret draw in the search range');
+  }
 
-    // Secret on, and no reservation possible: nothing is shown or recorded.
-    const on = flow({ balances, secretAvailable: true, chain: blocks });
-    expect(await on.genesis.request(secretWallet)).toEqual({
-      kind: 'SECRET_RESERVATION_PENDING',
-      requestId: genesisRequestId(secretWallet),
+  it('reveals a Secret only with its reservation, and reserves it once', async () => {
+    const { blocks, wallet, balances } = secretDraw();
+    const { port, reserved } = vault(true, ['RESERVE']);
+    const { genesis } = flow({ balances, vault: port, chain: blocks });
+
+    const dealt = await genesis.request(wallet);
+    if (dealt.kind !== 'READY') throw new Error(`expected a card, got ${dealt.kind}`);
+    expect(dealt.claim.rarity).toBe('SECRET');
+    expect(dealt.claim.secretReservationTx).toBe(RESERVATION_TX);
+
+    expect(await genesis.status(wallet)).toEqual(dealt);
+    expect(reserved).toEqual([wallet]);
+  });
+
+  it('holds a Secret back while its reservation fails, then reveals it once it lands', async () => {
+    const { blocks, wallet, balances } = secretDraw();
+    const { port, reserved } = vault(true, ['THROW', 'THROW', 'RESERVE']);
+    const { genesis, repository } = flow({ balances, vault: port, chain: blocks });
+
+    for (const ask of [() => genesis.request(wallet), () => genesis.status(wallet)]) {
+      expect(await ask()).toEqual({
+        kind: 'SECRET_RESERVATION_PENDING',
+        requestId: genesisRequestId(wallet),
+      });
+      const stored = await repository.find(wallet);
+      // The entropy is committed, so the card cannot change; nothing is shown.
+      expect(stored?.request.state).toBe('COMMITTED');
+      expect(stored?.claim).toBeNull();
+    }
+
+    const dealt = await genesis.status(wallet);
+    if (dealt.kind !== 'READY') throw new Error(`expected a card, got ${dealt.kind}`);
+    expect(dealt.claim.rarity).toBe('SECRET');
+    expect(reserved).toHaveLength(3);
+  });
+
+  it('deals Legendary under the disabled table when the last reward was taken first', async () => {
+    // Covered when resolved, gone by the time the reservation ran (§8.4's race).
+    const { blocks, wallet, balances } = secretDraw();
+    const { port } = vault(true, ['UNCOVERED']);
+    const { genesis } = flow({ balances, vault: port, chain: blocks });
+
+    const dealt = await genesis.request(wallet);
+    if (dealt.kind !== 'READY') throw new Error(`expected a card, got ${dealt.kind}`);
+    expect(dealt.claim).toMatchObject({
+      rarity: 'LEGENDARY',
+      secretAvailable: false,
+      rarityTableVersion: 'rarity-table-v1-secret-disabled',
+      secretReservationTx: null,
     });
-    expect((await on.repository.find(secretWallet))?.claim).toBeNull();
-    // And asking again does not resolve it a second time under other coverage.
-    expect((await on.genesis.status(secretWallet)).kind).toBe('SECRET_RESERVATION_PENDING');
+  });
 
-    // Secret off: the same draw is a Legendary card.
-    const off = flow({ balances, secretAvailable: false, chain: blocks });
-    const dealt = await off.genesis.request(secretWallet);
+  it('never reserves while the vault is uncovered, and deals Legendary', async () => {
+    const { blocks, wallet, balances } = secretDraw();
+    const { port, reserved } = vault(false, []);
+    const { genesis } = flow({ balances, vault: port, chain: blocks });
+
+    const dealt = await genesis.request(wallet);
+    if (dealt.kind !== 'READY') throw new Error(`expected a card, got ${dealt.kind}`);
+    expect(dealt.claim.rarity).toBe('LEGENDARY');
+    expect(reserved).toEqual([]);
+  });
+
+  it('deals Legendary where the service holds no vault key at all', async () => {
+    const { blocks, wallet, balances } = secretDraw();
+    const { genesis } = flow({ balances, vault: null, chain: blocks });
+
+    const dealt = await genesis.request(wallet);
     if (dealt.kind !== 'READY') throw new Error(`expected a card, got ${dealt.kind}`);
     expect(dealt.claim.rarity).toBe('LEGENDARY');
     expect(dealt.claim.secretAvailable).toBe(false);
