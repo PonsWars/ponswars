@@ -270,6 +270,9 @@ importers:
 
   packages/chain:
     dependencies:
+      '@ponswars/genesis-service':
+        specifier: workspace:*
+        version: link:../genesis-service
       '@ponswars/round-service':
         specifier: workspace:*
         version: link:../round-service

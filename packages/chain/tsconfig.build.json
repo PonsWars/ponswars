@@ -10,6 +10,7 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     { "path": "../shared-types/tsconfig.build.json" },
+    { "path": "../genesis-service/tsconfig.build.json" },
     { "path": "../round-service/tsconfig.build.json" }
   ]
 }

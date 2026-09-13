@@ -20,6 +20,7 @@
     "clean": "tsc --build --clean"
   },
   "dependencies": {
+    "@ponswars/genesis-service": "workspace:*",
     "@ponswars/round-service": "workspace:*",
     "@ponswars/shared-types": "workspace:*",
     "viem": "^2.56.3"
