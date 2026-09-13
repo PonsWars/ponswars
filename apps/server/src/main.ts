@@ -1,6 +1,6 @@
 import { bearer, buildServer } from '@ponswars/api';
 import { AuthService } from '@ponswars/auth';
-import { assertChain, RpcChainPort, rpcChainReader } from '@ponswars/chain';
+import { assertChain, RpcChainPort, robinhoodChainRpc } from '@ponswars/chain';
 import {
   CURRENT_ENGINE_VERSIONS,
   type EngineConfig,
@@ -132,7 +132,8 @@ async function main(): Promise<void> {
   // Before anything connects or binds. An RPC endpoint on another network
   // would break ties from blocks on a chain PonsWars does not run on, and
   // nothing about the hashes it returned would look wrong.
-  const chain = rpcChainReader(config.RPC_URL);
+  const rpc = robinhoodChainRpc(config.RPC_URL);
+  const chain = rpc.chain;
   await assertChain(chain, config.CHAIN_ID);
 
   /**
