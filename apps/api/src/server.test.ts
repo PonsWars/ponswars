@@ -36,10 +36,10 @@ import {
 import { playerRecord, type SettledPick } from '@ponswars/player-service';
 import type { FastifyInstance } from 'fastify';
 import { privateKeyToAccount } from 'viem/accounts';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryCardHoldings, type CardHolding } from '@ponswars/round-service';
 import { PickStore } from './pick-store.js';
-import { buildServer, MAX_BODY_BYTES } from './server.js';
+import { buildServer, CHAIN_READ_TIMEOUT_MS, MAX_BODY_BYTES, type ServerDeps } from './server.js';
 
 /**
  * The HTTP surface, exercised as HTTP.
@@ -139,6 +139,8 @@ let settledPicks: SettledPick[] = [];
  * test takes it away, so the card flow is exercised as a holder meets it.
  */
 let holdings: Map<WalletAddress, CardHolding>;
+/** What `app` was built from, for a test that needs the same server with one thing changed. */
+let serverDeps: ServerDeps;
 
 beforeEach(() => {
   round = openRound();
@@ -152,7 +154,7 @@ beforeEach(() => {
   const cards = new MemoryCardHoldings(holdings);
   picks = new PickStore(cards);
   now = utcTimestamp(EPOCH + 30_000);
-  app = buildServer({
+  serverDeps = {
     currentRound: () => round,
     picks,
     config: CONFIG,
@@ -172,7 +174,8 @@ beforeEach(() => {
         );
       },
     },
-  });
+  };
+  app = buildServer(serverDeps);
 });
 
 const AUTH = { authorization: 'Bearer test' };
@@ -1173,6 +1176,58 @@ describe('GET /v1/profile', () => {
     expect(body.holdings).toEqual({
       war: { status: 'UNPUBLISHED' },
       genesis: { status: 'UNPUBLISHED' },
+    });
+  });
+
+  describe('the $WAR balance', () => {
+    const withBalance = (warBalanceOf: ServerDeps['warBalanceOf']) =>
+      buildServer({ ...serverDeps, ...(warBalanceOf === undefined ? {} : { warBalanceOf }) });
+    const holdingsFrom = async (server: ReturnType<typeof buildServer>) =>
+      profileSchema.parse(
+        (await server.inject({ method: 'GET', url: '/v1/profile', headers: AUTH })).json(),
+      ).holdings;
+
+    it('is read for the signed-in wallet, in base units with its decimals', async () => {
+      const read: WalletAddress[] = [];
+      const server = withBalance((who) => {
+        read.push(who);
+        return Promise.resolve({ balance: 1_234_567_000_000_000_000_000_000n, decimals: 18 });
+      });
+
+      expect((await holdingsFrom(server)).war).toEqual({
+        status: 'READ',
+        balance: '1234567000000000000000000',
+        decimals: 18,
+      });
+      expect(read).toEqual([WALLET]);
+    });
+
+    it('is unavailable, not zero, when the chain read fails', async () => {
+      const server = withBalance(() => Promise.reject(new Error('503 from the RPC endpoint')));
+
+      const response = await server.inject({ method: 'GET', url: '/v1/profile', headers: AUTH });
+
+      expect(response.statusCode).toBe(200);
+      expect(profileSchema.parse(response.json()).holdings.war).toEqual({ status: 'UNAVAILABLE' });
+    });
+
+    it('is unavailable when the chain is slow, and the record still arrives', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const server = withBalance(() => new Promise(() => undefined));
+        const pending = server.inject({ method: 'GET', url: '/v1/profile', headers: AUTH });
+        await vi.advanceTimersByTimeAsync(CHAIN_READ_TIMEOUT_MS);
+
+        const body = profileSchema.parse((await pending).json());
+        expect(body.holdings.war).toEqual({ status: 'UNAVAILABLE' });
+        expect(body.currentWindow.warPoints).toBe(64);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('is unpublished where nothing reads the chain', async () => {
+      expect((await holdingsFrom(withBalance(undefined))).war).toEqual({ status: 'UNPUBLISHED' });
     });
   });
 

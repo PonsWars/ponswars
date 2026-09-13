@@ -144,7 +144,27 @@ export interface ServerDeps {
    * so it must not get as far as being recorded.
    */
   readonly cards: CardHoldings;
+  /**
+   * The wallet's `$WAR` on Robinhood Chain, in base units, with the token's
+   * decimals (§34.1).
+   *
+   * Absent where nothing reads the chain — the local stack — and the profile
+   * then says the balance is unpublished rather than zero.
+   */
+  readonly warBalanceOf?: (
+    wallet: WalletAddress,
+  ) => Promise<{ readonly balance: bigint; readonly decimals: number }>;
 }
+
+/**
+ * How long a profile waits for the chain before answering without the balance.
+ *
+ * The record is the database's and is ready in milliseconds; an RPC endpoint
+ * having a slow minute should cost the player the one figure it owes, not the
+ * whole page. A constant with a reason rather than an `OPEN` value (§102): no
+ * figure changes with it, only how long a slow read is waited for.
+ */
+export const CHAIN_READ_TIMEOUT_MS = 2_500;
 
 /**
  * The token out of an `Authorization` header, or `null`.
@@ -163,6 +183,41 @@ export function bearer(authorization: string | undefined): string | null {
 
 /** The largest request body the API reads, in bytes. */
 export const MAX_BODY_BYTES = 16_384;
+
+/**
+ * The `$WAR` holding a profile reports: read, not read here, or not read now.
+ *
+ * A failed or slow read is `UNAVAILABLE`, never zero — §42.14's rule about a
+ * figure nobody has read, applied to the one that matters most to a holder.
+ */
+async function warHolding(
+  read: ServerDeps['warBalanceOf'],
+  wallet: WalletAddress,
+): Promise<
+  | { status: 'READ'; balance: string; decimals: number }
+  | { status: 'UNPUBLISHED' }
+  | { status: 'UNAVAILABLE' }
+> {
+  if (read === undefined) {
+    return { status: 'UNPUBLISHED' };
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(null);
+    }, CHAIN_READ_TIMEOUT_MS);
+  });
+  try {
+    const holding = await Promise.race([read(wallet), timedOut]);
+    return holding === null
+      ? { status: 'UNAVAILABLE' }
+      : { status: 'READ', balance: holding.balance.toString(), decimals: holding.decimals };
+  } catch {
+    return { status: 'UNAVAILABLE' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Stands in for a write the store refused because the round's picks froze. */
 const LOCKED = Symbol('picks locked');
@@ -710,14 +765,16 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       return send(reply, unauthenticated(correlationId()));
     }
 
-    const record = await deps.playerRecords.recordOf(wallet);
+    const [record, war] = await Promise.all([
+      deps.playerRecords.recordOf(wallet),
+      warHolding(deps.warBalanceOf, wallet),
+    ]);
     void reply.header('cache-control', 'private, no-store');
     return reply.send(
       profileSchema.parse({
         ...record,
-        // Balance, Genesis, card and claimable rewards are the chain's to
-        // answer, and nothing reads the chain yet (§59.3).
-        holdings: { war: { status: 'UNPUBLISHED' }, genesis: { status: 'UNPUBLISHED' } },
+        // Genesis claims are the chain's to answer too, and are not read yet.
+        holdings: { war, genesis: { status: 'UNPUBLISHED' } },
       }),
     );
   });
