@@ -138,7 +138,8 @@ async function main(): Promise<void> {
 
   // The same reasoning for the two tokens: a decimals value off by one power
   // of ten converts every amount wrongly and nothing downstream looks wrong.
-  await assertTokenDecimals(rpc.token(config.WAR_TOKEN_ADDRESS), {
+  const war = rpc.token(config.WAR_TOKEN_ADDRESS);
+  await assertTokenDecimals(war, {
     parameter: 'WAR_TOKEN_DECIMALS',
     decimals: config.WAR_TOKEN_DECIMALS,
     chainId: config.CHAIN_ID,
@@ -256,6 +257,13 @@ async function main(): Promise<void> {
     // From the cards table. Until Genesis claims are recorded from the chain it
     // is empty, and no wallet can arm a card it has not been shown to hold.
     cards: new PostgresCardHoldings(database),
+    // §34.1: the wallet's $WAR, read from Robinhood Chain when its profile is
+    // asked for. The decimals are the configured ones, which startup has
+    // already checked against the token.
+    warBalanceOf: async (wallet) => ({
+      balance: await war.balanceOf(wallet),
+      decimals: config.WAR_TOKEN_DECIMALS,
+    }),
     picks,
     config: CONFIG,
     now,
