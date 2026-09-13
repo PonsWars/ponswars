@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '../state/session.js';
 import {
+  deploymentChain,
   fetchSession,
   requestChallenge,
   rotateSession,
@@ -262,7 +263,7 @@ async function offerSwitch(
   endpoints: LiveEndpoints,
   address: string,
 ): Promise<WalletStatus> {
-  const expected = await expectedChain(endpoints, address);
+  const expected = await deploymentChain(endpoints, address);
   if (expected === null) {
     return {
       kind: 'REFUSED',
@@ -288,19 +289,6 @@ async function offerSwitch(
         message: `PonsWars runs on chain ${String(expected)}.`,
         nextStep: 'Switch networks in your wallet, then connect again.',
       };
-}
-
-/**
- * The chain this deployment wants, asked for rather than guessed.
- *
- * The refusal already named it in a sentence, and parsing a number back out of
- * a sentence is exactly the kind of thing that works until the wording changes.
- * A challenge request for the wrong chain is refused; one for the right chain
- * is answered *with* the chain, so this asks for chain 1 and reads the answer.
- */
-async function expectedChain(endpoints: LiveEndpoints, address: string): Promise<number | null> {
-  const probe = await requestChallenge(endpoints, address, 1);
-  return probe.ok ? probe.value.chainId : null;
 }
 
 function fromWallet(failure: WalletFailure): WalletStatus {
