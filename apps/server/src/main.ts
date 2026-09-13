@@ -174,6 +174,10 @@ async function main(): Promise<void> {
     // — so this is the one port with no honest implementation, and it throws
     // rather than returning a constant. A predictable tiebreak is worse than a
     // failed finalization, which at least gets looked at.
+    //
+    // The loop only asks for it when a battle is tied through every market
+    // component, so every other round finalizes without it. A dead heat will
+    // stop finalization here until a chain client exists.
     chain: {
       finalizationBlockHash: () =>
         Promise.reject(

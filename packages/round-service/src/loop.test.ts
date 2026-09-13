@@ -329,6 +329,53 @@ describe('finalizing', () => {
   });
 });
 
+describe('the chain at finalization (§12.7)', () => {
+  /** Runs a round from lock to its cutoff, one tick a minute. */
+  async function runToCutoff(p: MemoryPorts): Promise<RoundEngineState> {
+    let state = (await stepRound(openRound(), CLOCK.lockAt, p, CONFIG)).state;
+    for (let minute = 1; minute <= 9; minute += 1) {
+      state = (await stepRound(state, at(60_000 + minute * 60_000 - 1_000), p, CONFIG)).state;
+    }
+    return state;
+  }
+
+  it('finalizes a round the market decided without asking the chain at all', async () => {
+    // The deployable server has no chain client yet, and its port refuses. A
+    // round that needs no tiebreak must finish anyway — it used to ask every
+    // round, and so no round could finish.
+    const p = ports();
+    let asked = 0;
+    p.chain.finalizationBlockHash = () => {
+      asked += 1;
+      return Promise.reject(new Error('no chain client'));
+    };
+    const state = await runToCutoff(p);
+
+    const result = await stepRound(state, CLOCK.battleEndAt, p, CONFIG);
+
+    expect(asked).toBe(0);
+    expect(result.state.state).toBe('FINALIZED');
+    expect(result.finalization?.results.length).toBeGreaterThan(0);
+  });
+
+  it('asks the chain when a battle is level through every market component', async () => {
+    // Every ticker observed identically: every battle a dead heat.
+    const level: MarketObservation = healthy('NVDA');
+    const p = ports({ market: () => level });
+    let asked = 0;
+    p.chain.finalizationBlockHash = () => {
+      asked += 1;
+      return Promise.resolve(BLOCK);
+    };
+    const state = await runToCutoff(p);
+
+    const result = await stepRound(state, CLOCK.battleEndAt, p, CONFIG);
+
+    expect(asked).toBe(1);
+    expect(result.finalization?.results.every((r) => r.tiebreakStep === 'chainDerived')).toBe(true);
+  });
+});
+
 describe('an overdue finalization', () => {
   it('is reported without voiding anything', async () => {
     const p = ports();

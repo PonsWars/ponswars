@@ -325,7 +325,7 @@ export type FinalizeOutcome =
 export function finalizeBattle(
   state: BattleEngineState,
   at: UtcTimestamp,
-  finalizedBlockHash: string,
+  finalizedBlockHash: string | null,
   config: EngineConfig,
   requiredDataComplete = true,
 ): FinalizeOutcome {

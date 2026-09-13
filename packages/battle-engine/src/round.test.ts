@@ -23,6 +23,7 @@ import {
   createRound,
   finalizeRound,
   lockRound,
+  needsFinalizationBlockHash,
   sectorIds,
   tickBattle,
   type LockedPick,
@@ -477,5 +478,28 @@ describe('card support at lock (§12.4, §23.1)', () => {
       left: NO_CARD_SUPPORT,
       right: aggregateCardSupport(['WAR_MACHINE']),
     });
+  });
+});
+
+describe('needsFinalizationBlockHash (§12.7)', () => {
+  it('is false for a round whose battles are decided by the market', () => {
+    const live = driveLeftWins(lockRound(makeRound(), at(60_000), []));
+
+    expect(needsFinalizationBlockHash(live, CONFIG)).toBe(false);
+    // And such a round finalizes with no hash at all.
+    expect(finalizeRound(live, at(600_000), null, CONFIG).results.length).toBeGreaterThan(0);
+  });
+
+  it('is true when a battle is level through every market component', () => {
+    let live = lockRound(makeRound(), at(60_000), []);
+    const first = live.battles[0];
+    if (first === undefined) {
+      throw new Error('a round always has five battles');
+    }
+    // Identical observations on both sides: a dead heat.
+    live = tickBattle(live, first.setup.battleId, tick(120_000), CONFIG);
+
+    expect(needsFinalizationBlockHash(live, CONFIG)).toBe(true);
+    expect(() => finalizeRound(live, at(600_000), null, CONFIG)).toThrow(/block hash/);
   });
 });

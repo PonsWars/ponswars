@@ -2,6 +2,8 @@ import {
   aggregateCardSupport,
   battleIdFor,
   matchupConfidence,
+  needsChainTiebreak,
+  scoreBattle,
   scheduleRound,
   sectorIdFor,
   type ConfidenceCalibration,
@@ -260,10 +262,29 @@ export interface RoundFinalization {
  * §22 writes War Points only during successful finalization, so this is the
  * single place they originate.
  */
+/**
+ * Whether finalizing this round will need a finalized block hash (§12.7).
+ *
+ * Only a battle tied through every market component reaches the chain-derived
+ * tiebreak. Asking the chain for a hash every round would make every round
+ * depend on a chain client; asking only when a battle is that level makes a
+ * round depend on one exactly when §12.7 does.
+ */
+export function needsFinalizationBlockHash(state: RoundEngineState, config: EngineConfig): boolean {
+  return state.battles.some(
+    (battle) =>
+      battle.state === 'LIVE' &&
+      battle.lastLeft !== null &&
+      battle.lastRight !== null &&
+      needsChainTiebreak(scoreBattle(battle.lastLeft, battle.lastRight, config.scoring)),
+  );
+}
+
 export function finalizeRound(
   state: RoundEngineState,
   at: UtcTimestamp,
-  finalizedBlockHash: string,
+  /** `null` is only safe when `needsFinalizationBlockHash` is false. */
+  finalizedBlockHash: string | null,
   config: EngineConfig,
   requiredDataComplete = true,
 ): RoundFinalization {

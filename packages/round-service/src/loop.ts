@@ -2,6 +2,7 @@ import {
   applyTick,
   finalizeRound,
   lockRound,
+  needsFinalizationBlockHash,
   nextRoundAction,
   type BattleEngineState,
   type EngineConfig,
@@ -195,7 +196,13 @@ async function performFinalize(
   ports: RoundPorts,
   config: EngineConfig,
 ): Promise<RoundFinalization> {
-  const blockHash = await ports.chain.finalizationBlockHash(state.clock.battleEndAt);
+  // Only a battle level through every market component reaches §12.7's
+  // chain-derived tiebreak, so only then is the chain asked. Asking every round
+  // made every round unfinishable without a chain client — and the engine
+  // refuses to break a full tie without the hash, so passing none is safe.
+  const blockHash = needsFinalizationBlockHash(state, config)
+    ? await ports.chain.finalizationBlockHash(state.clock.battleEndAt)
+    : null;
   const finalization = finalizeRound(state, state.clock.battleEndAt, blockHash, config);
 
   await ports.store.saveFinalization(finalization);
