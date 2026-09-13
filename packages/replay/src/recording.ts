@@ -61,7 +61,16 @@ export interface RoundRecording {
   readonly picks: readonly LockedPick[];
   /** Ticks in the order they were applied. Order is part of the record (§26). */
   readonly tickLogs: readonly BattleTickLog[];
-  readonly finalizationBlockHash: string;
+  /**
+   * The finalized block hash the round was finalized with (§12.7), or `null`.
+   *
+   * `null` is what a round the market decided records: the chain is asked only
+   * when a battle is level through every market component. A recording that
+   * says `null` for a round that did reach a dead heat does not replay — the
+   * engine refuses to break the tie any other way — which is the right failure
+   * for a file that left out an input.
+   */
+  readonly finalizationBlockHash: string | null;
   /**
    * The engine tuning in force when the round ran (§59.4).
    *
@@ -147,7 +156,7 @@ export function recordRound(input: {
    */
   readonly confidence: RoundSetup['confidence'];
   readonly picks: readonly LockedPick[];
-  readonly finalizationBlockHash: string;
+  readonly finalizationBlockHash: string | null;
   readonly tickCount: number;
   readonly tickFor: (
     battleId: BattleId,
@@ -268,6 +277,13 @@ function assertRecordingShape(value: unknown): asserts value is RoundRecording {
   }
   if (typeof record['roundIndex'] !== 'number' || !Number.isInteger(record['roundIndex'])) {
     throw new TypeError('A round index is a whole number');
+  }
+  const blockHash = record['finalizationBlockHash'];
+  if (
+    blockHash !== null &&
+    (typeof blockHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(blockHash))
+  ) {
+    throw new TypeError('A recording finalization block hash is a 32-byte hash, or null');
   }
   if (!Array.isArray(record['tickLogs']) || !Array.isArray(record['picks'])) {
     throw new TypeError('A recording carries tick logs and picks as arrays');

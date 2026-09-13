@@ -165,6 +165,18 @@ describe('a damaged recording', () => {
     expect(() => decodeRecording(none)).not.toThrow();
   });
 
+  it('accepts a round finalized without a block, and refuses a block that is not one', () => {
+    // §12.7: only a dead heat asks the chain, so most rounds record none.
+    const none = damaged((draft) => ({ ...draft, finalizationBlockHash: null }));
+    expect(decodeRecording(none).finalizationBlockHash).toBeNull();
+
+    for (const bad of ['', '0x1234', 42]) {
+      expect(() =>
+        decodeRecording(damaged((draft) => ({ ...draft, finalizationBlockHash: bad }))),
+      ).toThrow(/block hash/);
+    }
+  });
+
   it('rejects tick logs that are not a list', () => {
     expect(() => decodeRecording(damaged((draft) => ({ ...draft, tickLogs: 'nope' })))).toThrow(
       TypeError,
