@@ -12,8 +12,8 @@ import type { ProfileFailure } from '../live/profile-client.js';
  * - **loading** — the wallet is known and its record is on the way;
  * - **failed** — the record did not arrive, and the page says why and what to
  *   do, rather than showing a record of nothing;
- * - **not published** — no service answers for it at all. Genesis claims are
- *   read from the chain, and nothing reads the chain yet.
+ * - **not published** — no service answers for it at all, as on a server that
+ *   does not read Robinhood Chain.
  *
  * These pages were once filled with preview figures in every case — 1,180 War
  * Points and "qualified for distribution" for a visitor with no wallet at all.
@@ -50,17 +50,11 @@ export function signedOutCopy(page: PersonalPage): PageCopy {
       };
     case 'GENESIS':
       return {
-        headline: 'CONNECT THE WALLET THAT HOLDS YOUR CLAIM',
-        body: 'A Genesis Card is revealed once, to the wallet that holds the claim. Connect that wallet from the bar above to open it.',
+        headline: 'CONNECT A WALLET TO OPEN YOUR GENESIS CARD',
+        body: 'A Genesis Card belongs to one wallet, forever. Connect the wallet holding your $WAR from the bar above to open or see its card.',
       };
   }
 }
-
-/** Genesis claims, which no service publishes yet. */
-export const GENESIS_UNPUBLISHED: PageCopy = {
-  headline: 'GENESIS CLAIMS ARE NOT PUBLISHED YET',
-  body: 'Claims are read from the chain by the Genesis service, which this server does not run yet. Whether this wallet holds one is not something this page will guess.',
-};
 
 /**
  * Why a record did not load, in the player's terms (§110.5).

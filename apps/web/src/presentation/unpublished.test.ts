@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  GENESIS_UNPUBLISHED,
-  failureCopy,
-  signedOutCopy,
-  type PersonalPage,
-} from './unpublished.js';
+import { failureCopy, signedOutCopy, type PersonalPage } from './unpublished.js';
 
 const PAGES: readonly PersonalPage[] = ['PROFILE', 'REWARDS', 'GENESIS'];
 
@@ -24,7 +19,7 @@ describe('copy that describes a wallet no service has been asked about', () => {
   it('never claims a fact about it', () => {
     // The copy this replaced said "no Genesis claim on this wallet" — a
     // statement about a wallet nothing had looked up.
-    const all = [...PAGES.map((page) => signedOutCopy(page)), GENESIS_UNPUBLISHED];
+    const all = PAGES.map((page) => signedOutCopy(page));
     for (const { headline, body } of all) {
       const text = `${headline} ${body}`;
       expect(text).not.toMatch(/\d/);

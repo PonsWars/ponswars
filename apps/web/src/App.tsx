@@ -13,14 +13,17 @@ import { Landing } from './landing/Landing.js';
 import { PreviewBanner } from './live/PreviewBanner.js';
 import { fetchBattleResult } from './live/round-client.js';
 import { useLiveProfile, type LiveProfile } from './live/useLiveProfile.js';
+import { useLiveGenesis, type LiveGenesis } from './live/useLiveGenesis.js';
 import { useLiveWorld } from './live/useLiveWorld.js';
 import { useWalletSession } from './live/useWalletSession.js';
 import { WalletSessionProvider } from './live/WalletSessionContext.js';
 import type { GenesisOutcome } from './genesis/GenesisReveal.js';
+import type { GenesisPageData } from './genesis/GenesisClaim.js';
+import { genesisViewFrom } from './genesis/genesis-view.js';
 import { Hud } from './hud/Hud.js';
 import { Presentations, type FinishedBattle } from './presentation/Presentations.js';
 import { formatTokenAmount } from './presentation/token-amount.js';
-import { GENESIS_UNPUBLISHED, failureCopy, type PersonalData } from './presentation/unpublished.js';
+import { failureCopy, type PersonalData } from './presentation/unpublished.js';
 import { warRoomFrom } from './profile/profile-view.js';
 import type { ProfileData } from './profile/WarRoom.js';
 import { activeWindowView, currentWindowView } from './rewards/reward-view.js';
@@ -306,6 +309,28 @@ const PLACEHOLDER_POOL: PoolStatus = { balance: '12.40' };
  * A personal page's data from the live profile, for as long as it is loading,
  * failed or arrived — and asking for a wallet when there is no session.
  */
+/** A Genesis claim, in the shape the Genesis page renders. */
+function fromLiveGenesis(live: LiveGenesis): PersonalData<GenesisPageData> {
+  switch (live.kind) {
+    case 'IDLE':
+      return { status: 'SIGNED_OUT' };
+    case 'LOADING':
+      return { status: 'LOADING' };
+    case 'FAILED':
+      return { status: 'FAILED', copy: failureCopy(live.failure), retry: live.retry };
+    case 'READY':
+      return {
+        status: 'READY',
+        value: {
+          view: genesisViewFrom(live.status),
+          request: live.request,
+          requesting: live.requesting,
+          requestFailure: live.requestFailure === null ? null : failureCopy(live.requestFailure),
+        },
+      };
+  }
+}
+
 function fromLiveProfile<T>(live: LiveProfile, shape: (profile: Profile) => T): PersonalData<T> {
   switch (live.kind) {
     case 'IDLE':
@@ -418,6 +443,12 @@ export function App(): JSX.Element {
       setWalletWarBalance(readWarBalance);
     }
   }, [liveProfile.kind, readWarBalance, setWalletWarBalance]);
+  // The wallet's Genesis claim, read while its page is open and kept current
+  // while its block is sealing.
+  const liveGenesis = useLiveGenesis(
+    status.live ? walletSession.authorization : null,
+    route.kind === 'GENESIS',
+  );
   const myBattleId = useSession((state) => state.myBattleId);
 
   /**
@@ -614,10 +645,16 @@ export function App(): JSX.Element {
           pool={status.live ? null : PLACEHOLDER_POOL}
           genesis={
             status.live
-              ? walletSession.authorization === null
-                ? { status: 'SIGNED_OUT' }
-                : { status: 'UNPUBLISHED', copy: GENESIS_UNPUBLISHED }
-              : { status: 'READY', value: PLACEHOLDER_GENESIS }
+              ? fromLiveGenesis(liveGenesis)
+              : {
+                  status: 'READY',
+                  value: {
+                    view: { kind: 'CARD', outcome: PLACEHOLDER_GENESIS },
+                    request: null,
+                    requesting: false,
+                    requestFailure: null,
+                  },
+                }
           }
           result={status.live ? finished : PLACEHOLDER_RESULT}
         />

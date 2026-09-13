@@ -3,7 +3,7 @@ import { NavBar } from '../hud/NavBar.js';
 import { controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
 import { useState, type JSX } from 'react';
 import type { ActiveTicker, ConfidenceLabel, FinalizedBattleResult } from '@ponswars/shared-types';
-import { GenesisReveal, type GenesisOutcome } from '../genesis/GenesisReveal.js';
+import { GenesisClaim, type GenesisPageData } from '../genesis/GenesisClaim.js';
 import { WarRoom, type ProfileData } from '../profile/WarRoom.js';
 import { RewardsHub, type PoolStatus } from '../rewards/RewardsHub.js';
 import { canTransitionClaim, type ClaimState, type RewardView } from '../rewards/reward-view.js';
@@ -40,8 +40,7 @@ export function Presentations({
   readonly profile: PersonalData<ProfileData>;
   readonly reward: PersonalData<RewardView>;
   readonly pool: PoolStatus | null;
-  /** `null` inside a ready value is a wallet with no claim — a real answer. */
-  readonly genesis: PersonalData<GenesisOutcome | null>;
+  readonly genesis: PersonalData<GenesisPageData>;
   readonly result: FinishedBattle | null;
 }): JSX.Element {
   const close = (): void => {
@@ -183,20 +182,9 @@ export function Presentations({
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
-          {personal('GENESIS', genesis, (value) =>
-            value === null ? (
-              // §42.14: say what is actually true rather than showing an empty
-              // ceremony. A wallet with no Genesis claim has nothing to reveal.
-              <EmptyState
-                headline="NO GENESIS CLAIM ON THIS WALLET"
-                body="Genesis Cards are revealed once, to the wallet that holds the claim. Nothing here is hidden from you — there is nothing on this wallet to open."
-                action="BACK TO THE WORLD →"
-                onAction={close}
-              />
-            ) : (
-              <GenesisReveal outcome={value} onDone={close} />
-            ),
-          )}
+          {personal('GENESIS', genesis, (value) => (
+            <GenesisClaim page={value} onDone={close} />
+          ))}
         </Overlay>
       );
   }
@@ -268,7 +256,11 @@ function LoadingState({ page }: { readonly page: PersonalPage }): JSX.Element {
       style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)', maxWidth: 560 }}
     >
       <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>
-        {page === 'REWARDS' ? 'READING YOUR WINDOW…' : 'READING YOUR RECORD…'}
+        {page === 'REWARDS'
+          ? 'READING YOUR WINDOW…'
+          : page === 'GENESIS'
+            ? 'READING YOUR GENESIS CLAIM…'
+            : 'READING YOUR RECORD…'}
       </h2>
       <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.55 }}>
         From the battles you have played and the War Points they earned.
