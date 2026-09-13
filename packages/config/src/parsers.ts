@@ -67,12 +67,12 @@ export function parseDecimalString(raw: string): ParseResult<string> {
  * Lowercasing here means an address compares equal regardless of the checksum
  * casing it was configured with.
  */
-export function parseAddress(raw: string): ParseResult<string> {
+export function parseAddress(raw: string): ParseResult<`0x${string}`> {
   const trimmed = raw.trim();
   if (!/^0x[0-9a-fA-F]{40}$/.test(trimmed)) {
     return fail('expected a 0x-prefixed 20-byte hex address');
   }
-  return ok(trimmed.toLowerCase());
+  return ok(trimmed.toLowerCase() as `0x${string}`);
 }
 
 /** An absolute URL restricted to an allowed protocol set. */

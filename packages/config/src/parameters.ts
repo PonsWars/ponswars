@@ -151,13 +151,13 @@ export const PARAMETERS = {
     group: 'chain',
     description: '$WAR token. Genesis eligibility reads its balance (§6).',
     parse: parseAddress,
-  } satisfies ParameterSpec<string>,
+  } satisfies ParameterSpec<`0x${string}`>,
 
   SPY_TOKEN_ADDRESS: {
     group: 'chain',
     description: 'SPY reward token for distributions and the Secret vault (§17, §18).',
     parse: parseAddress,
-  } satisfies ParameterSpec<string>,
+  } satisfies ParameterSpec<`0x${string}`>,
 
   SPY_TOKEN_DECIMALS: {
     group: 'chain',
@@ -176,13 +176,13 @@ export const PARAMETERS = {
     group: 'chain',
     description: 'RewardsDistributor contract, populated after deployment (§17).',
     parse: parseAddress,
-  } satisfies ParameterSpec<string>,
+  } satisfies ParameterSpec<`0x${string}`>,
 
   SECRET_STOCK_VAULT_ADDRESS: {
     group: 'chain',
     description: 'SecretStockVault contract, populated after deployment (§18).',
     parse: parseAddress,
-  } satisfies ParameterSpec<string>,
+  } satisfies ParameterSpec<`0x${string}`>,
 
   // -- Storage (docs/OPEN_PARAMETERS.md §3) ---------------------------------
   DATABASE_URL: {
