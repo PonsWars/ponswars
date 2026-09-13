@@ -23,23 +23,36 @@ be installed without the lockfile and the manifests of everything it depends on.
 
 ## Before anything else: what is still open
 
-**A deployment can open a round today. It cannot finish one.**
+**A deployment can run rounds end to end.** What it still lacks is a real market.
 
-§13.6 makes the finalization tiebreak depend on a finalized block hash, and the
-RPC vendor is an `OPEN` decision (`docs/OPEN_PARAMETERS.md` §1). The server has
-no chain client, so its chain port rejects rather than returning a constant — a
-predictable tiebreak is worse than a failed finalization, because a failed one
-gets looked at. The consequence is exactly what it sounds like: the driver
-raises at the first finalization and the process exits non-zero.
+PonsWars runs on **Robinhood Chain**. `CHAIN_ID` is `4663` for mainnet or
+`46630` for testnet, and `loadConfig` refuses any other id. `RPC_URL` is any
+Robinhood Chain JSON-RPC endpoint — Robinhood's public one
+(`https://rpc.mainnet.chain.robinhood.com`, `https://rpc.testnet.chain.robinhood.com`)
+works, and a vendor's works the same way; which vendor is `OPEN`
+(`docs/OPEN_PARAMETERS.md` §3). On startup the server asks the endpoint which
+chain it serves and exits if that is not `CHAIN_ID`, before it connects to
+anything else.
 
-That is the last thing blocking a first live round. The others matter but do not
-stop one:
+The chain is read for one thing today: §12.7's last tiebreak step. Only a battle
+level through every market component reaches it, and for that battle the server
+waits for the first Robinhood Chain block at or after the cutoff to be
+**finalized** and breaks the tie with its hash. Finalization trails the head by
+minutes, so a dead heat publishes that much later, and the log says so:
 
-| Decision           | Effect until it is made                                           |
-| ------------------ | ----------------------------------------------------------------- |
-| Chain RPC (§59.3)  | **No round can finalize.** The driver fails and the process exits |
-| Market data (§102) | Prices are synthetic; the banner says so on every start           |
-| Redis (§21.3)      | `REDIS_URL` is required and validated but nothing reads it yet    |
+```
+a battle is tied through every market component; waiting for the first Robinhood Chain block after … to be finalized
+```
+
+An endpoint that fails is retried every fifteen seconds and each failure is
+logged. A stop signal during the wait ends it without writing anything; the next
+start asks for the same block.
+
+| Decision                   | Effect until it is made                                         |
+| -------------------------- | --------------------------------------------------------------- |
+| Market data (§102)         | Prices are synthetic; the banner says so on every start         |
+| Robinhood Chain RPC vendor | The public endpoint works, with no uptime or rate-limit promise |
+| Redis (§21.3)              | `REDIS_URL` is required and validated but nothing reads it yet  |
 
 Authentication is no longer on that list. §45.2 is built: a wallet signs an
 EIP-4361 challenge, the signature is verified, and the session that comes back
@@ -49,9 +62,8 @@ deployment has to decide is how long a challenge and a session last — both are
 
 One limitation worth knowing before somebody reports it as a bug: a
 smart-contract wallet cannot sign in. EIP-1271 verification is a call to the
-wallet's own contract, which needs the chain client that does not exist yet, so
-a signature that does not recover to the expected address is refused. That is
-the same open decision as the tiebreak, arriving in a second place.
+wallet's own contract, and sign-in does not make chain calls, so a signature
+that does not recover to the expected address is refused.
 
 ## Configuration
 
