@@ -141,7 +141,8 @@ export const PARAMETERS = {
 
   RPC_URL: {
     group: 'chain',
-    description: 'Chain RPC endpoint (§59.3). Vendor choice is OPEN.',
+    description:
+      'Robinhood Chain JSON-RPC endpoint (§59.3), on the CHAIN_ID network; startup refuses one on another chain. Vendor choice is OPEN.',
     parse: (raw) => parseUrl(raw, ['http:', 'https:', 'ws:', 'wss:']),
     secret: true,
   } satisfies ParameterSpec<string>,
