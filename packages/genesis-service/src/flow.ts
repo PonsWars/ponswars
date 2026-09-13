@@ -99,6 +99,7 @@ export type GenesisStatus =
       readonly kind: 'NOT_ELIGIBLE_BALANCE';
       readonly balance: BaseUnits;
       readonly threshold: BaseUnits;
+      readonly decimals: TokenDecimals;
     }
   /** Bound to a block that is not finalized yet. */
   | {
@@ -178,6 +179,7 @@ export class GenesisFlow {
         kind: 'NOT_ELIGIBLE_BALANCE',
         balance,
         threshold: warThreshold(this.#deps.warDecimals),
+        decimals: this.#deps.warDecimals,
       };
     }
 

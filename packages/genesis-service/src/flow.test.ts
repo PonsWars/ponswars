@@ -77,6 +77,7 @@ describe('asking for a Genesis card (§6, §69.6)', () => {
       kind: 'NOT_ELIGIBLE_BALANCE',
       balance: MILLION - 1n,
       threshold: MILLION,
+      decimals: WAR,
     });
     expect(await repository.find(WALLET)).toBeNull();
   });
