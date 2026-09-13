@@ -141,6 +141,30 @@ describe('a damaged recording', () => {
     );
   });
 
+  it('refuses a pick that does not name its card, rather than paying assists for it', () => {
+    const pick = {
+      wallet: `0x${'1'.repeat(40)}`,
+      battleId: 'round-0000000000-b0',
+      backedTicker: 'NVDA',
+    };
+    // The shape picks had before cards were named: whether one went in, not which.
+    const legacy = damaged((draft) => ({ ...draft, picks: [{ ...pick, cardDeployed: true }] }));
+    const invented = damaged((draft) => ({
+      ...draft,
+      picks: [{ ...pick, deployedCard: 'NOT_A_CARD' }],
+    }));
+    const named = damaged((draft) => ({
+      ...draft,
+      picks: [{ ...pick, deployedCard: 'BULL_RUN' }],
+    }));
+    const none = damaged((draft) => ({ ...draft, picks: [{ ...pick, deployedCard: null }] }));
+
+    expect(() => decodeRecording(legacy)).toThrow(/deployedCard/);
+    expect(() => decodeRecording(invented)).toThrow(/deployedCard/);
+    expect(() => decodeRecording(named)).not.toThrow();
+    expect(() => decodeRecording(none)).not.toThrow();
+  });
+
   it('rejects tick logs that are not a list', () => {
     expect(() => decodeRecording(damaged((draft) => ({ ...draft, tickLogs: 'nope' })))).toThrow(
       TypeError,

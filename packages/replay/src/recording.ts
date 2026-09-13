@@ -10,7 +10,13 @@ import {
   type TickInput,
 } from '@ponswars/battle-engine';
 import type { Pairing } from '@ponswars/battle-math';
-import type { BattleId, CanonicalClock, RoundId, UtcTimestamp } from '@ponswars/shared-types';
+import {
+  CARD_TYPES,
+  type BattleId,
+  type CanonicalClock,
+  type RoundId,
+  type UtcTimestamp,
+} from '@ponswars/shared-types';
 
 /**
  * Recording and replaying a round (§26, §54).
@@ -265,5 +271,22 @@ function assertRecordingShape(value: unknown): asserts value is RoundRecording {
   }
   if (!Array.isArray(record['tickLogs']) || !Array.isArray(record['picks'])) {
     throw new TypeError('A recording carries tick logs and picks as arrays');
+  }
+  for (const pick of record['picks'] as unknown[]) {
+    // Every pick names its deployed card, or says none. Picks once said only
+    // whether a card went in (`cardDeployed`); a file in that shape has no
+    // `deployedCard` at all, and the engine would read the missing field as a
+    // deployment and pay a card assist on every winning pick. Refused by name,
+    // so the file is re-recorded rather than replayed into a wrong answer.
+    const card =
+      typeof pick === 'object' && pick !== null
+        ? (pick as Record<string, unknown>)['deployedCard']
+        : undefined;
+    if (card !== null && !CARD_TYPES.some((type) => type === card)) {
+      throw new TypeError(
+        'A recording pick needs deployedCard — a card from the catalog, or null. ' +
+          'Recordings from before cards were named (cardDeployed) cannot be replayed.',
+      );
+    }
   }
 }
