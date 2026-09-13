@@ -1,8 +1,11 @@
 import { PGlite } from '@electric-sql/pglite';
 import {
+  commitEntropy,
   ENTROPY_TARGET_DISTANCE,
   GenesisFlow,
   genesisRequestId,
+  openRequest,
+  resolveRequest,
   warThreshold,
   type GenesisChain,
 } from '@ponswars/genesis-service';
@@ -90,7 +93,7 @@ beforeEach(async () => {
     chain: blocks,
     warBalanceOf: () => Promise.resolve(warThreshold(WAR)),
     warDecimals: WAR,
-    secretAvailable: () => Promise.resolve(false),
+    secretVault: null,
     now: () => utcTimestamp((now += 1_000)),
   });
 });
@@ -188,7 +191,7 @@ describe('a Genesis claim in PostgreSQL', () => {
     ).rejects.toThrow(/entropy_target_block/);
   });
 
-  it('commits a held-back result without recording a card', async () => {
+  it('keeps a held-back commit, and deals from that committed hash on the next read', async () => {
     await genesis.request(wallet(1));
     const pending = await store.find(wallet(1));
     if (pending === null) throw new Error('expected a request');
@@ -205,7 +208,73 @@ describe('a Genesis claim in PostgreSQL', () => {
     expect(stored?.request.state).toBe('COMMITTED');
     expect(stored?.request.entropyBlockHash).toBe(hash);
     expect(stored?.claim).toBeNull();
-    expect((await genesis.status(wallet(1))).kind).toBe('SECRET_RESERVATION_PENDING');
+
+    // The next read finishes it from the entropy already committed, not from a
+    // block read again.
+    const finished = await genesis.status(wallet(1));
+    if (finished.kind !== 'READY') throw new Error(`expected a card, got ${finished.kind}`);
+    expect(finished.claim.entropyBlockHash).toBe(hash);
+  });
+
+  it('records a Secret with its entitlement, in the same transaction as the claim (§8.4)', async () => {
+    blocks.finalized = Number.MAX_SAFE_INTEGER;
+    const target = blocks.head + ENTROPY_TARGET_DISTANCE;
+    const hash = `0x${target.toString(16).padStart(64, '0')}`;
+    let secret: WalletAddress | null = null;
+    for (let n = 1; n < 20_000 && secret === null; n += 1) {
+      const candidate = wallet(n);
+      const request = commitEntropy(
+        openRequest(genesisRequestId(candidate), candidate, target, utcTimestamp(0)),
+        { number: target, hash },
+        utcTimestamp(0),
+      );
+      if (resolveRequest(request, true).outcome.rarity === 'SECRET') {
+        secret = candidate;
+      }
+    }
+    if (secret === null) throw new Error('no Secret draw in the search range');
+    const reservationTx = `0x${'5e'.repeat(32)}`;
+    const withVault = new GenesisFlow({
+      repository: store,
+      chain: blocks,
+      warBalanceOf: () => Promise.resolve(warThreshold(WAR)),
+      warDecimals: WAR,
+      secretVault: {
+        isCovered: () => Promise.resolve(true),
+        reserve: (who) =>
+          Promise.resolve({
+            kind: 'RESERVED',
+            reservation: {
+              entitlementId: `secret-${who}`,
+              amount: baseUnits(200_000_000_000_000_000n),
+              reservationTx,
+            },
+          }),
+      },
+      now: () => utcTimestamp(1_800_000_000_000),
+    });
+
+    const dealt = await withVault.request(secret);
+    if (dealt.kind !== 'READY') throw new Error(`expected a card, got ${dealt.kind}`);
+
+    expect(dealt.claim).toMatchObject({ rarity: 'SECRET', secretReservationTx: reservationTx });
+    const rows = await pg.query<{
+      wallet: string;
+      amount: string;
+      reservation_tx: string;
+      genesis_id: string;
+    }>(
+      'SELECT wallet, amount::text AS amount, reservation_tx, genesis_id FROM secret_entitlements',
+    );
+    expect(rows.rows).toEqual([
+      {
+        wallet: secret,
+        amount: '200000000000000000',
+        reservation_tx: reservationTx,
+        genesis_id: dealt.claim.genesisId,
+      },
+    ]);
+    expect((await store.find(secret))?.claim).toEqual(dealt.claim);
   });
 
   it('writes nothing for a wallet under the threshold', async () => {
@@ -214,7 +283,7 @@ describe('a Genesis claim in PostgreSQL', () => {
       chain: blocks,
       warBalanceOf: () => Promise.resolve(baseUnits(0n)),
       warDecimals: WAR,
-      secretAvailable: () => Promise.resolve(false),
+      secretVault: null,
       now: () => utcTimestamp(1_800_000_000_000),
     });
 

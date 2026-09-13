@@ -160,6 +160,22 @@ export class PostgresGenesisStore implements GenesisRepository {
           result.initialUses,
         ],
       );
+      // §8.4: a Secret is recorded only with its reservation, and the
+      // entitlement row is written in the same transaction as the claim — its
+      // existence is what proves the reveal was allowed (0006).
+      if (result.secretReservation !== null) {
+        await tx.query(
+          `INSERT INTO secret_entitlements (entitlement_id, genesis_id, wallet, amount, reservation_tx)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            result.secretReservation.entitlementId,
+            genesisId,
+            result.wallet,
+            result.secretReservation.amount.toString(),
+            result.secretReservation.reservationTx,
+          ],
+        );
+      }
       await tx.query(
         'UPDATE wallet_profiles SET genesis_claimed = TRUE, updated_at = now() WHERE wallet = $1',
         [result.wallet],
@@ -179,10 +195,11 @@ async function readStored(db: SqlExecutor, wallet: WalletAddress): Promise<Store
     `SELECT r.request_id, r.wallet, r.state, r.entropy_target_block, r.entropy_block_hash,
             r.requested_at, r.committed_at,
             c.genesis_id, c.seed, c.slot, c.secret_available, c.rarity, c.card, c.initial_uses,
-            c.rng_version, c.finalized_at, k.card_instance_id
+            c.rng_version, c.finalized_at, k.card_instance_id, s.reservation_tx
        FROM genesis_requests r
        LEFT JOIN genesis_claims c ON c.request_id = r.request_id
        LEFT JOIN cards k ON k.genesis_id = c.genesis_id
+       LEFT JOIN secret_entitlements s ON s.genesis_id = c.genesis_id
       WHERE r.wallet = $1
       ORDER BY r.requested_at DESC
       LIMIT 1`,
@@ -223,6 +240,7 @@ function claimOf(row: SqlRow, request: GenesisRequest): GenesisClaim {
     seed: text(row['seed']),
     secretAvailable: row['secret_available'] === true,
     rarityTableVersion: text(row['rng_version']),
+    secretReservationTx: row['reservation_tx'] == null ? null : text(row['reservation_tx']),
     finalizedAt: instant(row['finalized_at']),
   };
 }
