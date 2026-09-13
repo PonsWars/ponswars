@@ -91,6 +91,24 @@ export const hash32Schema = z
   .regex(/^0x[0-9a-fA-F]{64}$/, 'expected a 0x-prefixed 32-byte hash');
 
 /**
+ * Whether a result's tiebreak block agrees with its tiebreak step (§12.7).
+ *
+ * A block hash exactly when the chain-derived step decided the battle: a
+ * chain-decided result without one could not be checked, and a hash on a
+ * result the market decided would claim the chain was consulted when it was
+ * not. The database holds the same rule; this holds it on the wire.
+ */
+export function tiebreakBlockAgrees(result: {
+  readonly tiebreakStep?: string | undefined;
+  readonly tiebreakBlockHash?: string | undefined;
+}): boolean {
+  return (result.tiebreakStep === 'chainDerived') === (result.tiebreakBlockHash !== undefined);
+}
+
+export const TIEBREAK_BLOCK_MESSAGE =
+  'a tiebreak block hash is present exactly when the chain-derived step decided the battle';
+
+/**
  * A UTC timestamp in milliseconds.
  *
  * Integer only: a fractional millisecond would survive JSON and then compare

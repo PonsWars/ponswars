@@ -329,7 +329,7 @@ function describe(failure: PickFailure): { message: string; nextStep: string } {
 function toFinalizedResult(
   result: RoundFinalizedPayload['results'][number],
 ): FinalizedBattleResult {
-  const { battleId, roundId, finalizedAt, tiebreakStep, ...rest } = result;
+  const { battleId, roundId, finalizedAt, tiebreakStep, tiebreakBlockHash, ...rest } = result;
   return {
     ...rest,
     battleId: toBattleId(battleId),
@@ -338,5 +338,6 @@ function toFinalizedResult(
     // Destructured out above rather than spread over, because spreading leaves
     // the optional key in the type even when the value is absent.
     ...(tiebreakStep === undefined ? {} : { tiebreakStep }),
+    ...(tiebreakBlockHash === undefined ? {} : { tiebreakBlockHash }),
   };
 }

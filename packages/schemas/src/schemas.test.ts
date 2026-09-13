@@ -8,6 +8,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   apiErrorSchema,
+  battleResultSchema,
   currentRewardsSchema,
   liveBattleSchema,
   pickRequestSchema,
@@ -231,6 +232,18 @@ describe('ROUND_FINALIZED', () => {
     ).toBe(false);
   });
 
+  it('carries the block hash of a chain-decided tiebreak, and only of one (§12.7)', () => {
+    const block = `0x${'ab'.repeat(32)}`;
+    const withResult = (patch: object) =>
+      parseEventFrame(frame({ ...finalized, results: [{ ...result, ...patch }] })).ok;
+
+    expect(withResult({ tiebreakStep: 'chainDerived', tiebreakBlockHash: block })).toBe(true);
+    expect(withResult({ tiebreakStep: 'chainDerived' })).toBe(false);
+    expect(withResult({ tiebreakStep: 'ponsPower', tiebreakBlockHash: block })).toBe(false);
+    expect(withResult({ tiebreakBlockHash: block })).toBe(false);
+    expect(withResult({ tiebreakStep: 'chainDerived', tiebreakBlockHash: 'abc' })).toBe(false);
+  });
+
   it('accepts every declared victory label', () => {
     for (const victoryLabel of VICTORY_LABELS) {
       expect(
@@ -314,6 +327,33 @@ describe('API requests', () => {
 });
 
 describe('API responses', () => {
+  it('answers a chain-decided result with its block hash, and refuses one without (§12.7)', () => {
+    const base = {
+      battleId: 'round-0000000001-b0',
+      roundId: 'round-0000000001',
+      left: 'NVDA',
+      right: 'AAPL',
+      winner: 'AAPL',
+      leftScore: { priceMomentum: 22.5, relativeVolume: 12.5, ponsPower: 10, holderCardSupport: 5 },
+      rightScore: {
+        priceMomentum: 22.5,
+        relativeVolume: 12.5,
+        ponsPower: 10,
+        holderCardSupport: 5,
+      },
+      victoryLabel: 'NARROW_VICTORY',
+      tiebreakStep: 'chainDerived',
+      scoringEngineVersion: 'battle-engine-v1',
+      finalizedAt: T0 + 600_000,
+      evidenceHash: 'abc123',
+    };
+
+    expect(
+      battleResultSchema.safeParse({ ...base, tiebreakBlockHash: `0x${'ab'.repeat(32)}` }).success,
+    ).toBe(true);
+    expect(battleResultSchema.safeParse(base).success).toBe(false);
+  });
+
   it('cannot attach a score to a live battle', () => {
     // §47.1: a public battle response must not expose the hidden live score.
     const battle = {

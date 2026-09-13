@@ -12,6 +12,8 @@ import {
   hash32Schema,
   roundIdSchema,
   roundStateSchema,
+  tiebreakBlockAgrees,
+  TIEBREAK_BLOCK_MESSAGE,
   tiebreakStepSchema,
   sectorIdSchema,
   tickerSchema,
@@ -126,11 +128,14 @@ export const battleResultSchema = z
     rightScore: battleScoreBreakdownSchema,
     victoryLabel: victoryLabelSchema,
     tiebreakStep: tiebreakStepSchema.optional(),
+    /** The finalized Robinhood Chain block hash that broke a dead heat (§12.7). */
+    tiebreakBlockHash: hash32Schema.optional(),
     scoringEngineVersion: z.string().min(1),
     finalizedAt: utcTimestampSchema,
     evidenceHash: z.string().min(1),
   })
-  .strict();
+  .strict()
+  .refine(tiebreakBlockAgrees, { message: TIEBREAK_BLOCK_MESSAGE, path: ['tiebreakBlockHash'] });
 
 /**
  * What `GET /v1/rounds/{roundId}/pick` answers with (§47.5).

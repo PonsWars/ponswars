@@ -191,12 +191,20 @@ export async function fetchBattleResult(
     return null;
   }
 
-  const { battleId: id, roundId, finalizedAt, tiebreakStep, ...rest } = parsed.data;
+  const {
+    battleId: id,
+    roundId,
+    finalizedAt,
+    tiebreakStep,
+    tiebreakBlockHash,
+    ...rest
+  } = parsed.data;
   return {
     ...rest,
     battleId: toBattleId(id),
     roundId: toRoundId(roundId),
     finalizedAt: utcTimestamp(finalizedAt),
     ...(tiebreakStep === undefined ? {} : { tiebreakStep }),
+    ...(tiebreakBlockHash === undefined ? {} : { tiebreakBlockHash }),
   };
 }

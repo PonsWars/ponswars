@@ -774,6 +774,23 @@ describe('GET /v1/battles/:battleId/result', () => {
     expect(body.evidenceHash).toBe(`0x${'ab'.repeat(24)}`);
   });
 
+  it('answers a result the chain decided, with the block that decided it (§12.7)', async () => {
+    // The response schema is strict: before it knew the block hash, a
+    // chain-decided result failed to serialise and the link answered 500.
+    const battleId = round.battles[0]?.setup.battleId ?? '';
+    const block = `0x${'cd'.repeat(32)}`;
+    finalized.set(battleId, {
+      ...resultFor(battleId),
+      tiebreakStep: 'chainDerived',
+      tiebreakBlockHash: block,
+    });
+
+    const response = await app.inject({ method: 'GET', url: `/v1/battles/${battleId}/result` });
+
+    expect(response.statusCode).toBe(200);
+    expect(battleResultSchema.parse(response.json()).tiebreakBlockHash).toBe(block);
+  });
+
   it('needs no wallet', async () => {
     // §5: a result is public, and spectating is the normal case.
     const battleId = round.battles[0]?.setup.battleId ?? '';

@@ -15,6 +15,8 @@ import {
   sectorIdSchema,
   unitIntervalSchema,
   utcTimestampSchema,
+  tiebreakBlockAgrees,
+  TIEBREAK_BLOCK_MESSAGE,
   tiebreakStepSchema,
   victoryLabelSchema,
   visualEventCueSchema,
@@ -180,6 +182,8 @@ export const roundFinalizedPayloadSchema = z.object({
         victoryLabel: victoryLabelSchema,
         /** Present only when the totals tied and a step decided it (§12.7). */
         tiebreakStep: tiebreakStepSchema.optional(),
+        /** The finalized Robinhood Chain block hash that broke a dead heat (§12.7). */
+        tiebreakBlockHash: hash32Schema.optional(),
         /**
          * Provenance, so a result can be argued with rather than believed.
          *
@@ -195,6 +199,10 @@ export const roundFinalizedPayloadSchema = z.object({
       .refine((result) => result.winner === result.left || result.winner === result.right, {
         message: 'the winner must be one of the two participants',
         path: ['winner'],
+      })
+      .refine(tiebreakBlockAgrees, {
+        message: TIEBREAK_BLOCK_MESSAGE,
+        path: ['tiebreakBlockHash'],
       }),
   ),
   /**
