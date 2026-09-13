@@ -587,6 +587,61 @@ describe('reading a result back', () => {
     expect(read).toEqual(written);
   });
 
+  it('keeps the block hash a dead heat was broken with (§12.7)', async () => {
+    // Identical sides in every battle: each one reaches the chain-derived step.
+    const round = openRound();
+    await store.saveState(round);
+    let live = lockRound(round, at(60_000), []);
+    for (const battle of live.battles) {
+      live = tickBattle(live, battle.setup.battleId, tick(120_000), CONFIG);
+    }
+    const finalization = finalizeRound(live, at(600_000), BLOCK, CONFIG);
+    await store.saveFinalization(finalization);
+
+    const written = finalization.results[0]!;
+    const read = await readFinalizedResult(database(pg), written.battleId);
+
+    expect(written.tiebreakStep).toBe('chainDerived');
+    expect(read?.tiebreakBlockHash).toBe(BLOCK);
+    expect(read).toEqual(written);
+  });
+
+  it('refuses a chain-derived result without its block, or a block on any other result', async () => {
+    // Written by hand, past the engine: the table is the last line, and it has
+    // to hold against a writer that is not the engine too.
+    const round = openRound();
+    await store.saveState(round);
+
+    const insert = (tiebreak: string | null, hash: string | null) =>
+      pg.query(
+        `INSERT INTO battle_results (
+           battle_id, round_id, left_ticker, right_ticker, winner_ticker,
+           left_price_scaled, left_volume_scaled, left_pons_scaled, left_card_scaled,
+           right_price_scaled, right_volume_scaled, right_pons_scaled, right_card_scaled,
+           victory, tiebreak, tiebreak_block_hash, scoring_engine_version, evidence_hash
+         )
+         SELECT battle_id, round_id, left_ticker, right_ticker, left_ticker,
+                22500000, 12500000, 10000000, 5000000, 22500000, 12500000, 10000000, 5000000,
+                'NARROW_VICTORY', $2::tiebreak_step, $3, 'v', 'e'
+           FROM battles WHERE battle_id = $1`,
+        [round.battles[1]!.setup.battleId, tiebreak, hash],
+      );
+
+    await expect(insert('chainDerived', null)).rejects.toThrow(
+      /results_chain_tiebreak_names_its_block/,
+    );
+    await expect(insert(null, BLOCK)).rejects.toThrow(/results_chain_tiebreak_names_its_block/);
+    await expect(insert('priceMomentum', BLOCK)).rejects.toThrow(
+      /results_chain_tiebreak_names_its_block/,
+    );
+    await expect(insert('chainDerived', 'not-a-hash')).rejects.toThrow(
+      /results_tiebreak_block_hash_is_a_block_hash/,
+    );
+    // And the same row with its step and block agreeing is stored, so each
+    // refusal above is the constraint's and not a malformed insert's.
+    await expect(insert('chainDerived', BLOCK)).resolves.toBeDefined();
+  });
+
   it('keeps the four components exact', async () => {
     // §12 splits a hundred points 45/25/20/10 and the database enforces it. A
     // component read back through the wrong column would still sum to a

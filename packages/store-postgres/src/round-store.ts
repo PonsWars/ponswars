@@ -473,7 +473,8 @@ export async function readFinalizedResult(
     `SELECT battle_id, round_id, left_ticker, right_ticker, winner_ticker,
             left_price_scaled, left_volume_scaled, left_pons_scaled, left_card_scaled,
             right_price_scaled, right_volume_scaled, right_pons_scaled, right_card_scaled,
-            victory, tiebreak, scoring_engine_version, evidence_hash, finalized_at
+            victory, tiebreak, tiebreak_block_hash, scoring_engine_version, evidence_hash,
+            finalized_at
        FROM battle_results
       WHERE battle_id = $1`,
     [battleId],
@@ -508,6 +509,9 @@ export async function readFinalizedResult(
     ...(row['tiebreak'] === null || row['tiebreak'] === undefined
       ? {}
       : { tiebreakStep: text(row['tiebreak']) }),
+    ...(row['tiebreak_block_hash'] === null || row['tiebreak_block_hash'] === undefined
+      ? {}
+      : { tiebreakBlockHash: text(row['tiebreak_block_hash']) }),
     scoringEngineVersion: text(row['scoring_engine_version']),
     evidenceHash: text(row['evidence_hash']),
     finalizedAt: utcTimestamp(instant(row['finalized_at'])),
@@ -527,8 +531,8 @@ async function insertResult(tx: SqlExecutor, result: FinalizedBattleResult): Pro
        battle_id, round_id, left_ticker, right_ticker, winner_ticker,
        left_price_scaled, left_volume_scaled, left_pons_scaled, left_card_scaled,
        right_price_scaled, right_volume_scaled, right_pons_scaled, right_card_scaled,
-       victory, tiebreak, scoring_engine_version, evidence_hash, finalized_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+       victory, tiebreak, tiebreak_block_hash, scoring_engine_version, evidence_hash, finalized_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
      -- §25 makes a result immutable from the moment it exists, so a retried
      -- finalization must not rewrite one. Doing nothing is the correct answer,
      -- not an error to report.
@@ -549,6 +553,7 @@ async function insertResult(tx: SqlExecutor, result: FinalizedBattleResult): Pro
       result.rightScore.holderCardSupport,
       result.victoryLabel,
       result.tiebreakStep ?? null,
+      result.tiebreakBlockHash ?? null,
       result.scoringEngineVersion,
       result.evidenceHash,
       toTimestamp(result.finalizedAt),
