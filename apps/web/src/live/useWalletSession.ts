@@ -1,3 +1,4 @@
+import { chainLabel } from '@ponswars/shared-types';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '../state/session.js';
 import {
@@ -276,7 +277,7 @@ async function offerSwitch(
   if (!switched.ok) {
     return {
       kind: 'REFUSED',
-      message: `PonsWars runs on chain ${String(expected)} and your wallet is on another.`,
+      message: `PonsWars runs on ${chainLabel(expected)} and your wallet is on another network.`,
       nextStep: 'Switch networks in your wallet, then connect again.',
     };
   }
@@ -286,7 +287,7 @@ async function offerSwitch(
     ? { kind: 'DISCONNECTED' }
     : {
         kind: 'REFUSED',
-        message: `PonsWars runs on chain ${String(expected)}.`,
+        message: `PonsWars runs on ${chainLabel(expected)}.`,
         nextStep: 'Switch networks in your wallet, then connect again.',
       };
 }
@@ -301,7 +302,7 @@ function fromWallet(failure: WalletFailure): WalletStatus {
     case 'WRONG_CHAIN':
       return {
         kind: 'REFUSED',
-        message: `PonsWars runs on chain ${String(failure.expected)}.`,
+        message: `PonsWars runs on ${chainLabel(failure.expected)}.`,
         nextStep: 'Switch networks in your wallet, then connect again.',
       };
     case 'FAILED':
