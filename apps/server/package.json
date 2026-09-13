@@ -21,6 +21,7 @@
     "@ponswars/chain": "workspace:*",
     "@ponswars/config": "workspace:*",
     "@ponswars/gateway": "workspace:*",
+    "@ponswars/genesis-service": "workspace:*",
     "@ponswars/market-data": "workspace:*",
     "@ponswars/round-service": "workspace:*",
     "@ponswars/shared-types": "workspace:*",

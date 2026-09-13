@@ -163,6 +163,9 @@ importers:
       '@ponswars/gateway':
         specifier: workspace:*
         version: link:../gateway
+      '@ponswars/genesis-service':
+        specifier: workspace:*
+        version: link:../../packages/genesis-service
       '@ponswars/market-data':
         specifier: workspace:*
         version: link:../../packages/market-data

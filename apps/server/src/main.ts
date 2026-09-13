@@ -1,6 +1,13 @@
 import { bearer, buildServer } from '@ponswars/api';
 import { AuthService } from '@ponswars/auth';
-import { assertChain, assertTokenDecimals, RpcChainPort, robinhoodChainRpc } from '@ponswars/chain';
+import {
+  assertChain,
+  assertTokenDecimals,
+  finalizedBlockAt,
+  RpcChainPort,
+  robinhoodChainRpc,
+} from '@ponswars/chain';
+import { GenesisFlow } from '@ponswars/genesis-service';
 import {
   CURRENT_ENGINE_VERSIONS,
   type EngineConfig,
@@ -17,8 +24,10 @@ import {
   type RoundPorts,
 } from '@ponswars/round-service';
 import {
+  baseUnits,
   chainLabel,
   milliseconds,
+  tokenDecimals,
   utcTimestamp,
   type UtcTimestamp,
   type WalletAddress,
@@ -26,6 +35,7 @@ import {
 import {
   PostgresAuthStore,
   PostgresCardHoldings,
+  PostgresGenesisStore,
   PostgresPickStore,
   PostgresPlayerRecords,
   PostgresRoundStore,
@@ -263,6 +273,27 @@ async function main(): Promise<void> {
     warBalanceOf: async (wallet) => ({
       balance: await war.balanceOf(wallet),
       decimals: config.WAR_TOKEN_DECIMALS,
+    }),
+    // §6, §9: a Genesis card, dealt from the finalized hash of a Robinhood Chain
+    // block chosen before it existed, and recorded with its card in PostgreSQL.
+    genesis: new GenesisFlow({
+      repository: new PostgresGenesisStore(database),
+      chain: {
+        headBlock: async () => Number(await chain.latestBlockNumber()),
+        finalizedBlock: async (number) => {
+          const block = await finalizedBlockAt(chain, BigInt(number));
+          return block === null ? null : { number: Number(block.number), hash: block.hash };
+        },
+      },
+      warBalanceOf: async (wallet) => baseUnits(await war.balanceOf(wallet)),
+      warDecimals: tokenDecimals(config.WAR_TOKEN_DECIMALS),
+      // No Secret results yet. Revealing one needs its SPY reward reserved in
+      // the Secret Stock Vault first (§8.4, §76.5), and this service holds no
+      // key that can reserve — so the Secret band deals Legendary (§8.3), the
+      // rarity table records that it did, and no player is shown a Secret they
+      // could not be paid.
+      secretAvailable: () => Promise.resolve(false),
+      now,
     }),
     picks,
     config: CONFIG,

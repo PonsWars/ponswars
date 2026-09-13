@@ -15,6 +15,7 @@
     { "path": "../../packages/battle-engine/tsconfig.build.json" },
     { "path": "../../packages/chain/tsconfig.build.json" },
     { "path": "../../packages/config/tsconfig.build.json" },
+    { "path": "../../packages/genesis-service/tsconfig.build.json" },
     { "path": "../../packages/market-data/tsconfig.build.json" },
     { "path": "../../packages/round-service/tsconfig.build.json" },
     { "path": "../../packages/store-postgres/tsconfig.build.json" },
