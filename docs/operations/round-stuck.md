@@ -53,7 +53,11 @@ incident into two.
 
 Find what it is waiting on. The likely candidates:
 
-- the finalization block hash (§13.6) — the chain, not the engine
+- the finalization block hash (§12.7) — the chain, not the engine. Only a battle
+  tied through every market component needs it. While the server waits for the
+  block to be finalized it logs that it is waiting, and minutes is normal:
+  Robinhood Chain finalizes in batches. Repeated "tiebreak block read failed"
+  lines mean `RPC_URL` is failing; fix the endpoint and the wait resumes by itself
 - the evidence bundle write (§26)
 - the awards write
 
