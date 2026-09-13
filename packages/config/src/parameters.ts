@@ -1,3 +1,4 @@
+import { ROBINHOOD_CHAIN_NETWORKS, robinhoodChainNetwork } from '@ponswars/shared-types';
 import {
   parseAddress,
   parseDecimalString,
@@ -100,6 +101,29 @@ function parseOriginList(raw: string): ParseResult<readonly string[]> {
   return { ok: true, value: origins };
 }
 
+/**
+ * A Robinhood Chain network id.
+ *
+ * The masterplan fixes the network — *Network: Robinhood Chain* — so which of
+ * its networks is per-environment and which chain is not. Any other id is a
+ * deployment pointed somewhere PonsWars does not run, and a wallet signing in
+ * against it would be signing for the wrong chain, so it is refused at startup
+ * rather than discovered by the first player who tries.
+ */
+function parseRobinhoodChainId(raw: string): ParseResult<number> {
+  const parsed = parseInteger(raw, { min: 1 });
+  if (!parsed.ok) {
+    return parsed;
+  }
+  if (robinhoodChainNetwork(parsed.value) === null) {
+    const known = ROBINHOOD_CHAIN_NETWORKS.map(
+      (network) => `${String(network.chainId)} (${network.name})`,
+    ).join(' or ');
+    return { ok: false, error: `expected a Robinhood Chain network: ${known}` };
+  }
+  return parsed;
+}
+
 export const PARAMETERS = {
   NODE_ENV: {
     group: 'runtime',
@@ -110,8 +134,9 @@ export const PARAMETERS = {
   // -- Chain (docs/OPEN_PARAMETERS.md §1) -----------------------------------
   CHAIN_ID: {
     group: 'chain',
-    description: 'EVM chain ID. Per-environment; never inferred from the RPC response alone.',
-    parse: (raw) => parseInteger(raw, { min: 1 }),
+    description:
+      'Robinhood Chain network ID: 4663 mainnet or 46630 testnet. Per-environment; never inferred from the RPC response alone.',
+    parse: parseRobinhoodChainId,
   } satisfies ParameterSpec<number>,
 
   RPC_URL: {

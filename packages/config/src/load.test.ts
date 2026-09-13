@@ -185,6 +185,24 @@ describe('loadConfig failures', () => {
     expect(names).toEqual(['BATTLE_ENGINE_TICK_MS', 'CHAIN_ID', 'RPC_URL', 'SPY_TOKEN_ADDRESS']);
   });
 
+  it('accepts Robinhood Chain mainnet and testnet, and no other chain', () => {
+    expect(loadConfig(withOverride({ CHAIN_ID: '46630' })).CHAIN_ID).toBe(46630);
+
+    // Base, Base Sepolia and Ethereum mainnet: not where PonsWars runs.
+    for (const other of ['8453', '84532', '1']) {
+      let thrown: unknown;
+      try {
+        loadConfig(withOverride({ CHAIN_ID: other }));
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(ConfigError);
+      expect((thrown as ConfigError).issues[0]?.reason).toContain(
+        '4663 (Robinhood Chain) or 46630 (Robinhood Chain Testnet)',
+      );
+    }
+  });
+
   it('quotes the offending value for a non-secret parameter', () => {
     let thrown: unknown;
     try {
