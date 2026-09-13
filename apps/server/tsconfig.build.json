@@ -13,6 +13,7 @@
     { "path": "../../packages/auth/tsconfig.build.json" },
     { "path": "../../packages/battle-math/tsconfig.build.json" },
     { "path": "../../packages/battle-engine/tsconfig.build.json" },
+    { "path": "../../packages/chain/tsconfig.build.json" },
     { "path": "../../packages/config/tsconfig.build.json" },
     { "path": "../../packages/market-data/tsconfig.build.json" },
     { "path": "../../packages/round-service/tsconfig.build.json" },

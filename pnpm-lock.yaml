@@ -151,6 +151,9 @@ importers:
       '@ponswars/battle-math':
         specifier: workspace:*
         version: link:../../packages/battle-math
+      '@ponswars/chain':
+        specifier: workspace:*
+        version: link:../../packages/chain
       '@ponswars/config':
         specifier: workspace:*
         version: link:../../packages/config

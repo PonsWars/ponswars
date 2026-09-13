@@ -1,5 +1,6 @@
 import { bearer, buildServer } from '@ponswars/api';
 import { AuthService } from '@ponswars/auth';
+import { assertChain, RpcChainPort, rpcChainReader } from '@ponswars/chain';
 import {
   CURRENT_ENGINE_VERSIONS,
   type EngineConfig,
@@ -16,6 +17,7 @@ import {
   type RoundPorts,
 } from '@ponswars/round-service';
 import {
+  chainLabel,
   milliseconds,
   utcTimestamp,
   type UtcTimestamp,
@@ -61,6 +63,16 @@ import { connectPostgres } from './postgres.js';
  */
 
 const now = (): UtcTimestamp => utcTimestamp(Date.now());
+
+/**
+ * How often a finalization waiting on its tiebreak block asks the chain again.
+ *
+ * Robinhood Chain finalizes in batches minutes apart, so asking every second
+ * would spend RPC calls learning nothing; fifteen seconds adds at most that to
+ * a wait already measured in minutes. A constant with a reason, not an `OPEN`
+ * value (§102): no result depends on it, only how soon one is published.
+ */
+const TIEBREAK_POLL_MS = 15_000;
 
 /**
  * Engine calibration.
@@ -117,6 +129,23 @@ function marketFor(provider: MarketDataProvider): { port: MarketDataPort; real: 
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
 
+  // Before anything connects or binds. An RPC endpoint on another network
+  // would break ties from blocks on a chain PonsWars does not run on, and
+  // nothing about the hashes it returned would look wrong.
+  const chain = rpcChainReader(config.RPC_URL);
+  await assertChain(chain, config.CHAIN_ID);
+
+  /**
+   * Stops between rounds rather than mid-write (§25).
+   *
+   * An orchestrator sends `SIGTERM` and then waits before `SIGKILL`. What must
+   * not happen in that window is a finalization torn in half, so the driver is
+   * asked to stop after the step it is in and everything else comes down after
+   * it has. A finalization still waiting for its tiebreak block stops waiting:
+   * nothing was written, and the next start asks for the same block.
+   */
+  const stopping = new AbortController();
+
   const market = marketFor(config.MARKET_DATA_PROVIDER);
   const database = connectPostgres({
     connectionString: config.DATABASE_URL,
@@ -166,27 +195,33 @@ async function main(): Promise<void> {
   // by the time the process dies.
   await sockets.ready;
 
+  let waitingFor: UtcTimestamp | null = null;
   const ports: RoundPorts = {
     marketData: market.port,
     picks,
-    // §13.6: a finalized block hash is what makes the tiebreak unpredictable in
-    // advance. There is no chain client yet — §59.3 leaves the RPC vendor open
-    // — so this is the one port with no honest implementation, and it throws
-    // rather than returning a constant. A predictable tiebreak is worse than a
-    // failed finalization, which at least gets looked at.
-    //
-    // The loop only asks for it when a battle is tied through every market
-    // component, so every other round finalizes without it. A dead heat will
-    // stop finalization here until a chain client exists.
-    chain: {
-      finalizationBlockHash: () =>
-        Promise.reject(
-          new Error(
-            'No chain client configured. §13.6 needs a finalized block hash for the tiebreak; ' +
-              'the RPC vendor is an OPEN decision (docs/OPEN_PARAMETERS.md §1).',
-          ),
-        ),
-    },
+    // §12.7: the first Robinhood Chain block at or after the cutoff, once it is
+    // finalized, is what makes the last tiebreak step unpredictable in advance
+    // and checkable afterwards. The loop only asks when a battle is level
+    // through every market component, so every other round finalizes without
+    // touching the chain; a dead heat finalizes once its block is final.
+    chain: new RpcChainPort(chain, {
+      pollIntervalMs: TIEBREAK_POLL_MS,
+      signal: stopping.signal,
+      onWait: (cutoff) => {
+        if (waitingFor !== cutoff) {
+          waitingFor = cutoff;
+          say(
+            `a battle is tied through every market component; waiting for the first ` +
+              `Robinhood Chain block after ${new Date(cutoff).toISOString()} to be finalized
+`,
+          );
+        }
+      },
+      onRetry: (_cutoff, error) => {
+        say(`tiebreak block read failed, retrying: ${String(error)}
+`);
+      },
+    }),
     publisher: sockets.gateway,
     store,
   };
@@ -225,7 +260,15 @@ async function main(): Promise<void> {
     throw error;
   }
 
-  say(banner(config.API_PORT, config.GATEWAY_PORT, config.MARKET_DATA_PROVIDER, market.real));
+  say(
+    banner(
+      config.API_PORT,
+      config.GATEWAY_PORT,
+      config.CHAIN_ID,
+      config.MARKET_DATA_PROVIDER,
+      market.real,
+    ),
+  );
 
   /**
    * Housekeeping for the auth tables.
@@ -247,15 +290,6 @@ async function main(): Promise<void> {
   );
   housekeeping.unref();
 
-  /**
-   * Stops between rounds rather than mid-write (§25).
-   *
-   * An orchestrator sends `SIGTERM` and then waits before `SIGKILL`. What must
-   * not happen in that window is a finalization torn in half, so the driver is
-   * asked to stop after the step it is in and everything else comes down after
-   * it has.
-   */
-  const stopping = new AbortController();
   let shuttingDown = false;
   const shutdown = (signal: string): void => {
     if (shuttingDown) {
@@ -293,8 +327,8 @@ async function main(): Promise<void> {
     });
   } finally {
     clearInterval(housekeeping);
-    // `finally`, not the happy path. The driver can fail rather than stop —
-    // the chain port has no implementation and rejects (§13.6) — and without
+    // `finally`, not the happy path. The driver can fail rather than stop — a
+    // store write that fails, or a stop signal during a tiebreak wait — and without
     // this the process stayed up afterwards: the API kept the event loop
     // alive, so a service whose round loop had died went on answering
     // `/v1/ready` with `200` and serving the last round it saw, forever. A
@@ -311,6 +345,7 @@ async function main(): Promise<void> {
 function banner(
   apiPort: number,
   gatewayPort: number,
+  chainId: number,
   provider: MarketDataProvider,
   real: boolean,
 ): string {
@@ -319,6 +354,7 @@ function banner(
     'PonsWars server',
     `  API       :${String(apiPort)}   (health /v1/health, readiness /v1/ready)`,
     `  Gateway   :${String(gatewayPort)}`,
+    `  Chain     ${chainLabel(chainId)}`,
     `  Market    ${provider}`,
     ...(real
       ? []

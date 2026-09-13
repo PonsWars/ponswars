@@ -18,6 +18,7 @@
     "@ponswars/auth": "workspace:*",
     "@ponswars/battle-engine": "workspace:*",
     "@ponswars/battle-math": "workspace:*",
+    "@ponswars/chain": "workspace:*",
     "@ponswars/config": "workspace:*",
     "@ponswars/gateway": "workspace:*",
     "@ponswars/market-data": "workspace:*",
