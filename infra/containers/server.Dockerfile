@@ -18,15 +18,19 @@ RUN corepack enable
 
 # Manifests before sources. Everything below this layer is cached until a
 # dependency actually changes, which is the difference between a thirty-second
-# rebuild and a four-minute one.
+# rebuild and a four-minute one. Every workspace package the server depends on,
+# directly or not, needs a line here: `apps/server/src/container-images.test.ts`
+# checks the list.
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
 COPY apps/api/package.json apps/api/
 COPY apps/gateway/package.json apps/gateway/
 COPY apps/server/package.json apps/server/
+COPY packages/auth/package.json packages/auth/
 COPY packages/battle-engine/package.json packages/battle-engine/
 COPY packages/battle-math/package.json packages/battle-math/
 COPY packages/config/package.json packages/config/
 COPY packages/market-data/package.json packages/market-data/
+COPY packages/player-service/package.json packages/player-service/
 COPY packages/realtime/package.json packages/realtime/
 COPY packages/round-service/package.json packages/round-service/
 COPY packages/schemas/package.json packages/schemas/
