@@ -15,6 +15,8 @@
  * that is somewhere else by design.
  */
 
+import { robinhoodChainNetwork } from '@ponswars/shared-types';
+
 /** The slice of EIP-1193 this uses. */
 export interface Eip1193Provider {
   request(args: {
@@ -46,6 +48,14 @@ export type WalletResult<T> =
  * broke something by changing their mind.
  */
 const USER_REJECTED = 4001;
+
+/**
+ * EIP-3326's code for a switch to a chain the wallet has never been told about.
+ *
+ * The usual answer for Robinhood Chain: a wallet ships knowing a handful of
+ * networks, and a player's first visit is when it learns this one.
+ */
+const UNRECOGNIZED_CHAIN = 4902;
 
 /** The injected provider, or `null` when there is no wallet in this browser. */
 export function browserProvider(): Eip1193Provider | null {
@@ -95,19 +105,48 @@ export async function currentChain(provider: Eip1193Provider): Promise<number> {
  *
  * Offered rather than required: a player can switch in their wallet instead,
  * and a client that treats a refusal here as fatal has taken away the choice.
+ *
+ * A wallet that does not know the chain is offered it (EIP-3085) — but only a
+ * Robinhood Chain network, described from the table Robinhood publishes. The id
+ * comes from the server, and a page that would add whatever network a response
+ * named is a page that can be made to add a hostile RPC endpoint.
  */
 export async function switchChain(
   provider: Eip1193Provider,
   chainId: number,
 ): Promise<WalletResult<void>> {
+  const hexChainId = `0x${chainId.toString(16)}`;
   try {
     await provider.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: `0x${chainId.toString(16)}` }],
+      params: [{ chainId: hexChainId }],
     });
     return { ok: true, value: undefined };
   } catch (error: unknown) {
-    return { ok: false, failure: describe(error) };
+    const network = robinhoodChainNetwork(chainId);
+    if (!isUnrecognizedChain(error) || network === null) {
+      return { ok: false, failure: describe(error) };
+    }
+    try {
+      // Adding a network asks the player to approve it and, in the wallets
+      // that implement it, switches to it on approval. The caller reads the
+      // chain back either way rather than trusting that it did.
+      await provider.request({
+        method: 'wallet_addEthereumChain',
+        params: [
+          {
+            chainId: hexChainId,
+            chainName: network.name,
+            nativeCurrency: network.nativeCurrency,
+            rpcUrls: [network.publicRpcUrl],
+            blockExplorerUrls: [network.explorerUrl],
+          },
+        ],
+      });
+      return { ok: true, value: undefined };
+    } catch (addError: unknown) {
+      return { ok: false, failure: describe(addError) };
+    }
   }
 }
 
@@ -137,12 +176,36 @@ export async function signMessage(
   }
 }
 
+function codeOf(error: unknown): unknown {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? (error as { code?: unknown }).code
+    : undefined;
+}
+
+/**
+ * Whether a switch failed because the wallet does not know the chain.
+ *
+ * MetaMask Mobile reports it one level down, under `data.originalError`, so
+ * both places are read.
+ */
+function isUnrecognizedChain(error: unknown): boolean {
+  if (codeOf(error) === UNRECOGNIZED_CHAIN) {
+    return true;
+  }
+  const data =
+    typeof error === 'object' && error !== null && 'data' in error
+      ? (error as { data?: unknown }).data
+      : undefined;
+  const original =
+    typeof data === 'object' && data !== null && 'originalError' in data
+      ? (data as { originalError?: unknown }).originalError
+      : undefined;
+  return codeOf(original) === UNRECOGNIZED_CHAIN;
+}
+
 function describe(error: unknown): WalletFailure {
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    const { code } = error as { code?: unknown };
-    if (code === USER_REJECTED) {
-      return { kind: 'DECLINED' };
-    }
+  if (codeOf(error) === USER_REJECTED) {
+    return { kind: 'DECLINED' };
   }
   return {
     kind: 'FAILED',
