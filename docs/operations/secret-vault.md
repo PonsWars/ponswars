@@ -27,6 +27,17 @@ totalReserved`, and the contract tests cover it.
 An operator reading the raw vault balance and concluding there is coverage is
 the most likely way this goes wrong.
 
+## In this build, Secret is off
+
+The Genesis service deals cards today, but it holds no key with the vault's
+reserver role, so it cannot reserve a Secret reward before revealing one. It
+therefore treats Secret as unavailable whatever the vault holds: the Secret band
+deals Legendary, and each claim records `rarity-table-v1-secret-disabled`.
+
+Funding the vault does not turn Secret on. Wiring a reserver does — and until
+then, a funded vault is coverage no player can reach, which is safe and is also
+worth knowing before anyone announces Secret as live.
+
 ## When coverage runs out
 
 This is **not an incident**. It is a designed state.

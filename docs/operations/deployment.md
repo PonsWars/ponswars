@@ -43,7 +43,23 @@ A signed-in wallet's profile carries its `$WAR` balance, read at the latest
 block when the profile is asked for. A read that fails or takes longer than
 2.5 seconds answers `UNAVAILABLE`, and the rest of the profile arrives anyway.
 
-The chain decides one thing: §12.7's last tiebreak step. Only a battle
+The chain decides two things.
+
+**Genesis cards (§6, §9).** A signed-in wallet holding at least 1,000,000 `$WAR`
+asks once, and its one request is bound to a block ten past the Robinhood Chain
+head — a block that does not exist yet. The card is dealt from that block's hash
+once the block is **finalized**, which is usually around twenty minutes; the
+Genesis page waits and re-reads on its own. The claim, the card with its charges
+and the wallet's claimed flag are written in one transaction, and a claim cannot
+be updated or deleted. Every card recomputes with `pnpm run audit:genesis`.
+
+**Secret results are off.** Revealing a Secret needs its SPY reward reserved in
+the Secret Stock Vault first (§8.4, §76.5), and this service holds no key with
+the vault's reserver role. So the Secret band deals Legendary (§8.3) and each
+claim records the `rarity-table-v1-secret-disabled` table it was dealt under.
+Funding the vault does not change that on its own; wiring a reserver does.
+
+**The last tiebreak step (§12.7).** Only a battle
 level through every market component reaches it, and for that battle the server
 waits for the first Robinhood Chain block at or after the cutoff to be
 **finalized** and breaks the tie with its hash. Finalization trails the head by
@@ -60,6 +76,7 @@ start asks for the same block.
 | Decision                   | Effect until it is made                                         |
 | -------------------------- | --------------------------------------------------------------- |
 | Market data (§102)         | Prices are synthetic; the banner says so on every start         |
+| Secret reservation signer  | Secret results are off; their band deals Legendary (§8.3)       |
 | Robinhood Chain RPC vendor | The public endpoint works, with no uptime or rate-limit promise |
 | Redis (§21.3)              | `REDIS_URL` is required and validated but nothing reads it yet  |
 

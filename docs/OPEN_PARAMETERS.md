@@ -28,20 +28,21 @@ formula is locked, the constants inside it are not.
 
 ## 1. Launch and treasury (§59.1, §102)
 
-| Parameter                                   | Status     | Notes                                                                                                              |
-| ------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------ |
-| Pons V2 creator-tax rate                    | `OPEN`     | Determines realized fee revenue feeding both pools.                                                                |
-| `$WAR` / SPY pair support and configuration | `OPEN`     | Must be confirmed against the production Robinhood Chain / Stock Token environment.                                |
-| Initial Rewards Distribution pool funding   | `OPEN`     | Manual funding; no promised amount (§30, §16.1).                                                                   |
-| Initial Secret Stock Vault funding          | `OPEN`     | Gates whether Secret RNG is active at launch (§8.3).                                                               |
-| Production multisig signers and threshold   | `OPEN`     | Required before any treasury-sensitive action (§20).                                                               |
-| Minimum claim threshold                     | `BASELINE` | Masterplan example is `0.001 SPY` (§16.7). Confirm before launch.                                                  |
-| SPY token decimals                          | `OPEN`     | Needed to convert the locked `0.2 SPY` Secret reward into base units. Read from chain at startup; never assume 18. |
-| SPY token address                           | `OPEN`     | Per-environment.                                                                                                   |
-| Chain ID                                    | `OPEN`     | Per-environment, but only ever Robinhood Chain: `4663` mainnet or `46630` testnet. `loadConfig` refuses any other. |
-| `$WAR` token address                        | `OPEN`     | Per-environment. Genesis eligibility reads its balance.                                                            |
-| `RewardsDistributor` address                | `OPEN`     | Populated after deployment.                                                                                        |
-| `SecretStockVault` address                  | `OPEN`     | Populated after deployment.                                                                                        |
+| Parameter                                   | Status     | Notes                                                                                                                 |
+| ------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------- |
+| Pons V2 creator-tax rate                    | `OPEN`     | Determines realized fee revenue feeding both pools.                                                                   |
+| `$WAR` / SPY pair support and configuration | `OPEN`     | Must be confirmed against the production Robinhood Chain / Stock Token environment.                                   |
+| Initial Rewards Distribution pool funding   | `OPEN`     | Manual funding; no promised amount (§30, §16.1).                                                                      |
+| Initial Secret Stock Vault funding          | `OPEN`     | Gates whether Secret RNG is active at launch (§8.3).                                                                  |
+| Secret reservation signer                   | `OPEN`     | The key holding the vault's reserver role. Until one is wired, Secret results are off and their band deals Legendary. |
+| Production multisig signers and threshold   | `OPEN`     | Required before any treasury-sensitive action (§20).                                                                  |
+| Minimum claim threshold                     | `BASELINE` | Masterplan example is `0.001 SPY` (§16.7). Confirm before launch.                                                     |
+| SPY token decimals                          | `OPEN`     | Needed to convert the locked `0.2 SPY` Secret reward into base units. Read from chain at startup; never assume 18.    |
+| SPY token address                           | `OPEN`     | Per-environment.                                                                                                      |
+| Chain ID                                    | `OPEN`     | Per-environment, but only ever Robinhood Chain: `4663` mainnet or `46630` testnet. `loadConfig` refuses any other.    |
+| `$WAR` token address                        | `OPEN`     | Per-environment. Genesis eligibility reads its balance.                                                               |
+| `RewardsDistributor` address                | `OPEN`     | Populated after deployment.                                                                                           |
+| `SecretStockVault` address                  | `OPEN`     | Populated after deployment.                                                                                           |
 
 ## 2. Data and scoring calibration (§59.2, §102)
 

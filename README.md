@@ -134,8 +134,10 @@ Once signed in, **PROFILE** and **REWARDS** show the wallet's own record from
 `GET /v1/profile` — battles, wins, upsets, War Points and the current
 distribution window. A deployment also reads the wallet's `$WAR` balance from
 Robinhood Chain; the local stack reads no chain, so there it reads as not
-published. The Genesis card and the pool balance are not read from the chain
-yet, and say so rather than showing an empty card or a zero.
+published. A deployment deals Genesis cards too — from a finalized Robinhood
+Chain block, to a wallet holding a million `$WAR` — and shows the card on the
+profile; the local stack cannot, and says so. The pool balance is not read from
+the chain yet.
 
 ## Operator tools
 
@@ -320,9 +322,9 @@ A wallet connects for real (§45.2). It signs an EIP-4361 challenge, the
 signature becomes a session that lives in PostgreSQL, and that session
 authenticates both the writes and the socket — a browser cannot put a header on
 a WebSocket, so the client proves its wallet in a frame before it subscribes to
-anything. The `$WAR` balance comes from Robinhood Chain where the server reads
-it; the Genesis card and reward pool are not read yet, and the client shows a
-dash rather than a zero for a figure nobody has read.
+anything. The `$WAR` balance and the Genesis card come from Robinhood Chain and
+PostgreSQL where the server reads them; the reward pool is not read yet, and the
+client shows a dash rather than a zero for a figure nobody has read.
 
 Design tokens are transcribed into `@ponswars/ui-tokens` from the design-token
 specification, with a test asserting the stylesheet and the typed constants
