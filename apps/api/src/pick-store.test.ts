@@ -89,8 +89,8 @@ describe('a card at lock', () => {
     const store = new PickStore(
       new MemoryCardHoldings(
         new Map([
-          [wallet(1), { cardInstanceId: 'card-1', remainingUses: 2 }],
-          [wallet(2), { cardInstanceId: 'card-2', remainingUses: 0 }],
+          [wallet(1), { cardInstanceId: 'card-1', cardType: 'BULL_RUN', remainingUses: 2 }],
+          [wallet(2), { cardInstanceId: 'card-2', cardType: 'WAR_MACHINE', remainingUses: 0 }],
         ]),
       ),
     );
@@ -100,10 +100,10 @@ describe('a card at lock', () => {
 
     const locked = await store.lockedPicks(ROUND);
 
-    expect(locked.map((entry) => [entry.wallet, entry.cardDeployed])).toEqual([
-      [wallet(1), true],
-      [wallet(2), false],
-      [wallet(3), false],
+    expect(locked.map((entry) => [entry.wallet, entry.deployedCard])).toEqual([
+      [wallet(1), 'BULL_RUN'],
+      [wallet(2), null],
+      [wallet(3), null],
     ]);
   });
 });

@@ -151,7 +151,7 @@ function finishedRound(state: RoundEngineState, walletCount: number) {
       wallet: wallet(index + 1),
       battleId: battle.setup.battleId,
       backedTicker: battle.setup.left,
-      cardDeployed: index % 3 === 0,
+      deployedCard: index % 3 === 0 ? ('REINFORCEMENT' as const) : null,
     };
   });
 

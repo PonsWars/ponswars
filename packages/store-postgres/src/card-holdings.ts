@@ -1,5 +1,5 @@
 import type { CardHolding, CardHoldings } from '@ponswars/round-service';
-import type { WalletAddress } from '@ponswars/shared-types';
+import { CARD_TYPES, type WalletAddress } from '@ponswars/shared-types';
 import type { SqlExecutor } from './sql.js';
 
 /**
@@ -21,15 +21,21 @@ export class PostgresCardHoldings implements CardHoldings {
 
   async cardOf(wallet: WalletAddress): Promise<CardHolding | null> {
     const { rows } = await this.#db.query(
-      'SELECT card_instance_id, remaining_uses FROM cards WHERE wallet = $1',
+      'SELECT card_instance_id, card, remaining_uses FROM cards WHERE wallet = $1',
       [wallet],
     );
     const row = rows[0];
-    return row === undefined
-      ? null
-      : {
-          cardInstanceId: String(row['card_instance_id']),
-          remainingUses: Number(row['remaining_uses']),
-        };
+    if (row === undefined) {
+      return null;
+    }
+    const cardType = CARD_TYPES.find((type) => type === row['card']);
+    if (cardType === undefined) {
+      throw new TypeError(`Stored card ${String(row['card'])} is not in the card catalog`);
+    }
+    return {
+      cardInstanceId: String(row['card_instance_id']),
+      cardType,
+      remainingUses: Number(row['remaining_uses']),
+    };
   }
 }

@@ -1,4 +1,5 @@
 import {
+  aggregateCardSupport,
   battleIdFor,
   matchupConfidence,
   scheduleRound,
@@ -14,6 +15,7 @@ import {
   type ActiveTicker,
   type BattleId,
   type CanonicalClock,
+  type CardType,
   type FinalizedBattleResult,
   type RoundId,
   type RoundState,
@@ -27,6 +29,7 @@ import {
   finalizeBattle,
   openBattle,
   type BattleEngineState,
+  type BattleSetup,
   type EngineConfig,
   type TickInput,
 } from './engine.js';
@@ -48,7 +51,36 @@ export interface LockedPick {
   readonly wallet: WalletAddress;
   readonly battleId: BattleId;
   readonly backedTicker: ActiveTicker;
-  readonly cardDeployed: boolean;
+  /**
+   * The card deployed behind this pick, or `null` when none was.
+   *
+   * The card itself rather than whether there was one, because what it is
+   * decides how much support it gives the side it backs (§7.2, §12.4) — and
+   * one field cannot disagree with itself about whether a card went in.
+   */
+  readonly deployedCard: CardType | null;
+}
+
+/**
+ * Each side's card support in a battle, from the picks frozen at lock (§23.1).
+ *
+ * Exported so a round restored from storage rebuilds the same snapshot from the
+ * same picks, rather than a second summing that could drift from this one.
+ */
+export function battleCardSupport(
+  setup: BattleSetup,
+  picks: readonly LockedPick[],
+): BattleEngineState['cardSupport'] {
+  const side = (ticker: ActiveTicker): CardType[] =>
+    picks.flatMap((pick) =>
+      pick.battleId === setup.battleId && pick.backedTicker === ticker && pick.deployedCard !== null
+        ? [pick.deployedCard]
+        : [],
+    );
+  return {
+    left: aggregateCardSupport(side(setup.left)),
+    right: aggregateCardSupport(side(setup.right)),
+  };
 }
 
 /** A War Point award produced by finalization (§11, §49.10). */
@@ -188,7 +220,10 @@ export function lockRound(
     ...state,
     state: 'BATTLE_LIVE',
     picks,
-    battles: state.battles.map((battle) => openBattle(battle, at)),
+    battles: state.battles.map((battle) => ({
+      ...openBattle(battle, at),
+      cardSupport: battleCardSupport(battle.setup, picks),
+    })),
   };
 }
 
@@ -320,7 +355,7 @@ function awardsFor(
 
     awards.push({ wallet: pick.wallet, battleId: pick.battleId, reason, points: base });
 
-    if (pick.cardDeployed) {
+    if (pick.deployedCard !== null) {
       awards.push({
         wallet: pick.wallet,
         battleId: pick.battleId,

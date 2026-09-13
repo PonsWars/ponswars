@@ -5,6 +5,7 @@ import {
   type RoundEngineState,
 } from '@ponswars/battle-engine';
 import {
+  aggregateCardSupport,
   NO_CARD_SUPPORT,
   RATIO_SCALE,
   clockForRound,
@@ -152,7 +153,7 @@ describe('locking', () => {
           wallet: wallet(1),
           battleId: first.setup.battleId,
           backedTicker: first.setup.left,
-          cardDeployed: false,
+          deployedCard: null,
         },
       ],
     });
@@ -188,6 +189,41 @@ describe('ticking', () => {
     const locked = await stepRound(openRound(), CLOCK.lockAt, p, CONFIG);
     return locked.state;
   }
+
+  it('scores every tick with the battle’s card support, whatever the feed reports', async () => {
+    // Card support is snapshotted at lock (§23.1); a market feed cannot know
+    // it, and a feed that put a figure there must not move the card component.
+    const first = openRound().battles[0];
+    if (first === undefined) {
+      throw new Error('round has no battles');
+    }
+    const p = ports({
+      market: (ticker) => ({
+        ...healthy(ticker),
+        inputs: {
+          ...healthy(ticker).inputs,
+          cardSupport: { market: 9_999n, volume: 9_999n, pons: 9_999n, general: 9_999n },
+        },
+      }),
+      picks: [
+        {
+          wallet: wallet(1),
+          battleId: first.setup.battleId,
+          backedTicker: first.setup.left,
+          deployedCard: 'GOLDEN_ARMY',
+        },
+      ],
+    });
+    const live = await liveRound(p);
+
+    const ticked = await stepRound(live, at(2 * 60_000), p, CONFIG);
+    const battle = ticked.state.battles.find((b) => b.setup.battleId === first.setup.battleId);
+    const other = ticked.state.battles.find((b) => b.setup.battleId !== first.setup.battleId);
+
+    expect(battle?.lastLeft?.cardSupport).toEqual(aggregateCardSupport(['GOLDEN_ARMY']));
+    expect(battle?.lastRight?.cardSupport).toEqual(NO_CARD_SUPPORT);
+    expect(other?.lastLeft?.cardSupport).toEqual(NO_CARD_SUPPORT);
+  });
 
   it('scores every battle from one instant', async () => {
     const p = ports();
@@ -318,7 +354,7 @@ describe('a full round through the loop', () => {
       wallet: wallet(index + 1),
       battleId: first.setup.battleId,
       backedTicker: index % 2 === 0 ? first.setup.left : first.setup.right,
-      cardDeployed: index % 5 === 0,
+      deployedCard: index % 5 === 0 ? ('REINFORCEMENT' as const) : null,
     }));
 
     const p = ports({ picks });
@@ -371,7 +407,7 @@ describe('the published contract', () => {
           wallet: wallet(1),
           battleId: first.setup.battleId,
           backedTicker: first.setup.left,
-          cardDeployed: false,
+          deployedCard: null,
         },
       ],
     });

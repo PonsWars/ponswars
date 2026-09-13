@@ -135,8 +135,11 @@ async function performTick(
       battle,
       {
         at: now,
-        left: left.inputs,
-        right: right.inputs,
+        // Card support is the battle's own, snapshotted at lock (§23.1), not
+        // something a market feed could know. Whatever the feed put there is
+        // replaced, so a market adapter cannot move the card component.
+        left: { ...left.inputs, cardSupport: battle.cardSupport.left },
+        right: { ...right.inputs, cardSupport: battle.cardSupport.right },
         leftHealth: left.health,
         rightHealth: right.health,
       },

@@ -91,16 +91,20 @@ export class PickStore implements PickRepository {
     );
     // Asked again at lock, not trusted from when the card was armed: the card
     // is deployed now, and only if it can be now (§40.7).
-    const deployable = await Promise.all(
-      picks.map(async (pick) =>
-        pick.cardDecision === 'USE' ? canDeploy(await this.cards.cardOf(pick.wallet)) : false,
-      ),
+    const deployed = await Promise.all(
+      picks.map(async (pick) => {
+        if (pick.cardDecision !== 'USE') {
+          return null;
+        }
+        const holding = await this.cards.cardOf(pick.wallet);
+        return holding !== null && canDeploy(holding) ? holding.cardType : null;
+      }),
     );
     return picks.map((pick, index) => ({
       wallet: pick.wallet,
       battleId: pick.battleId,
       backedTicker: pick.backedTicker,
-      cardDeployed: deployable[index] === true,
+      deployedCard: deployed[index] ?? null,
     }));
   }
 

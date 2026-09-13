@@ -106,14 +106,24 @@ function playedRound(): RoundFinalization {
   }
 
   let state = lockRound({ ...round, state: 'PICK_OPEN' }, at(60_000), [
-    { wallet: wallet(1), battleId: first.battleId, backedTicker: first.left, cardDeployed: true },
+    {
+      wallet: wallet(1),
+      battleId: first.battleId,
+      backedTicker: first.left,
+      deployedCard: 'BULL_RUN',
+    },
     {
       wallet: wallet(2),
       battleId: second.battleId,
       backedTicker: second.right,
-      cardDeployed: false,
+      deployedCard: null,
     },
-    { wallet: wallet(3), battleId: fifth.battleId, backedTicker: fifth.left, cardDeployed: true },
+    {
+      wallet: wallet(3),
+      battleId: fifth.battleId,
+      backedTicker: fifth.left,
+      deployedCard: 'BULL_RUN',
+    },
   ]);
   // Every battle but the last is scored with the left side clearly ahead.
   for (const battle of battles.slice(0, 4)) {

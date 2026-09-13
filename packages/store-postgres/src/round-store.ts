@@ -1,25 +1,24 @@
 import {
   EMPTY_EVIDENCE,
+  battleCardSupport,
   sectorIds,
   type BattleEngineState,
-  type LockedPick,
   type RoundEngineState,
   type RoundFinalization,
   type WpAward,
 } from '@ponswars/battle-engine';
-import { INITIAL_MOMENTUM_MEMORY, type SideInputs } from '@ponswars/battle-math';
+import { INITIAL_MOMENTUM_MEMORY, NO_CARD_SUPPORT, type SideInputs } from '@ponswars/battle-math';
 import type { RoundStorePort } from '@ponswars/round-service';
 import {
   battleId as toBattleId,
   buildCanonicalClock,
-  isActiveTicker,
   roundId as toRoundId,
   utcTimestamp,
-  walletAddress,
   type CanonicalClock,
   type ConfidenceSnapshot,
   type FinalizedBattleResult,
 } from '@ponswars/shared-types';
+import { readFrozenPicks } from './pick-store.js';
 import type { SqlDatabase, SqlExecutor, SqlRow } from './sql.js';
 
 /**
@@ -161,38 +160,6 @@ export class PostgresRoundStore implements RoundStorePort {
    * rather than a missing one: it resumes exactly where an unscored battle
    * starts.
    */
-  /**
-   * The picks a round froze at lock, or none if it has not locked (§22, §25).
-   *
-   * Read back from the columns the pick store froze, in the order it froze
-   * them. A round restored after its lock needs them as much as it needs its
-   * scores: finalization pays War Points to exactly these picks. This returned
-   * none at all once, on the reasoning that the battles had already consumed
-   * them — and a restart during a live battle then finalized a round that paid
-   * nobody.
-   */
-  private async frozenPicks(roundId: string): Promise<readonly LockedPick[]> {
-    const { rows } = await this.db.query(
-      `SELECT wallet, locked_battle_id, locked_ticker, locked_card_decision
-         FROM player_picks
-        WHERE round_id = $1 AND locked_at IS NOT NULL
-        ORDER BY wallet COLLATE "C"`,
-      [roundId],
-    );
-    return rows.map((row) => {
-      const ticker = text(row['locked_ticker']);
-      if (!isActiveTicker(ticker)) {
-        throw new TypeError(`Frozen pick backs ${ticker}, which is not an active ticker`);
-      }
-      return {
-        wallet: walletAddress(text(row['wallet'])),
-        battleId: toBattleId(text(row['locked_battle_id'])),
-        backedTicker: ticker,
-        cardDeployed: text(row['locked_card_decision']) === 'USE',
-      };
-    });
-  }
-
   async loadLatest(): Promise<RoundEngineState | null> {
     const rounds = await this.db.query(
       `SELECT round_id, state, pick_open_at, matchmaking_seed
@@ -230,6 +197,11 @@ export class PostgresRoundStore implements RoundStorePort {
     // refuses a row that disagrees. Reading three columns that are defined by
     // the first would be three chances to restore a round with a clock the
     // engine could not have produced.
+    // The picks frozen at lock, or none before it. Finalization pays War Points
+    // to exactly these, so a round resumed mid-battle needs them as much as its
+    // scores — restoring none once finalized a round that paid nobody.
+    const picks = await readFrozenPicks(this.db, roundId);
+
     const openedAt = utcTimestamp(instant(round['pick_open_at']));
     const clock = buildCanonicalClock(openedAt, openedAt);
 
@@ -238,8 +210,13 @@ export class PostgresRoundStore implements RoundStorePort {
       state: text(round['state']) as RoundEngineState['state'],
       clock,
       matchmakingSeed: text(round['matchmaking_seed']),
-      picks: await this.frozenPicks(roundId),
-      battles: battles.rows.map((row) => toBattleState(row, clock)),
+      picks,
+      // The card support snapshot is rebuilt from the picks it was summed from
+      // at lock, by the same function — it is not stored twice.
+      battles: battles.rows.map((row) => {
+        const battle = toBattleState(row, clock);
+        return { ...battle, cardSupport: battleCardSupport(battle.setup, picks) };
+      }),
     };
   }
 
@@ -382,6 +359,8 @@ function toBattleState(row: SqlRow, clock: CanonicalClock): BattleEngineState {
     lastLeft: ticked ? decodeInputs(row['left_inputs']) : null,
     lastRight: ticked ? decodeInputs(row['right_inputs']) : null,
     lastTickAt: ticked ? utcTimestamp(instant(row['observed_at'])) : null,
+    // Filled in by the caller from the frozen picks.
+    cardSupport: { left: NO_CARD_SUPPORT, right: NO_CARD_SUPPORT },
     voidReason:
       row['void_reason'] === null || row['void_reason'] === undefined
         ? null

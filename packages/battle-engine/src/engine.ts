@@ -4,9 +4,11 @@ import {
   decideFinalization,
   INITIAL_MOMENTUM_MEMORY,
   nextMomentum,
+  NO_CARD_SUPPORT,
   resolveBattle,
   scoreBattle,
   wasComeback,
+  type AggregateCardSupport,
   type FinalizationPolicy,
   type MomentumMemory,
   type MomentumThresholds,
@@ -111,6 +113,17 @@ export interface BattleEngineState {
   readonly lastRight: SideInputs | null;
   readonly lastTickAt: UtcTimestamp | null;
   readonly voidReason: VoidReasonCategory | null;
+  /**
+   * Each side's community card support, snapshotted at lock (§23.1).
+   *
+   * Every card deployed behind that side, summed once when the picks froze. It
+   * cannot change during the battle — no pick can — so it is fixed on the
+   * battle rather than observed each tick, and every tick is scored with it.
+   */
+  readonly cardSupport: {
+    readonly left: AggregateCardSupport;
+    readonly right: AggregateCardSupport;
+  };
 }
 
 /** One observation of both sides at an instant. */
@@ -148,6 +161,7 @@ export function beginBattle(setup: BattleSetup): BattleEngineState {
     lastRight: null,
     lastTickAt: null,
     voidReason: null,
+    cardSupport: { left: NO_CARD_SUPPORT, right: NO_CARD_SUPPORT },
   };
 }
 

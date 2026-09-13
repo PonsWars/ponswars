@@ -146,7 +146,9 @@ beforeEach(() => {
   settledPicks = [];
   finalized = new Map();
   auth = new AuthService({ store: new MemoryAuthStore(), policy: AUTH_POLICY, now: () => now });
-  holdings = new Map([[WALLET, { cardInstanceId: 'card-1', remainingUses: 3 }]]);
+  holdings = new Map([
+    [WALLET, { cardInstanceId: 'card-1', cardType: 'BULL_RUN', remainingUses: 3 }],
+  ]);
   const cards = new MemoryCardHoldings(holdings);
   picks = new PickStore(cards);
   now = utcTimestamp(EPOCH + 30_000);
@@ -406,7 +408,7 @@ describe('the frozen pick set', () => {
 
     const locked = await picks.lockedPicks(toRoundId(ROUND_ID));
     expect(locked).toHaveLength(1);
-    expect(locked[0]).toMatchObject({ wallet: WALLET, cardDeployed: true });
+    expect(locked[0]).toMatchObject({ wallet: WALLET, deployedCard: 'BULL_RUN' });
   });
 });
 
@@ -700,7 +702,7 @@ describe('PUT /v1/rounds/:roundId/card-decision', () => {
     });
 
     const locked = await picks.lockedPicks(toRoundId(ROUND_ID));
-    expect(locked[0]?.cardDeployed).toBe(false);
+    expect(locked[0]?.deployedCard).toBeNull();
   });
 
   it('refuses a decision with no pick behind it', async () => {
@@ -1182,7 +1184,7 @@ describe('a card the wallet cannot deploy', () => {
   });
 
   it('is refused when the card has no charge left', async () => {
-    holdings.set(WALLET, { cardInstanceId: 'card-1', remainingUses: 0 });
+    holdings.set(WALLET, { cardInstanceId: 'card-1', cardType: 'BULL_RUN', remainingUses: 0 });
     await app.inject({ method: 'PUT', url: pickUrl(), headers: AUTH, payload: pickBody() });
 
     const response = await app.inject({

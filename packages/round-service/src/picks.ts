@@ -2,6 +2,7 @@ import type {
   ActiveTicker,
   BattleId,
   CardDecision,
+  CardType,
   ClientRequestId,
   RoundId,
   UtcTimestamp,
@@ -93,6 +94,8 @@ export class PicksLockedError extends Error {
  */
 export interface CardHolding {
   readonly cardInstanceId: string;
+  /** Which card it is, which is what decides the support it gives (§7.2). */
+  readonly cardType: CardType;
   readonly remainingUses: number;
 }
 

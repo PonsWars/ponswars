@@ -49,7 +49,7 @@ export function settledPicksIn(
         left: setup.left,
         right: setup.right,
         backed: pick.backedTicker,
-        cardDeployed: pick.cardDeployed,
+        cardDeployed: pick.deployedCard !== null,
         settledAt: state.clock.battleEndAt,
         warPoints,
         settlement:

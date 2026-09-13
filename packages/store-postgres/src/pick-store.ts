@@ -1,6 +1,7 @@
 import type { LockedPick } from '@ponswars/battle-engine';
 import { PicksLockedError, type PickRepository, type SubmittedPick } from '@ponswars/round-service';
 import {
+  CARD_TYPES,
   battleId,
   clientRequestId,
   isActiveTicker,
@@ -9,6 +10,7 @@ import {
   walletAddress,
   type ActiveTicker,
   type CardDecision,
+  type CardType,
   type RoundId,
   type UtcTimestamp,
   type WalletAddress,
@@ -151,23 +153,7 @@ export class PostgresPickStore implements PickRepository {
       );
       await deployCards(tx, roundId);
 
-      // What was locked, not what the row says now — after this they are the
-      // same, and the locked columns are the ones that cannot change. Ordered
-      // byte-wise by wallet so the engine receives them in one order however
-      // the database is collated.
-      const { rows } = await tx.query(
-        `SELECT wallet, locked_battle_id, locked_ticker, locked_card_decision
-           FROM player_picks
-          WHERE round_id = $1 AND locked_at IS NOT NULL
-          ORDER BY wallet COLLATE "C"`,
-        [roundId],
-      );
-      return rows.map((row) => ({
-        wallet: walletAddress(text(row['wallet'])),
-        battleId: battleId(text(row['locked_battle_id'])),
-        backedTicker: ticker(row['locked_ticker']),
-        cardDeployed: decision(row['locked_card_decision']) === 'USE',
-      }));
+      return readFrozenPicks(tx, roundId);
     });
   }
 
@@ -226,6 +212,46 @@ export class PostgresPickStore implements PickRepository {
     );
     return Number(rows[0]?.['picks'] ?? 0);
   }
+}
+
+/**
+ * The picks a round froze at lock, as the engine receives them (§22).
+ *
+ * What was locked, not what the row says now — the locked columns are the ones
+ * that cannot change. The card is the one the usage ledger recorded as deployed
+ * for this round, so a pick carries a card exactly when a charge was spent on
+ * it. Ordered byte-wise by wallet, so the engine receives the picks in one order
+ * however the database is collated.
+ *
+ * Shared with the round store, which restores the same set after a restart —
+ * one reading of the frozen picks, so a resumed round is scored and paid from
+ * the picks the round actually locked.
+ */
+export async function readFrozenPicks(db: SqlExecutor, roundId: string): Promise<LockedPick[]> {
+  const { rows } = await db.query(
+    `SELECT p.wallet, p.locked_battle_id, p.locked_ticker, c.card AS deployed_card
+       FROM player_picks p
+       LEFT JOIN card_usage_ledger l
+         ON l.wallet = p.wallet AND l.round_id = p.round_id AND l.event = 'DEPLOY'
+       LEFT JOIN cards c ON c.card_instance_id = l.card_instance_id
+      WHERE p.round_id = $1 AND p.locked_at IS NOT NULL
+      ORDER BY p.wallet COLLATE "C"`,
+    [roundId],
+  );
+  return rows.map((row) => ({
+    wallet: walletAddress(text(row['wallet'])),
+    battleId: battleId(text(row['locked_battle_id'])),
+    backedTicker: ticker(row['locked_ticker']),
+    deployedCard: row['deployed_card'] === null ? null : cardType(row['deployed_card']),
+  }));
+}
+
+function cardType(value: unknown): CardType {
+  const found = CARD_TYPES.find((type) => type === value);
+  if (found === undefined) {
+    throw new TypeError(`Deployed card ${String(value)} is not in the card catalog`);
+  }
+  return found;
 }
 
 /**

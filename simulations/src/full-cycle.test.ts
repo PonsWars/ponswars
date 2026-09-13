@@ -109,7 +109,7 @@ function runRound(
       wallet: wallet(w + 1),
       battleId: battle.setup.battleId,
       backedTicker: backLeft ? battle.setup.left : battle.setup.right,
-      cardDeployed: picker.nextBelow(100) < 30,
+      deployedCard: picker.nextBelow(100) < 30 ? ('REINFORCEMENT' as const) : null,
     });
   }
 

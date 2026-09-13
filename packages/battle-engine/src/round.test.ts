@@ -1,4 +1,5 @@
 import {
+  aggregateCardSupport,
   NO_CARD_SUPPORT,
   RATIO_SCALE,
   type ConfidenceCalibration,
@@ -173,7 +174,7 @@ describe('lockRound', () => {
         wallet: wallet(1),
         battleId: first!.setup.battleId,
         backedTicker: first!.setup.left,
-        cardDeployed: false,
+        deployedCard: null,
       },
     ]);
 
@@ -198,7 +199,7 @@ describe('lockRound', () => {
       wallet: wallet(1),
       battleId: first!.setup.battleId,
       backedTicker: first!.setup.left,
-      cardDeployed: false,
+      deployedCard: null,
     };
     expect(() => lockRound(round, at(60_000), [pick, pick])).toThrow(RangeError);
   });
@@ -210,7 +211,7 @@ describe('lockRound', () => {
           wallet: wallet(1),
           battleId: 'round-0000000099-b0' as BattleId,
           backedTicker: 'NVDA',
-          cardDeployed: false,
+          deployedCard: null,
         },
       ]),
     ).toThrow(RangeError);
@@ -247,7 +248,7 @@ describe('finalizeRound', () => {
         wallet: wallet(1),
         battleId: first!.setup.battleId,
         backedTicker: first!.setup.left,
-        cardDeployed: false,
+        deployedCard: null,
       },
     ]);
 
@@ -266,7 +267,7 @@ describe('finalizeRound', () => {
         wallet: wallet(2),
         battleId: first!.setup.battleId,
         backedTicker: first!.setup.right,
-        cardDeployed: false,
+        deployedCard: null,
       },
     ]);
     expect(outcome.awards).toHaveLength(0);
@@ -285,7 +286,7 @@ describe('finalizeRound', () => {
         wallet: wallet(3),
         battleId: first!.setup.battleId,
         backedTicker: first!.setup.left,
-        cardDeployed: true,
+        deployedCard: 'REINFORCEMENT',
       },
     ]);
 
@@ -322,7 +323,7 @@ describe('finalizeRound', () => {
           wallet: wallet(4),
           battleId: first!.setup.battleId,
           backedTicker: first!.setup.left,
-          cardDeployed: false,
+          deployedCard: null,
         },
       ],
       lookback,
@@ -345,7 +346,7 @@ describe('finalizeRound', () => {
         wallet: wallet(5),
         battleId: first!.setup.battleId,
         backedTicker: first!.setup.left,
-        cardDeployed: true,
+        deployedCard: 'REINFORCEMENT',
       },
     ]);
     locked = tickBattle(
@@ -391,19 +392,19 @@ describe('finalizeRound', () => {
         wallet: wallet(10),
         battleId: first!.setup.battleId,
         backedTicker: first!.setup.left,
-        cardDeployed: false,
+        deployedCard: null,
       },
       {
         wallet: wallet(11),
         battleId: first!.setup.battleId,
         backedTicker: first!.setup.right,
-        cardDeployed: false,
+        deployedCard: null,
       },
       {
         wallet: wallet(12),
         battleId: second!.setup.battleId,
         backedTicker: second!.setup.left,
-        cardDeployed: true,
+        deployedCard: 'REINFORCEMENT',
       },
     ]);
 
@@ -422,10 +423,59 @@ describe('finalizeRound', () => {
       wallet: wallet(20),
       battleId: first!.setup.battleId,
       backedTicker: first!.setup.left,
-      cardDeployed: true,
+      deployedCard: 'REINFORCEMENT',
     });
 
     expect(runRound(picks).awards).toEqual(runRound(picks).awards);
     expect(runRound(picks).results).toEqual(runRound(picks).results);
+  });
+});
+
+describe('card support at lock (§12.4, §23.1)', () => {
+  it('snapshots each side’s deployed cards onto its battle, and nothing else', () => {
+    const round = makeRound();
+    const [first, second] = round.battles;
+    if (first === undefined || second === undefined) {
+      throw new Error('a round always has five battles');
+    }
+
+    const locked = lockRound(round, at(60_000), [
+      {
+        wallet: wallet(1),
+        battleId: first.setup.battleId,
+        backedTicker: first.setup.left,
+        deployedCard: 'GOLDEN_ARMY',
+      },
+      {
+        wallet: wallet(2),
+        battleId: first.setup.battleId,
+        backedTicker: first.setup.left,
+        deployedCard: 'REINFORCEMENT',
+      },
+      // Backing the other side, without a card: adds nothing to either side.
+      {
+        wallet: wallet(3),
+        battleId: first.setup.battleId,
+        backedTicker: first.setup.right,
+        deployedCard: null,
+      },
+      // A card in a different battle stays in that battle.
+      {
+        wallet: wallet(4),
+        battleId: second.setup.battleId,
+        backedTicker: second.setup.right,
+        deployedCard: 'WAR_MACHINE',
+      },
+    ]);
+
+    const [lockedFirst, lockedSecond] = locked.battles;
+    expect(lockedFirst?.cardSupport.left).toEqual(
+      aggregateCardSupport(['GOLDEN_ARMY', 'REINFORCEMENT']),
+    );
+    expect(lockedFirst?.cardSupport.right).toEqual(NO_CARD_SUPPORT);
+    expect(lockedSecond?.cardSupport).toEqual({
+      left: NO_CARD_SUPPORT,
+      right: aggregateCardSupport(['WAR_MACHINE']),
+    });
   });
 });

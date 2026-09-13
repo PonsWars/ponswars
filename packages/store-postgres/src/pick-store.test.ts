@@ -268,7 +268,7 @@ describe('the lock', () => {
       wallet: wallet(2),
       battleId: round.battles[2]?.setup.battleId,
       backedTicker: round.battles[2]?.setup.right,
-      cardDeployed: false,
+      deployedCard: null,
     });
   });
 
@@ -383,7 +383,7 @@ describe('a card at lock (§3.2, §40.7)', () => {
     await store.lockedPicks(round.roundId);
     await new PostgresPickStore(db).lockedPicks(round.roundId);
 
-    expect(first[0]?.cardDeployed).toBe(true);
+    expect(first[0]?.deployedCard).toBe('BULL_RUN');
     expect(await remaining(wallet(1))).toEqual({ remaining_uses: 2, depleted_at: null });
     const ledger = await db.query(`SELECT event, delta FROM card_usage_ledger WHERE wallet = $1`, [
       wallet(1),
@@ -397,7 +397,7 @@ describe('a card at lock (§3.2, §40.7)', () => {
 
     const locked = await store.lockedPicks(round.roundId);
 
-    expect(locked[0]?.cardDeployed).toBe(true);
+    expect(locked[0]?.deployedCard).toBe('BULL_RUN');
     const card = (await remaining(wallet(1))) as { remaining_uses: number; depleted_at: unknown };
     expect(card.remaining_uses).toBe(0);
     expect(card.depleted_at).not.toBeNull();
@@ -411,7 +411,7 @@ describe('a card at lock (§3.2, §40.7)', () => {
 
     const locked = await store.lockedPicks(round.roundId);
 
-    expect(locked[0]?.cardDeployed).toBe(false);
+    expect(locked[0]?.deployedCard).toBeNull();
     const { rows } = await db.query(
       'SELECT locked_card_decision FROM player_picks WHERE wallet = $1',
       [wallet(2)],
@@ -425,10 +425,32 @@ describe('a card at lock (§3.2, §40.7)', () => {
 
     const locked = await store.lockedPicks(round.roundId);
 
-    expect(locked[0]?.cardDeployed).toBe(false);
+    expect(locked[0]?.deployedCard).toBeNull();
     expect((await remaining(wallet(3))) as { remaining_uses: number }).toMatchObject({
       remaining_uses: 0,
     });
+  });
+
+  it('comes back with the round after a restart, as the support it gave its side', async () => {
+    await seedCard(wallet(1), 3);
+    await store.submit(armed(wallet(1), 'a'));
+    const rounds = new PostgresRoundStore(db);
+    const locked = lockRound(
+      { ...round, state: 'PICK_OPEN' },
+      round.clock.lockAt,
+      await store.lockedPicks(round.roundId),
+    );
+    await rounds.saveState(locked);
+
+    const restored = await rounds.loadLatest();
+
+    expect(restored?.picks[0]?.deployedCard).toBe('BULL_RUN');
+    expect(restored?.battles.map((battle) => battle.cardSupport)).toEqual(
+      locked.battles.map((battle) => battle.cardSupport),
+    );
+    expect(restored?.battles[0]?.cardSupport.left).not.toEqual(
+      restored?.battles[0]?.cardSupport.right,
+    );
   });
 
   it('is refunded once when its battle voids (§4.4)', async () => {
@@ -484,7 +506,11 @@ describe('card holdings', () => {
       [wallet(7)],
     );
 
-    expect(await holdings.cardOf(wallet(7))).toEqual({ cardInstanceId: 'c7', remainingUses: 4 });
+    expect(await holdings.cardOf(wallet(7))).toEqual({
+      cardInstanceId: 'c7',
+      cardType: 'WAR_MACHINE',
+      remainingUses: 4,
+    });
     expect(await holdings.cardOf(wallet(8))).toBeNull();
   });
 });
