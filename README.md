@@ -166,6 +166,7 @@ needs assets, and a treasury audit, which needs chain access.
 | [`@ponswars/battle-math`](packages/battle-math)     | Deterministic matchmaking, the battle score engine, winner resolution and Genesis RNG |
 | [`@ponswars/rewards-math`](packages/rewards-math)   | The 24-hour allocation procedure and the Merkle tree behind on-chain claims           |
 | [`@ponswars/round-service`](packages/round-service) | The round loop and the five ports it needs. Composition, not transport                |
+| [`@ponswars/chain`](packages/chain)                 | Robinhood Chain over RPC: the finalized block that breaks a dead heat (§12.7)         |
 
 The split is deliberate and is the subject of
 [ADR 0002](docs/adr/0002-locked-constants-versus-open-configuration.md).
