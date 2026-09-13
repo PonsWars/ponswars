@@ -38,7 +38,7 @@ formula is locked, the constants inside it are not.
 | Minimum claim threshold                     | `BASELINE` | Masterplan example is `0.001 SPY` (§16.7). Confirm before launch.                                                  |
 | SPY token decimals                          | `OPEN`     | Needed to convert the locked `0.2 SPY` Secret reward into base units. Read from chain at startup; never assume 18. |
 | SPY token address                           | `OPEN`     | Per-environment.                                                                                                   |
-| Chain ID                                    | `OPEN`     | Per-environment.                                                                                                   |
+| Chain ID                                    | `OPEN`     | Per-environment, but only ever Robinhood Chain: `4663` mainnet or `46630` testnet. `loadConfig` refuses any other. |
 | `$WAR` token address                        | `OPEN`     | Per-environment. Genesis eligibility reads its balance.                                                            |
 | `RewardsDistributor` address                | `OPEN`     | Populated after deployment.                                                                                        |
 | `SecretStockVault` address                  | `OPEN`     | Populated after deployment.                                                                                        |
@@ -65,7 +65,7 @@ Only the constants inside them are open.
 | Parameter                                          | Status |
 | -------------------------------------------------- | ------ |
 | Cloud / runtime provider                           | `OPEN` |
-| RPC vendors                                        | `OPEN` |
+| Robinhood Chain RPC vendor                         | `OPEN` |
 | Market-data provider configuration and credentials | `OPEN` |
 | Managed PostgreSQL provider                        | `OPEN` |
 | Managed Redis provider                             | `OPEN` |
