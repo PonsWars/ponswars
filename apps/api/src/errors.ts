@@ -1,4 +1,5 @@
 import { apiErrorSchema, type ApiError } from '@ponswars/schemas';
+import { chainLabel } from '@ponswars/shared-types';
 
 /**
  * Every error this API returns (§110.5, §47).
@@ -221,9 +222,9 @@ export function wrongChain(expected: number, correlationId: string): ErrorRespon
   return error(
     400,
     'WRONG_CHAIN',
-    `This deployment accepts signatures from chain ${String(expected)} only.`,
+    `This deployment accepts signatures from ${chainLabel(expected)} only.`,
     true,
-    `Switch your wallet to chain ${String(expected)} and connect again.`,
+    `Switch your wallet to ${chainLabel(expected)} and connect again.`,
     correlationId,
   );
 }

@@ -91,9 +91,9 @@ describe('asking for something to sign', () => {
     stub(
       answer(400, {
         code: 'WRONG_CHAIN',
-        message: 'This deployment accepts signatures from chain 4663 only.',
+        message: 'This deployment accepts signatures from Robinhood Chain (4663) only.',
         stateIsSafe: true,
-        nextStep: 'Switch your wallet to chain 4663 and connect again.',
+        nextStep: 'Switch your wallet to Robinhood Chain (4663) and connect again.',
         correlationId: 'req_test',
       }),
     );
@@ -104,7 +104,7 @@ describe('asking for something to sign', () => {
     expect(!result.ok && result.failure).toMatchObject({
       kind: 'REFUSED',
       code: 'WRONG_CHAIN',
-      nextStep: 'Switch your wallet to chain 4663 and connect again.',
+      nextStep: 'Switch your wallet to Robinhood Chain (4663) and connect again.',
     });
   });
 
