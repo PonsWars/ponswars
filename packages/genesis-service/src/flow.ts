@@ -139,6 +139,30 @@ export interface GenesisFlowDeps {
   readonly now: () => UtcTimestamp;
 }
 
+/**
+ * A read from Robinhood Chain failed, so nothing was decided.
+ *
+ * Its own error so a caller can tell a chain that did not answer — try again,
+ * nothing was written — from a fault in the flow or the database.
+ */
+export class GenesisChainError extends Error {
+  constructor(cause: unknown) {
+    super(
+      `Robinhood Chain did not answer: ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
+    this.name = 'GenesisChainError';
+  }
+}
+
+async function fromChain<T>(read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error: unknown) {
+    throw new GenesisChainError(error);
+  }
+}
+
 export class GenesisFlow {
   readonly #deps: GenesisFlowDeps;
 
@@ -168,7 +192,7 @@ export class GenesisFlow {
       return this.#advance(stored);
     }
 
-    const balance = await this.#deps.warBalanceOf(wallet);
+    const balance = await fromChain(() => this.#deps.warBalanceOf(wallet));
     const verdict = checkEligibility({
       warBalance: balance,
       warDecimals: this.#deps.warDecimals,
@@ -183,7 +207,7 @@ export class GenesisFlow {
       };
     }
 
-    const head = await this.#deps.chain.headBlock();
+    const head = await fromChain(() => this.#deps.chain.headBlock());
     const request = await this.#deps.repository.open(
       openRequest(
         genesisRequestId(wallet),
@@ -214,7 +238,9 @@ export class GenesisFlow {
       );
     }
 
-    const block = await this.#deps.chain.finalizedBlock(pending.entropyTargetBlock);
+    const block = await fromChain(() =>
+      this.#deps.chain.finalizedBlock(pending.entropyTargetBlock),
+    );
     if (block === null) {
       return {
         kind: 'PENDING_FINALITY',
@@ -224,7 +250,7 @@ export class GenesisFlow {
     }
     const request = commitEntropy(pending, block, this.#deps.now());
 
-    const resolved = resolveRequest(request, await this.#deps.secretAvailable());
+    const resolved = resolveRequest(request, await fromChain(() => this.#deps.secretAvailable()));
     // No reservation is ever passed: nothing in this service can reserve a
     // Secret reward yet, which is why `secretAvailable` must say so and a Secret
     // is unreachable. Should one resolve anyway, the gate below holds it back.

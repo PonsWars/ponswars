@@ -7,7 +7,12 @@ import {
   type WalletAddress,
 } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
-import { ENTROPY_TARGET_DISTANCE, GenesisFlow, type GenesisChain } from './flow.js';
+import {
+  ENTROPY_TARGET_DISTANCE,
+  GenesisChainError,
+  GenesisFlow,
+  type GenesisChain,
+} from './flow.js';
 import {
   commitEntropy,
   genesisRequestId,
@@ -169,6 +174,15 @@ describe('finishing a claim', () => {
     if (ready.kind !== 'READY') throw new Error('expected a card');
 
     expect(await genesis.request(WALLET)).toEqual({ kind: 'ALREADY_CLAIMED', claim: ready.claim });
+  });
+
+  it('reports a chain that did not answer as a chain error, and writes nothing', async () => {
+    const blocks = chain();
+    blocks.headBlock = () => Promise.reject(new Error('503 from the RPC endpoint'));
+    const { genesis, repository } = flow({ balances: holding(MILLION), chain: blocks });
+
+    await expect(genesis.request(WALLET)).rejects.toBeInstanceOf(GenesisChainError);
+    expect(await repository.find(WALLET)).toBeNull();
   });
 
   it('says NONE for a wallet that never asked, without reading its balance', async () => {
