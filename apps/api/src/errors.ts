@@ -192,6 +192,42 @@ export function unauthenticated(correlationId: string): ErrorResponse {
   );
 }
 
+/** This server reads no chain, so it cannot deal a Genesis card (§69.6). */
+export function genesisUnavailable(correlationId: string): ErrorResponse {
+  return error(
+    503,
+    'GENESIS_UNAVAILABLE',
+    'This server does not read Robinhood Chain, so it cannot deal a Genesis card.',
+    true,
+    'Nothing was recorded. Watching and picking work without a card.',
+    correlationId,
+  );
+}
+
+/** Robinhood Chain did not answer, so nothing was decided (§69.6). */
+export function chainUnavailable(correlationId: string): ErrorResponse {
+  return error(
+    503,
+    'CHAIN_UNAVAILABLE',
+    'Robinhood Chain did not answer in time, so nothing was decided.',
+    true,
+    'Nothing was recorded and your eligibility is unchanged. Try again in a moment.',
+    correlationId,
+  );
+}
+
+/** No Genesis request by that id for this wallet (§47.4). */
+export function genesisRequestNotFound(correlationId: string): ErrorResponse {
+  return error(
+    404,
+    'GENESIS_REQUEST_NOT_FOUND',
+    'This wallet has no Genesis request by that id.',
+    true,
+    'Ask for a card with POST /v1/genesis/request, or read GET /v1/genesis.',
+    correlationId,
+  );
+}
+
 /**
  * The signature did not answer the challenge (§45.2, §69.5).
  *

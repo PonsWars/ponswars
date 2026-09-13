@@ -19,13 +19,16 @@ import {
   authSessionSchema,
   battleResultSchema,
   currentRoundSchema,
+  genesisStatusSchema,
   profileSchema,
   rosterSchema,
   serviceStatusSchema,
 } from '@ponswars/schemas';
 import {
   ACTIVE_TICKERS,
+  baseUnits,
   milliseconds,
+  tokenDecimals,
   roundId as toRoundId,
   utcTimestamp,
   type FinalizedBattleResult,
@@ -34,6 +37,12 @@ import {
   type WalletAddress,
 } from '@ponswars/shared-types';
 import { playerRecord, type SettledPick } from '@ponswars/player-service';
+import {
+  ENTROPY_TARGET_DISTANCE,
+  GenesisFlow,
+  genesisRequestId,
+  MemoryGenesisRepository,
+} from '@ponswars/genesis-service';
 import type { FastifyInstance } from 'fastify';
 import { privateKeyToAccount } from 'viem/accounts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1235,6 +1244,137 @@ describe('GET /v1/profile', () => {
     const response = await app.inject({ method: 'GET', url: '/v1/profile', headers: AUTH });
 
     expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+});
+
+describe('Genesis (§47.4, §69.6)', () => {
+  /** A chain a test moves by hand, and a flow over it holding `balance` for WALLET. */
+  function withGenesis(balance: bigint, chainDown = false) {
+    const blocks = { head: 62_000_000, finalized: 61_000_000 };
+    const genesis = new GenesisFlow({
+      repository: new MemoryGenesisRepository(),
+      chain: {
+        headBlock: () =>
+          chainDown ? Promise.reject(new Error('503')) : Promise.resolve(blocks.head),
+        finalizedBlock: (number) =>
+          Promise.resolve(
+            number > blocks.finalized
+              ? null
+              : { number, hash: `0x${number.toString(16).padStart(64, '0')}` },
+          ),
+      },
+      warBalanceOf: () => Promise.resolve(baseUnits(balance)),
+      warDecimals: tokenDecimals(18),
+      secretAvailable: () => Promise.resolve(false),
+      now: () => now,
+    });
+    return { server: buildServer({ ...serverDeps, genesis }), blocks };
+  }
+  const MILLION = 1_000_000n * 10n ** 18n;
+  const call = (server: FastifyInstance, method: 'GET' | 'POST', url: string) =>
+    server.inject({ method, url, headers: AUTH });
+
+  it('needs a signed-in wallet', async () => {
+    const { server } = withGenesis(MILLION);
+
+    expect((await server.inject({ method: 'GET', url: '/v1/genesis' })).statusCode).toBe(401);
+    expect((await server.inject({ method: 'POST', url: '/v1/genesis/request' })).statusCode).toBe(
+      401,
+    );
+  });
+
+  it('is unpublished, and refuses a request, where nothing reads the chain', async () => {
+    const read = await call(app, 'GET', '/v1/genesis');
+    expect(genesisStatusSchema.parse(read.json())).toEqual({ status: 'UNPUBLISHED' });
+
+    const asked = await call(app, 'POST', '/v1/genesis/request');
+    expect(asked.statusCode).toBe(503);
+    expect(apiErrorSchema.parse(asked.json())).toMatchObject({
+      code: 'GENESIS_UNAVAILABLE',
+      stateIsSafe: true,
+    });
+  });
+
+  it('refuses a wallet under a million $WAR, in base units with decimals', async () => {
+    const { server } = withGenesis(MILLION - 1n);
+
+    const response = await call(server, 'POST', '/v1/genesis/request');
+
+    expect(response.statusCode).toBe(200);
+    expect(genesisStatusSchema.parse(response.json())).toEqual({
+      status: 'NOT_ELIGIBLE_BALANCE',
+      balance: (MILLION - 1n).toString(),
+      threshold: MILLION.toString(),
+      decimals: 18,
+    });
+  });
+
+  it('binds a request to a future block, then deals the card once it is final', async () => {
+    const { server, blocks } = withGenesis(MILLION);
+
+    const asked = genesisStatusSchema.parse(
+      (await call(server, 'POST', '/v1/genesis/request')).json(),
+    );
+    expect(asked).toEqual({
+      status: 'PENDING_FINALITY',
+      requestId: genesisRequestId(WALLET),
+      targetBlock: 62_000_000 + ENTROPY_TARGET_DISTANCE,
+    });
+
+    blocks.finalized = blocks.head + ENTROPY_TARGET_DISTANCE;
+    const read = await call(server, 'GET', '/v1/genesis');
+    const ready = genesisStatusSchema.parse(read.json());
+    if (ready.status !== 'READY') throw new Error(`expected a card, got ${ready.status}`);
+
+    expect(read.headers['cache-control']).toBe('private, no-store');
+    expect(ready.claim).toMatchObject({
+      genesisId: '000001',
+      wallet: WALLET,
+      entropyBlock: 62_000_000 + ENTROPY_TARGET_DISTANCE,
+    });
+    // Asking again after the card is dealt says so (§6).
+    expect(
+      genesisStatusSchema.parse((await call(server, 'POST', '/v1/genesis/request')).json()),
+    ).toEqual({ status: 'ALREADY_CLAIMED', claim: ready.claim });
+  });
+
+  it('answers by request id for the wallet’s own request only', async () => {
+    const { server, blocks } = withGenesis(MILLION);
+    const ownUrl = `/v1/genesis/${genesisRequestId(WALLET)}`;
+
+    expect((await call(server, 'GET', ownUrl)).statusCode).toBe(404);
+    await call(server, 'POST', '/v1/genesis/request');
+    blocks.finalized = Number.MAX_SAFE_INTEGER;
+
+    const byId = genesisStatusSchema.parse((await call(server, 'GET', ownUrl)).json());
+    const finalized = genesisStatusSchema.parse(
+      (await call(server, 'POST', `${ownUrl}/finalize`)).json(),
+    );
+    expect(byId.status).toBe('READY');
+    expect(finalized).toEqual(byId);
+
+    const someoneElse = await call(
+      server,
+      'GET',
+      '/v1/genesis/genesis-0x00000000000000000000000000000000000000aa',
+    );
+    expect(someoneElse.statusCode).toBe(404);
+    expect(apiErrorSchema.parse(someoneElse.json()).code).toBe('GENESIS_REQUEST_NOT_FOUND');
+  });
+
+  it('says the chain did not answer, and that nothing was decided', async () => {
+    const { server } = withGenesis(MILLION, true);
+
+    const response = await call(server, 'POST', '/v1/genesis/request');
+
+    expect(response.statusCode).toBe(503);
+    expect(apiErrorSchema.parse(response.json())).toMatchObject({
+      code: 'CHAIN_UNAVAILABLE',
+      stateIsSafe: true,
+    });
+    expect(genesisStatusSchema.parse((await call(server, 'GET', '/v1/genesis')).json())).toEqual({
+      status: 'NONE',
+    });
   });
 });
 

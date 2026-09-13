@@ -13,6 +13,9 @@ import {
   authVerifyRequestSchema,
   cardDecisionRequestSchema,
   battleResultSchema,
+  genesisStatusSchema,
+  type GenesisClaimBody,
+  type GenesisStatusBody,
   currentRoundSchema,
   rosterSchema,
   serviceStatusSchema,
@@ -35,6 +38,9 @@ import { PROTOCOL_VERSION } from '@ponswars/realtime';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import {
   battleNotInRound,
+  chainUnavailable,
+  genesisRequestNotFound,
+  genesisUnavailable,
   invalidRequest,
   noCardToUse,
   noPickToDecide,
@@ -48,6 +54,12 @@ import {
   type ErrorResponse,
 } from './errors.js';
 import type { PlayerRecordSource } from '@ponswars/player-service';
+import {
+  GenesisChainError,
+  genesisRequestId,
+  type GenesisClaim,
+  type GenesisStatus,
+} from '@ponswars/genesis-service';
 import {
   PicksLockedError,
   canDeploy,
@@ -154,6 +166,17 @@ export interface ServerDeps {
   readonly warBalanceOf?: (
     wallet: WalletAddress,
   ) => Promise<{ readonly balance: bigint; readonly decimals: number }>;
+  /**
+   * Genesis claims (§6, §9, §69.6).
+   *
+   * Absent where nothing reads the chain: a card is dealt from a finalized
+   * Robinhood Chain block, and a server without one cannot deal a card it
+   * could stand behind.
+   */
+  readonly genesis?: {
+    status(wallet: WalletAddress): Promise<GenesisStatus>;
+    request(wallet: WalletAddress): Promise<GenesisStatus>;
+  };
 }
 
 /**
@@ -217,6 +240,50 @@ async function warHolding(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** A Genesis status as the API says it (§69.6). */
+function genesisBody(status: GenesisStatus): GenesisStatusBody {
+  switch (status.kind) {
+    case 'NONE':
+      return { status: 'NONE' };
+    case 'NOT_ELIGIBLE_BALANCE':
+      return {
+        status: 'NOT_ELIGIBLE_BALANCE',
+        balance: status.balance.toString(),
+        threshold: status.threshold.toString(),
+        decimals: status.decimals,
+      };
+    case 'PENDING_FINALITY':
+      return {
+        status: 'PENDING_FINALITY',
+        requestId: status.requestId,
+        targetBlock: status.targetBlock,
+      };
+    case 'SECRET_RESERVATION_PENDING':
+      return { status: 'SECRET_RESERVATION_PENDING', requestId: status.requestId };
+    case 'READY':
+    case 'ALREADY_CLAIMED':
+      return { status: status.kind, claim: claimBody(status.claim) };
+  }
+}
+
+function claimBody(claim: GenesisClaim): GenesisClaimBody {
+  return {
+    genesisId: claim.genesisId,
+    requestId: claim.requestId,
+    wallet: claim.wallet,
+    rarity: claim.rarity,
+    cardType: claim.cardType,
+    initialUses: claim.initialUses,
+    slot: claim.slot,
+    seed: claim.seed,
+    entropyBlock: claim.entropyBlock,
+    entropyBlockHash: claim.entropyBlockHash,
+    secretAvailable: claim.secretAvailable,
+    rarityTableVersion: claim.rarityTableVersion,
+    finalizedAt: claim.finalizedAt,
+  };
 }
 
 /** Stands in for a write the store refused because the round's picks froze. */
@@ -778,6 +845,103 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       }),
     );
   });
+
+  /**
+   * A Genesis read or request, answered (§47.4, §69.6).
+   *
+   * Private to the wallet, like a profile. A chain that did not answer is a
+   * `503` that says nothing was decided; anything else that throws is a fault
+   * and is left to be one.
+   */
+  const answerGenesis = async (
+    reply: FastifyReply,
+    work: () => Promise<GenesisStatus>,
+    options: { readonly noneIsNotFound?: boolean } = {},
+  ): Promise<FastifyReply> => {
+    void reply.header('cache-control', 'private, no-store');
+    let status: GenesisStatus;
+    try {
+      status = await work();
+    } catch (error: unknown) {
+      if (error instanceof GenesisChainError) {
+        return send(reply, chainUnavailable(correlationId()));
+      }
+      throw error;
+    }
+    if (options.noneIsNotFound === true && status.kind === 'NONE') {
+      return send(reply, genesisRequestNotFound(correlationId()));
+    }
+    return reply.send(genesisStatusSchema.parse(genesisBody(status)));
+  };
+
+  /**
+   * `GET /v1/genesis` — where this wallet's Genesis claim has got to (§69.6).
+   *
+   * Finishes the claim when its block has been finalized since it was last
+   * asked, so a client waiting on `PENDING_FINALITY` only has to ask again.
+   */
+  app.get('/v1/genesis', async (request, reply) => {
+    const wallet = await deps.walletOf(request.headers.authorization);
+    if (wallet === null) {
+      return send(reply, unauthenticated(correlationId()));
+    }
+    const genesis = deps.genesis;
+    if (genesis === undefined) {
+      void reply.header('cache-control', 'private, no-store');
+      return reply.send(genesisStatusSchema.parse({ status: 'UNPUBLISHED' }));
+    }
+    return answerGenesis(reply, () => genesis.status(wallet));
+  });
+
+  /**
+   * `POST /v1/genesis/request` (§69.6).
+   *
+   * Idempotent per wallet: the wallet's one request, however many times it is
+   * sent. No body — the wallet is the session's, and nothing else is chosen.
+   */
+  app.post('/v1/genesis/request', async (request, reply) => {
+    const wallet = await deps.walletOf(request.headers.authorization);
+    if (wallet === null) {
+      return send(reply, unauthenticated(correlationId()));
+    }
+    const genesis = deps.genesis;
+    if (genesis === undefined) {
+      return send(reply, genesisUnavailable(correlationId()));
+    }
+    return answerGenesis(reply, () => genesis.request(wallet));
+  });
+
+  /**
+   * `GET /v1/genesis/:requestId` and `POST /v1/genesis/:requestId/finalize` (§47.4).
+   *
+   * The same answer by request id. Only the wallet's own request is found — a
+   * request id is derived from its wallet, so any other is not this wallet's to
+   * read. Finalizing is what reading already does, so the two are one handler.
+   */
+  const byRequestId = async (
+    authorization: string | undefined,
+    requestId: string,
+    reply: FastifyReply,
+  ): Promise<FastifyReply> => {
+    const wallet = await deps.walletOf(authorization);
+    if (wallet === null) {
+      return send(reply, unauthenticated(correlationId()));
+    }
+    const genesis = deps.genesis;
+    if (genesis === undefined) {
+      return send(reply, genesisUnavailable(correlationId()));
+    }
+    if (requestId !== genesisRequestId(wallet)) {
+      return send(reply, genesisRequestNotFound(correlationId()));
+    }
+    return answerGenesis(reply, () => genesis.status(wallet), { noneIsNotFound: true });
+  };
+  app.get<{ Params: { requestId: string } }>('/v1/genesis/:requestId', (request, reply) =>
+    byRequestId(request.headers.authorization, request.params.requestId, reply),
+  );
+  app.post<{ Params: { requestId: string } }>('/v1/genesis/:requestId/finalize', (request, reply) =>
+    byRequestId(request.headers.authorization, request.params.requestId, reply),
+  );
 
   /**
    * `GET /v1/battles/:battleId/result` (§47.1, §27.8).
