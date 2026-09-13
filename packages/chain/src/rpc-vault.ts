@@ -11,6 +11,7 @@ import {
   webSocket,
   type Account,
 } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import type { ReserveSimulation, VaultContract } from './secret-vault.js';
 
 /** The parts of `SecretStockVault`'s ABI this reads, sends and decodes. */
@@ -82,6 +83,30 @@ const RESERVER_ROLE = keccak256(toBytes('RESERVER_ROLE'));
  */
 const RESERVATION_LOOKBACK_BLOCKS = 2_000_000n;
 const LOG_WINDOW_BLOCKS = 10_000n;
+
+/**
+ * The vault, with the reserver key taken from configuration.
+ *
+ * The key becomes an account here and goes no further: the caller gets the
+ * contract and the reserver's address, never the key again.
+ */
+export function reserverVault(options: {
+  readonly url: string;
+  readonly chainId: number;
+  readonly vault: `0x${string}`;
+  readonly privateKey: `0x${string}`;
+}): { readonly contract: VaultContract; readonly reserver: `0x${string}` } {
+  const reserver = privateKeyToAccount(options.privateKey);
+  return {
+    contract: rpcVaultContract({
+      url: options.url,
+      chainId: options.chainId,
+      vault: options.vault,
+      reserver,
+    }),
+    reserver: reserver.address,
+  };
+}
 
 /**
  * `SecretStockVault` over a JSON-RPC endpoint, with the reserver key (§8.4).

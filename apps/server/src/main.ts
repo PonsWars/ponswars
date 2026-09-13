@@ -2,8 +2,11 @@ import { bearer, buildServer } from '@ponswars/api';
 import { AuthService } from '@ponswars/auth';
 import {
   assertChain,
+  assertReserver,
   assertTokenDecimals,
+  ChainSecretVault,
   finalizedBlockAt,
+  reserverVault,
   RpcChainPort,
   robinhoodChainRpc,
 } from '@ponswars/chain';
@@ -160,6 +163,22 @@ async function main(): Promise<void> {
     chainId: config.CHAIN_ID,
   });
 
+  // §8.4: a Secret is revealed only once its reward is reserved, and only a
+  // key holding RESERVER_ROLE can reserve. A deployment names that key or says
+  // `disabled`; a key the vault has not granted the role is refused here, since
+  // it would hold back every Secret while looking configured.
+  let secretVault: ChainSecretVault | null = null;
+  if (config.SECRET_RESERVER_KEY.kind === 'KEY') {
+    const { contract, reserver } = reserverVault({
+      url: config.RPC_URL,
+      chainId: config.CHAIN_ID,
+      vault: config.SECRET_STOCK_VAULT_ADDRESS,
+      privateKey: config.SECRET_RESERVER_KEY.privateKey,
+    });
+    await assertReserver(contract, reserver, config.CHAIN_ID);
+    secretVault = new ChainSecretVault(contract);
+  }
+
   /**
    * Stops between rounds rather than mid-write (§25).
    *
@@ -287,12 +306,10 @@ async function main(): Promise<void> {
       },
       warBalanceOf: async (wallet) => baseUnits(await war.balanceOf(wallet)),
       warDecimals: tokenDecimals(config.WAR_TOKEN_DECIMALS),
-      // No Secret results yet. Revealing one needs its SPY reward reserved in
-      // the Secret Stock Vault first (§8.4, §76.5), and this service holds no
-      // key that can reserve — so the Secret band deals Legendary (§8.3), the
-      // rarity table records that it did, and no player is shown a Secret they
-      // could not be paid.
-      secretVault: null,
+      // Without a reserver the Secret band deals Legendary (§8.3), the rarity
+      // table records that it did, and no player is shown a Secret they could
+      // not be paid.
+      secretVault,
       now,
     }),
     picks,
@@ -318,6 +335,7 @@ async function main(): Promise<void> {
       config.API_PORT,
       config.GATEWAY_PORT,
       config.CHAIN_ID,
+      secretVault !== null,
       config.MARKET_DATA_PROVIDER,
       market.real,
     ),
@@ -399,6 +417,7 @@ function banner(
   apiPort: number,
   gatewayPort: number,
   chainId: number,
+  secret: boolean,
   provider: MarketDataProvider,
   real: boolean,
 ): string {
@@ -408,6 +427,7 @@ function banner(
     `  API       :${String(apiPort)}   (health /v1/health, readiness /v1/ready)`,
     `  Gateway   :${String(gatewayPort)}`,
     `  Chain     ${chainLabel(chainId)}`,
+    `  Secret    ${secret ? 'on — rewards reserved before reveal' : 'off — its band deals Legendary'}`,
     `  Market    ${provider}`,
     ...(real
       ? []
