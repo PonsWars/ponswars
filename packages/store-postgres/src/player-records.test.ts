@@ -150,10 +150,10 @@ afterEach(async () => {
 async function holdCard(who: WalletAddress): Promise<void> {
   const tag = who.slice(-4);
   await db.query('INSERT INTO wallet_profiles (wallet) VALUES ($1) ON CONFLICT DO NOTHING', [who]);
-  await db.query('INSERT INTO genesis_requests (request_id, wallet) VALUES ($1, $2)', [
-    `request-${tag}`,
-    who,
-  ]);
+  await db.query(
+    'INSERT INTO genesis_requests (request_id, wallet, entropy_target_block) VALUES ($1, $2, 1)',
+    [`request-${tag}`, who],
+  );
   await db.query(
     `INSERT INTO genesis_claims (genesis_id, wallet, request_id, seed, slot, secret_available,
                                  rarity, card, initial_uses, rng_version)
