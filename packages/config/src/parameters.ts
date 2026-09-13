@@ -101,6 +101,29 @@ function parseOriginList(raw: string): ParseResult<readonly string[]> {
   return { ok: true, value: origins };
 }
 
+/** The Secret reserver: a key, or a deployment's explicit statement that there is none. */
+export type SecretReserverKey =
+  { readonly kind: 'DISABLED' } | { readonly kind: 'KEY'; readonly privateKey: `0x${string}` };
+
+/**
+ * `disabled`, or a 32-byte private key.
+ *
+ * Required either way. A reserver absent by omission and one absent by decision
+ * look the same at runtime and are not the same thing; `disabled` is the
+ * second, written down. The key is secret, so a malformed one is reported
+ * without its value.
+ */
+function parseReserverKey(raw: string): ParseResult<SecretReserverKey> {
+  const trimmed = raw.trim();
+  if (trimmed === 'disabled') {
+    return { ok: true, value: { kind: 'DISABLED' } };
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(trimmed)) {
+    return { ok: false, error: 'expected "disabled" or a 0x-prefixed 32-byte private key' };
+  }
+  return { ok: true, value: { kind: 'KEY', privateKey: trimmed.toLowerCase() as `0x${string}` } };
+}
+
 /**
  * A Robinhood Chain network id.
  *
@@ -183,6 +206,14 @@ export const PARAMETERS = {
     description: 'SecretStockVault contract, populated after deployment (§18).',
     parse: parseAddress,
   } satisfies ParameterSpec<`0x${string}`>,
+
+  SECRET_RESERVER_KEY: {
+    group: 'chain',
+    description:
+      'The private key holding RESERVER_ROLE on SecretStockVault, so a Secret reward is reserved before it is revealed (§8.4), or "disabled". Disabled, Secret results are off and their band deals Legendary (§8.3). Startup refuses a key without the role.',
+    parse: parseReserverKey,
+    secret: true,
+  } satisfies ParameterSpec<SecretReserverKey>,
 
   // -- Storage (docs/OPEN_PARAMETERS.md §3) ---------------------------------
   DATABASE_URL: {

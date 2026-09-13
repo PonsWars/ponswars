@@ -13,6 +13,7 @@ const VALID: Readonly<Record<string, string>> = {
   WAR_TOKEN_DECIMALS: '18',
   REWARDS_DISTRIBUTOR_ADDRESS: '0x3333333333333333333333333333333333333333',
   SECRET_STOCK_VAULT_ADDRESS: '0x4444444444444444444444444444444444444444',
+  SECRET_RESERVER_KEY: 'disabled',
   DATABASE_URL: 'postgres://user:pw@db.example.invalid:5432/ponswars',
   REDIS_URL: 'redis://cache.example.invalid:6379',
   MIN_CLAIM_THRESHOLD_SPY: '0.001',
@@ -200,6 +201,27 @@ describe('loadConfig failures', () => {
       expect((thrown as ConfigError).issues[0]?.reason).toContain(
         '4663 (Robinhood Chain) or 46630 (Robinhood Chain Testnet)',
       );
+    }
+  });
+
+  it('takes the Secret reserver as a key or as "disabled", and nothing else', () => {
+    expect(loadConfig(VALID).SECRET_RESERVER_KEY).toEqual({ kind: 'DISABLED' });
+    const key = `0x${'AB'.repeat(32)}`;
+    expect(loadConfig(withOverride({ SECRET_RESERVER_KEY: key })).SECRET_RESERVER_KEY).toEqual({
+      kind: 'KEY',
+      privateKey: key.toLowerCase(),
+    });
+
+    for (const bad of ['', 'off', '0x1234', key.slice(2)]) {
+      let thrown: unknown;
+      try {
+        loadConfig(withOverride({ SECRET_RESERVER_KEY: bad }));
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(ConfigError);
+      // A private key is never echoed back, even a malformed one.
+      expect((thrown as ConfigError).message).not.toContain(key.slice(2, 20));
     }
   });
 
