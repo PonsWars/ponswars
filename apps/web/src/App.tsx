@@ -1,4 +1,5 @@
 import {
+  CARD_CATALOG,
   buildCanonicalClock,
   utcTimestamp,
   type FinalizedBattleResult,
@@ -443,6 +444,26 @@ export function App(): JSX.Element {
       setWalletWarBalance(readWarBalance);
     }
   }, [liveProfile.kind, readWarBalance, setWalletWarBalance]);
+  // The card the pick controls can arm: the dealt Genesis card and the charges
+  // it has left, from the same read. A server that deals no cards, or a wallet
+  // with none, leaves NO CARD ON RECORD — and the server refuses to arm one it
+  // has not recorded either way (§40.7).
+  const readGenesis = liveProfile.kind === 'READY' ? liveProfile.profile.holdings.genesis : null;
+  const readCard =
+    readGenesis?.status === 'READ' && readGenesis.card !== null ? readGenesis.card : null;
+  const readCardName = readCard === null ? null : CARD_CATALOG[readCard.cardType].name;
+  const readCardRarity = readCard?.rarity ?? null;
+  const readCardUses = readCard?.remainingUses ?? null;
+  useEffect(() => {
+    if (!status.live || liveProfile.kind !== 'READY') {
+      return;
+    }
+    setCard(
+      readCardName === null || readCardRarity === null || readCardUses === null
+        ? null
+        : { name: readCardName, rarity: readCardRarity, usesRemaining: readCardUses },
+    );
+  }, [status.live, liveProfile.kind, readCardName, readCardRarity, readCardUses, setCard]);
   // The wallet's Genesis claim, read while its page is open and kept current
   // while its block is sealing.
   const liveGenesis = useLiveGenesis(
