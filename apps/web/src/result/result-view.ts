@@ -39,6 +39,8 @@ export interface ResultView {
   readonly victoryLabel: VictoryLabel;
   /** Set only when the totals tied and a tiebreak step decided it (§12.7). */
   readonly tiebreakStep: string | null;
+  /** The finalized Robinhood Chain block hash that decided a dead heat (§12.7). */
+  readonly tiebreakBlockHash: string | null;
   /** Provenance, so a result can be argued with rather than only believed. */
   readonly scoringEngineVersion: string;
   readonly evidenceHash: string;
@@ -51,6 +53,7 @@ export function resultView(result: FinalizedBattleResult): ResultView {
     winner: result.winner,
     victoryLabel: result.victoryLabel,
     tiebreakStep: result.tiebreakStep ?? null,
+    tiebreakBlockHash: result.tiebreakBlockHash ?? null,
     scoringEngineVersion: result.scoringEngineVersion,
     evidenceHash: result.evidenceHash,
   };

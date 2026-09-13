@@ -85,6 +85,17 @@ describe('resultView', () => {
     const tied = { ...RESULT, tiebreakStep: 'PRICE_MOMENTUM' } as unknown as FinalizedBattleResult;
     expect(resultView(tied).tiebreakStep).toBe('PRICE_MOMENTUM');
   });
+
+  it('surfaces the Robinhood Chain block only for a chain-decided result', () => {
+    expect(resultView(RESULT).tiebreakBlockHash).toBeNull();
+    const block = `0x${'ab'.repeat(32)}`;
+    const chainDecided: FinalizedBattleResult = {
+      ...RESULT,
+      tiebreakStep: 'chainDerived',
+      tiebreakBlockHash: block,
+    };
+    expect(resultView(chainDecided).tiebreakBlockHash).toBe(block);
+  });
 });
 
 describe('formatScore', () => {

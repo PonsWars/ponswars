@@ -117,6 +117,17 @@ export function ResultScreen({
         >
           EVIDENCE {view.evidenceHash}
         </div>
+        {view.tiebreakBlockHash === null ? null : (
+          // §12.7: the one input to a chain-decided result that is not in the
+          // evidence bundle. With the battle id it is everything needed to
+          // recompute which side the chain picked.
+          <div
+            className="pw-tabular"
+            style={{ fontSize: 11, color: 'var(--pw-text-3)', wordBreak: 'break-all' }}
+          >
+            ROBINHOOD CHAIN BLOCK {view.tiebreakBlockHash}
+          </div>
+        )}
       </div>
     </>
   );
