@@ -1170,7 +1170,10 @@ describe('GET /v1/profile', () => {
       warPoints: 12,
     });
     expect(body.currentWindow).toMatchObject({ warPoints: 64, qualified: true, window: null });
-    expect(body.holdings).toEqual({ status: 'UNPUBLISHED' });
+    expect(body.holdings).toEqual({
+      war: { status: 'UNPUBLISHED' },
+      genesis: { status: 'UNPUBLISHED' },
+    });
   });
 
   it('is never kept by a shared cache', async () => {

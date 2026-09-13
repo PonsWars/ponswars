@@ -54,7 +54,7 @@ const PROFILE: Profile = {
     loser: 'TSLA',
     outcome: 'MAJOR_UPSET',
   },
-  holdings: { status: 'UNPUBLISHED' },
+  holdings: { war: { status: 'UNPUBLISHED' }, genesis: { status: 'UNPUBLISHED' } },
 };
 
 describe('the war room, from a live profile', () => {

@@ -54,7 +54,7 @@ const PROFILE = {
     loser: 'NVDA',
     outcome: 'UPSET_VICTORY',
   },
-  holdings: { status: 'UNPUBLISHED' },
+  holdings: { war: { status: 'UNPUBLISHED' }, genesis: { status: 'UNPUBLISHED' } },
 };
 
 const answer =

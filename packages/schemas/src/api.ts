@@ -172,6 +172,26 @@ export const cardDecisionRequestSchema = z
 
 const countSchema = z.int().nonnegative();
 
+/**
+ * The wallet's `$WAR` on Robinhood Chain (§34.1).
+ *
+ * - `READ`: the balance at the latest block, in base units, with the token's
+ *   decimals so the client can write it down without assuming eighteen.
+ * - `UNPUBLISHED`: this server does not read the chain (the local stack).
+ * - `UNAVAILABLE`: it does, and the read failed or took too long just now.
+ */
+const warHoldingSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('READ'),
+      balance: baseUnitsSchema,
+      decimals: z.int().min(0).max(36),
+    })
+    .strict(),
+  z.object({ status: z.literal('UNPUBLISHED') }).strict(),
+  z.object({ status: z.literal('UNAVAILABLE') }).strict(),
+]);
+
 const historyOutcomeSchema = z.enum(['WIN', 'UPSET_VICTORY', 'MAJOR_UPSET', 'LOSS', 'VOID']);
 
 /**
@@ -179,9 +199,9 @@ const historyOutcomeSchema = z.enum(['WIN', 'UPSET_VICTORY', 'MAJOR_UPSET', 'LOS
  *
  * Everything in it is derived from what finalization wrote: locked picks,
  * results and the War Point ledger. §69.9 also lists the wallet's `$WAR`
- * balance, Genesis state, card and claimable rewards; those are read from the
- * chain, no service publishes them yet, and `holdings` says exactly that rather
- * than answering `null` — which a client would read as "no card".
+ * balance, Genesis state, card and claimable rewards; those are the chain's.
+ * `holdings` says, for each, whether it was read — never `null` or `0` in place
+ * of a figure nobody read, which a client would show as "no card" or "no $WAR".
  *
  * No estimated payout, for the reason `currentRewardsSchema` gives: §16.2 and
  * §110.3 forbid one during an open window.
@@ -247,7 +267,13 @@ export const profileSchema = z
       })
       .strict()
       .nullable(),
-    holdings: z.object({ status: z.literal('UNPUBLISHED') }).strict(),
+    holdings: z
+      .object({
+        war: warHoldingSchema,
+        /** Genesis claims are not read from the chain yet. */
+        genesis: z.object({ status: z.literal('UNPUBLISHED') }).strict(),
+      })
+      .strict(),
   })
   .strict();
 

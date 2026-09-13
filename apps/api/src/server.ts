@@ -717,7 +717,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         ...record,
         // Balance, Genesis, card and claimable rewards are the chain's to
         // answer, and nothing reads the chain yet (§59.3).
-        holdings: { status: 'UNPUBLISHED' },
+        holdings: { war: { status: 'UNPUBLISHED' }, genesis: { status: 'UNPUBLISHED' } },
       }),
     );
   });
