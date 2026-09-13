@@ -1,6 +1,6 @@
 import { bearer, buildServer } from '@ponswars/api';
 import { AuthService } from '@ponswars/auth';
-import { assertChain, RpcChainPort, robinhoodChainRpc } from '@ponswars/chain';
+import { assertChain, assertTokenDecimals, RpcChainPort, robinhoodChainRpc } from '@ponswars/chain';
 import {
   CURRENT_ENGINE_VERSIONS,
   type EngineConfig,
@@ -135,6 +135,19 @@ async function main(): Promise<void> {
   const rpc = robinhoodChainRpc(config.RPC_URL);
   const chain = rpc.chain;
   await assertChain(chain, config.CHAIN_ID);
+
+  // The same reasoning for the two tokens: a decimals value off by one power
+  // of ten converts every amount wrongly and nothing downstream looks wrong.
+  await assertTokenDecimals(rpc.token(config.WAR_TOKEN_ADDRESS), {
+    parameter: 'WAR_TOKEN_DECIMALS',
+    decimals: config.WAR_TOKEN_DECIMALS,
+    chainId: config.CHAIN_ID,
+  });
+  await assertTokenDecimals(rpc.token(config.SPY_TOKEN_ADDRESS), {
+    parameter: 'SPY_TOKEN_DECIMALS',
+    decimals: config.SPY_TOKEN_DECIMALS,
+    chainId: config.CHAIN_ID,
+  });
 
   /**
    * Stops between rounds rather than mid-write (§25).
