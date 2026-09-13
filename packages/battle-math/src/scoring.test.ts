@@ -1,7 +1,13 @@
-import { BATTLE_SCORE_COMPONENTS, BATTLE_SCORE_WEIGHTS } from '@ponswars/shared-types';
+import {
+  BATTLE_SCORE_COMPONENTS,
+  BATTLE_SCORE_WEIGHTS,
+  CARD_CATALOG,
+  CARD_TYPES,
+} from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
 import { POINT_SCALE, RATIO_SCALE, points } from './scale.js';
 import {
+  aggregateCardSupport,
   cardSupportStrength,
   FULL_SCORE_SCALED,
   NO_CARD_SUPPORT,
@@ -303,5 +309,37 @@ describe('scoreBattle', () => {
     expect(POINT_SCALE).toBe(1_000_000n);
     expect(points(45)).toBe(45_000_000n);
     expect(FULL_SCORE_SCALED).toBe(100_000_000n);
+  });
+});
+
+describe('aggregateCardSupport', () => {
+  it('is nothing for no cards', () => {
+    expect(aggregateCardSupport([])).toEqual(NO_CARD_SUPPORT);
+  });
+
+  it('adds each card’s catalog support, channel by channel (§7.2)', () => {
+    const cards = ['GOLDEN_ARMY', 'REINFORCEMENT', 'VOLUME_BOOSTER', 'REINFORCEMENT'] as const;
+
+    const sum = (channel: 'market' | 'volume' | 'pons' | 'general'): bigint =>
+      cards.reduce((total, card) => total + BigInt(CARD_CATALOG[card].support[channel]), 0n);
+
+    expect(aggregateCardSupport(cards)).toEqual({
+      market: sum('market'),
+      volume: sum('volume'),
+      pons: sum('pons'),
+      general: sum('general'),
+    });
+  });
+
+  it('gives a stronger card more support than a weaker one', () => {
+    for (const card of CARD_TYPES) {
+      const own = aggregateCardSupport([card]);
+      const total = own.market + own.volume + own.pons + own.general;
+      const catalog = CARD_CATALOG[card].support;
+      expect(total).toBe(BigInt(catalog.market + catalog.volume + catalog.pons + catalog.general));
+    }
+    expect(cardSupportStrength(aggregateCardSupport(['GOLDEN_ARMY']))).toBeGreaterThan(
+      cardSupportStrength(aggregateCardSupport(['REINFORCEMENT'])),
+    );
   });
 });

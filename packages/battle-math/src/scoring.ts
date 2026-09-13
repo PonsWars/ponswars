@@ -1,10 +1,12 @@
 import {
   BATTLE_SCORE_COMPONENTS,
   BATTLE_SCORE_WEIGHTS,
+  CARD_CATALOG,
   FULL_BATTLE_SCORE_SCALED,
   integerSqrt,
   PONS_POWER_COMPOSITION,
   type BattleScoreComponent,
+  type CardType,
 } from '@ponswars/shared-types';
 import { clampUnit, divScaled, points, RATIO_SCALE } from './scale.js';
 
@@ -62,6 +64,29 @@ export const NO_CARD_SUPPORT: AggregateCardSupport = {
   pons: 0n,
   general: 0n,
 };
+
+/**
+ * The support a set of deployed cards gives one side (§7.2, §12.4).
+ *
+ * Summed channel by channel from the catalog, in the tenths the catalog is
+ * written in, and nothing more: the diminishing response to large support is
+ * `cardSupportStrength`'s square root and the 10-point ceiling is the
+ * component's weight, so adding cards up here stays plain addition.
+ */
+export function aggregateCardSupport(cards: readonly CardType[]): AggregateCardSupport {
+  let market = 0n;
+  let volume = 0n;
+  let pons = 0n;
+  let general = 0n;
+  for (const card of cards) {
+    const { support } = CARD_CATALOG[card];
+    market += BigInt(support.market);
+    volume += BigInt(support.volume);
+    pons += BigInt(support.pons);
+    general += BigInt(support.general);
+  }
+  return { market, volume, pons, general };
+}
 
 /** Everything the engine needs about one side of a battle. */
 export interface SideInputs {
