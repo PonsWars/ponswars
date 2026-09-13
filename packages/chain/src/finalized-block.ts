@@ -31,9 +31,27 @@ export interface BlockRef {
 /** The slice of a chain the search reads. */
 export interface ChainReader {
   chainId(): Promise<number>;
+  /** The newest block the chain has produced, finalized or not. */
+  latestBlockNumber(): Promise<bigint>;
   /** The newest finalized block. */
   finalizedBlock(): Promise<BlockRef>;
   block(number: bigint): Promise<BlockRef>;
+}
+
+/**
+ * Block `number`, once it is finalized — or `null` while it is not.
+ *
+ * For Genesis entropy (§9): a request is bound to a block number before that
+ * block exists, and its hash is only used once finalization makes it
+ * permanent. Reading it any earlier would seed a card from a hash the chain
+ * could still replace.
+ */
+export async function finalizedBlockAt(
+  reader: ChainReader,
+  number: bigint,
+): Promise<BlockRef | null> {
+  const head = await reader.finalizedBlock();
+  return head.number < number ? null : reader.block(number);
 }
 
 /**

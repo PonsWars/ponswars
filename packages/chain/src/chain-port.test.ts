@@ -21,6 +21,7 @@ function advancingChain(startAt: number, chainId = 4663): ChainReader {
   let head = startAt;
   return {
     chainId: () => Promise.resolve(chainId),
+    latestBlockNumber: () => Promise.resolve(BigInt(head)),
     finalizedBlock: () => {
       const current = block(head, 100 + head);
       head += 1;

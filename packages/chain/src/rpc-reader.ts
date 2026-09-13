@@ -29,6 +29,7 @@ export function robinhoodChainRpc(url: string): RobinhoodChainRpc {
   return {
     chain: {
       chainId: () => client.getChainId(),
+      latestBlockNumber: () => client.getBlockNumber({ cacheTime: 0 }),
       finalizedBlock: async () => refOf(await client.getBlock({ blockTag: 'finalized' }), null),
       block: async (number) => refOf(await client.getBlock({ blockNumber: number }), number),
     },

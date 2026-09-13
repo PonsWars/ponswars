@@ -1,6 +1,7 @@
 import { utcTimestamp } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
 import {
+  finalizedBlockAt,
   firstFinalizedBlockAtOrAfter,
   type BlockRef,
   type ChainReader,
@@ -30,6 +31,7 @@ function chain(
   };
   return {
     chainId: () => Promise.resolve(4663),
+    latestBlockNumber: () => Promise.resolve(BigInt(timestamps.length - 1)),
     finalizedBlock: () => {
       reads += 1;
       return Promise.resolve(at(finalized));
@@ -48,6 +50,17 @@ const seconds = (value: number) => utcTimestamp(value * 1000);
 function expected(timestamps: readonly number[], cutoffSeconds: number): number {
   return timestamps.findIndex((timestamp) => timestamp >= cutoffSeconds);
 }
+
+describe('finalizedBlockAt (§9)', () => {
+  it('is nothing while the block is not finalized, then the block itself', async () => {
+    const timestamps = [100, 101, 102, 103, 104, 105];
+
+    expect(await finalizedBlockAt(chain(timestamps, 3), 4n)).toBeNull();
+    const block = await finalizedBlockAt(chain(timestamps, 4), 4n);
+    expect(block?.number).toBe(4n);
+    expect(block?.hash).toBe(`0x${'4'.padStart(64, '0')}`);
+  });
+});
 
 describe('firstFinalizedBlockAtOrAfter (§12.7)', () => {
   it('is the first block at the cutoff, when several share its second', async () => {
