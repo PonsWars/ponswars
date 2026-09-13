@@ -29,9 +29,9 @@ export function WalletSummary(): JSX.Element | null {
       <Field caption="WALLET" value={wallet.addressFragment} />
       {/*
         An em dash rather than a zero for a figure nobody has read yet (§42.14).
-        The balance needs a chain client and the RPC vendor is OPEN (§59.3); War
-        Points show once the wallet's record has been read. Showing `0` to
-        somebody holding a million $WAR would be a placeholder read as fact.
+        The balance shows once Robinhood Chain has answered for this wallet, and
+        War Points once its record has been read. Showing `0` to somebody holding
+        a million $WAR would be a placeholder read as fact.
       */}
       <Field caption="$WAR" value={wallet.warBalance ?? '—'} />
       <Field caption="WP" value={wallet.warPoints === null ? '—' : String(wallet.warPoints)} />

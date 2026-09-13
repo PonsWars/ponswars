@@ -272,6 +272,12 @@ interface SessionState {
    */
   setWalletWarPoints: (warPoints: number) => void;
   /**
+   * The connected wallet's `$WAR`, written down, once Robinhood Chain has been
+   * read — or `null` when it was not, which the bar shows as unknown (§42.14).
+   * One field, for the reason `setWalletWarPoints` gives.
+   */
+  setWalletWarBalance: (warBalance: string | null) => void;
+  /**
    * Applies the authoritative round, and starts a reshuffle if it is a new one.
    *
    * The timestamp is passed in rather than read here, for the same reason every
@@ -415,6 +421,13 @@ export const useSession = create<SessionState>((set, get) => ({
     const { wallet } = get();
     if (wallet !== null && wallet.warPoints !== warPoints) {
       set({ wallet: { ...wallet, warPoints } });
+    }
+  },
+
+  setWalletWarBalance: (warBalance) => {
+    const { wallet } = get();
+    if (wallet !== null && wallet.warBalance !== warBalance) {
+      set({ wallet: { ...wallet, warBalance } });
     }
   },
 

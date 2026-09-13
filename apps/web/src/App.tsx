@@ -19,6 +19,7 @@ import { WalletSessionProvider } from './live/WalletSessionContext.js';
 import type { GenesisOutcome } from './genesis/GenesisReveal.js';
 import { Hud } from './hud/Hud.js';
 import { Presentations, type FinishedBattle } from './presentation/Presentations.js';
+import { formatTokenAmount } from './presentation/token-amount.js';
 import { GENESIS_UNPUBLISHED, failureCopy, type PersonalData } from './presentation/unpublished.js';
 import { warRoomFrom } from './profile/profile-view.js';
 import type { ProfileData } from './profile/WarRoom.js';
@@ -384,6 +385,7 @@ export function App(): JSX.Element {
 
   const lastResults = useSession((state) => state.lastResults);
   const setWalletWarPoints = useSession((state) => state.setWalletWarPoints);
+  const setWalletWarBalance = useSession((state) => state.setWalletWarBalance);
 
   // The signed-in wallet's record: read on sign-in, again when a round
   // finalizes, and again when a page that shows it opens — so the War Points in
@@ -404,6 +406,18 @@ export function App(): JSX.Element {
       setWalletWarPoints(readWarPoints);
     }
   }, [readWarPoints, setWalletWarPoints]);
+  // The bar's $WAR, from the same read. Only a balance the chain answered is
+  // shown; anything else leaves the dash that means nobody read it (§42.14).
+  const readWarHolding = liveProfile.kind === 'READY' ? liveProfile.profile.holdings.war : null;
+  const readWarBalance =
+    readWarHolding?.status === 'READ'
+      ? formatTokenAmount(readWarHolding.balance, readWarHolding.decimals)
+      : null;
+  useEffect(() => {
+    if (liveProfile.kind === 'READY') {
+      setWalletWarBalance(readWarBalance);
+    }
+  }, [liveProfile.kind, readWarBalance, setWalletWarBalance]);
   const myBattleId = useSession((state) => state.myBattleId);
 
   /**
