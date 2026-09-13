@@ -26,7 +26,7 @@ const CHALLENGE = {
   message: 'api.example.test wants you to sign in…',
   expiresAt: 1_800_000_300_000,
   statement: 'Sign in to PonsWars.',
-  chainId: 8453,
+  chainId: 4663,
 };
 
 const SESSION = {
@@ -79,10 +79,10 @@ describe('asking for something to sign', () => {
     // produce a signature that recovers to nobody.
     const sent = stub(answer(201, CHALLENGE));
 
-    const result = await requestChallenge(ENDPOINTS, SESSION.wallet, 8453);
+    const result = await requestChallenge(ENDPOINTS, SESSION.wallet, 4663);
 
     expect(result.ok && result.value.message).toBe(CHALLENGE.message);
-    expect(sent().body).toEqual({ wallet: SESSION.wallet, chainId: 8453 });
+    expect(sent().body).toEqual({ wallet: SESSION.wallet, chainId: 4663 });
   });
 
   it('carries the server’s own words for a refusal', async () => {
@@ -91,9 +91,9 @@ describe('asking for something to sign', () => {
     stub(
       answer(400, {
         code: 'WRONG_CHAIN',
-        message: 'This deployment accepts signatures from chain 8453 only.',
+        message: 'This deployment accepts signatures from chain 4663 only.',
         stateIsSafe: true,
-        nextStep: 'Switch your wallet to chain 8453 and connect again.',
+        nextStep: 'Switch your wallet to chain 4663 and connect again.',
         correlationId: 'req_test',
       }),
     );
@@ -104,14 +104,14 @@ describe('asking for something to sign', () => {
     expect(!result.ok && result.failure).toMatchObject({
       kind: 'REFUSED',
       code: 'WRONG_CHAIN',
-      nextStep: 'Switch your wallet to chain 8453 and connect again.',
+      nextStep: 'Switch your wallet to chain 4663 and connect again.',
     });
   });
 
   it('says the server was unreachable rather than throwing', async () => {
     stub(new TypeError('Failed to fetch'));
 
-    const result = await requestChallenge(ENDPOINTS, SESSION.wallet, 8453);
+    const result = await requestChallenge(ENDPOINTS, SESSION.wallet, 4663);
 
     expect(!result.ok && result.failure.kind).toBe('UNREACHABLE');
   });
@@ -121,7 +121,7 @@ describe('asking for something to sign', () => {
     // mismatch, and saying so beats a TypeError three components later.
     stub(answer(201, { nonce: 'too-short' }));
 
-    const result = await requestChallenge(ENDPOINTS, SESSION.wallet, 8453);
+    const result = await requestChallenge(ENDPOINTS, SESSION.wallet, 4663);
 
     expect(!result.ok && result.failure.kind).toBe('MALFORMED');
   });

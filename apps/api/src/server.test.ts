@@ -119,7 +119,7 @@ const AUTH_POLICY: AuthPolicy = {
   sessionTtlMs: 3_600_000,
   domain: 'play.example.test',
   uri: ALLOWED_ORIGIN,
-  chainId: 8453,
+  chainId: 4663,
 };
 
 /** Finalized results the server can answer for, seeded per test. */

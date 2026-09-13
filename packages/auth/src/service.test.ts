@@ -25,7 +25,7 @@ const POLICY: AuthPolicy = {
   sessionTtlMs: 3_600_000,
   domain: 'ponswars.test',
   uri: 'https://ponswars.test',
-  chainId: 1,
+  chainId: 4663,
 };
 
 let clock = 1_800_000_000_000;
@@ -60,7 +60,7 @@ describe('the challenge', () => {
     const parsed = parseSiweMessage((await auth.challenge(WALLET)).message);
 
     expect(parsed.domain).toBe('ponswars.test');
-    expect(parsed.chainId).toBe(1);
+    expect(parsed.chainId).toBe(4663);
     expect(parsed.expirationTime).toEqual(new Date(clock + POLICY.challengeTtlMs));
   });
 

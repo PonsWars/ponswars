@@ -36,7 +36,7 @@ const POLICY: AuthPolicy = {
   sessionTtlMs: 3_600_000,
   domain: 'ponswars.test',
   uri: 'https://ponswars.test',
-  chainId: 8453,
+  chainId: 4663,
 };
 
 let clock = 1_800_000_000_000;
