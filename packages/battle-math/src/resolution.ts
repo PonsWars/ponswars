@@ -70,8 +70,33 @@ export interface ResolutionInput {
   readonly left: ActiveTicker;
   readonly right: ActiveTicker;
   readonly battleId: string;
-  /** Block hash finalized at or after the cutoff, for the last tiebreak step. */
-  readonly finalizedBlockHash: string;
+  /**
+   * Block hash finalized at or after the cutoff, for the last tiebreak step.
+   *
+   * `null` when none was fetched, which is only safe for a battle that does not
+   * reach that step — `needsChainTiebreak` says which do — and resolving one
+   * that does throws rather than breaking the tie some other way.
+   */
+  readonly finalizedBlockHash: string | null;
+}
+
+/**
+ * Whether a battle is tied through every market component (§12.7).
+ *
+ * Equal totals, and equal price momentum, relative volume and Pons power: the
+ * only battles the chain-derived step decides, and so the only ones a finalized
+ * block hash is needed for. With scores in scaled integers that is an exact
+ * equality and it is rare — which is why the hash is not fetched for every
+ * round, and why a round is not left unfinishable for want of one it would not
+ * have used.
+ */
+export function needsChainTiebreak(score: BattleScore): boolean {
+  if (score.leftTotal !== score.rightTotal) {
+    return false;
+  }
+  return TIEBREAK_ORDER.every(
+    (step) => step === 'chainDerived' || score.left[step] === score.right[step],
+  );
 }
 
 /**
@@ -97,6 +122,11 @@ export function resolveBattle(input: ResolutionInput): Resolution {
 
   for (const step of TIEBREAK_ORDER) {
     if (step === 'chainDerived') {
+      if (finalizedBlockHash === null) {
+        throw new Error(
+          `Battle ${battleId} is tied through every market component and needs a finalized block hash to break it (§12.7)`,
+        );
+      }
       const winningSide = chainDerivedSide(finalizedBlockHash, battleId);
       return {
         winner: winningSide === 'LEFT' ? left : right,

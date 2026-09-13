@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   chainDerivedSide,
   classifyVictory,
+  needsChainTiebreak,
   resolveBattle,
   type VictoryThresholds,
 } from './resolution.js';
@@ -221,5 +222,54 @@ describe('classifyVictory', () => {
         thresholds: { narrowMargin: -1n, decisiveMargin: points(4) },
       }),
     ).toThrow(RangeError);
+  });
+});
+
+describe('needsChainTiebreak', () => {
+  it('is false when the totals differ', () => {
+    expect(needsChainTiebreak(scoreOf(breakdown({ ponsPower: points(11) }), breakdown()))).toBe(
+      false,
+    );
+  });
+
+  it('is false when a market component still separates equal totals', () => {
+    // Equal totals, but price momentum and volume moved in opposite directions.
+    const left = breakdown({ priceMomentum: points(23), relativeVolume: points(12) });
+    const right = breakdown({ priceMomentum: points(22), relativeVolume: points(13) });
+    expect(total(left)).toBe(total(right));
+
+    expect(needsChainTiebreak(scoreOf(left, right))).toBe(false);
+  });
+
+  it('is true only when every market component is level', () => {
+    expect(needsChainTiebreak(scoreOf(breakdown(), breakdown()))).toBe(true);
+  });
+});
+
+describe('resolveBattle without a block hash', () => {
+  it('decides every battle that does not reach the chain-derived step', () => {
+    const decided = resolveBattle({
+      score: scoreOf(breakdown({ ponsPower: points(11) }), breakdown()),
+      left: 'NVDA',
+      right: 'AAPL',
+      battleId: 'battle-1',
+      finalizedBlockHash: null,
+    });
+
+    expect(decided.winner).toBe('NVDA');
+  });
+
+  it('refuses to break a full tie any other way', () => {
+    // A tie broken without the finalized hash would be a tiebreak somebody could
+    // predict, which is what §12.7's last step exists to prevent.
+    expect(() =>
+      resolveBattle({
+        score: scoreOf(breakdown(), breakdown()),
+        left: 'NVDA',
+        right: 'AAPL',
+        battleId: 'battle-1',
+        finalizedBlockHash: null,
+      }),
+    ).toThrow(/needs a finalized block hash/);
   });
 });
