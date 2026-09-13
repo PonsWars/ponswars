@@ -2,12 +2,14 @@ import {
   ACTIVE_TICKERS,
   CARD_DECISIONS,
   CARD_SUPPORT_TIERS,
+  CARD_TYPES,
   CONFIDENCE_LABELS,
   MOMENTUM_STABILITY_SIGNALS,
   MOMENTUM_STATES,
   PONS_ACTIVITY_SIGNALS,
   PRICE_TREND_SIGNALS,
   PUBLIC_FEED_HEALTH,
+  RARITIES,
   RESERVE_TICKERS,
   ROUND_STATES,
   TIEBREAK_ORDER,
@@ -72,6 +74,8 @@ export const cardSupportTierSchema = enumOf(CARD_SUPPORT_TIERS);
 export const publicFeedHealthSchema = enumOf(PUBLIC_FEED_HEALTH);
 export const visualEventCueSchema = enumOf(VISUAL_EVENT_CUES);
 export const voidReasonSchema = enumOf(VOID_REASON_CATEGORIES);
+export const raritySchema = enumOf(RARITIES);
+export const cardTypeSchema = enumOf(CARD_TYPES);
 
 /**
  * A wallet address, normalized to lowercase.

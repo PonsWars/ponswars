@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   apiErrorSchema,
   battleResultSchema,
+  genesisStatusSchema,
   currentRewardsSchema,
   liveBattleSchema,
   pickRequestSchema,
@@ -323,6 +324,56 @@ describe('API requests', () => {
     // A reserve asset substitutes before a round (§4.2); it is never something
     // a player backs directly unless it is in the active roster that round.
     expect(pickRequestSchema.safeParse({ ...pick, backedTicker: 'COIN' }).success).toBe(false);
+  });
+});
+
+describe('Genesis status (§69.6)', () => {
+  const claim = {
+    genesisId: '000042',
+    requestId: 'genesis-0x00000000000000000000000000000000000000aa',
+    wallet: '0x00000000000000000000000000000000000000aa',
+    rarity: 'RARE',
+    cardType: 'BULL_RUN',
+    initialUses: 3,
+    slot: 812_345,
+    seed: 'ab'.repeat(32),
+    entropyBlock: 62_000_010,
+    entropyBlockHash: `0x${'cd'.repeat(32)}`,
+    secretAvailable: false,
+    rarityTableVersion: 'rarity-table-v1-secret-disabled',
+    finalizedAt: T0,
+  };
+
+  it('carries a dealt card with every input an audit needs', () => {
+    expect(genesisStatusSchema.safeParse({ status: 'READY', claim }).success).toBe(true);
+    expect(genesisStatusSchema.safeParse({ status: 'ALREADY_CLAIMED', claim }).success).toBe(true);
+  });
+
+  it('refuses a card whose entropy is not a block hash, or whose card is not in the catalog', () => {
+    for (const bad of [
+      { entropyBlockHash: '0x12' },
+      { cardType: 'NOT_A_CARD' },
+      { slot: 1_000_000 },
+    ]) {
+      expect(
+        genesisStatusSchema.safeParse({ status: 'READY', claim: { ...claim, ...bad } }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('says why a wallet is not eligible, in base units with decimals', () => {
+    expect(
+      genesisStatusSchema.safeParse({
+        status: 'NOT_ELIGIBLE_BALANCE',
+        balance: '5',
+        threshold: '1000000000000000000000000',
+        decimals: 18,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('has no state for a wallet that asked and got nothing back', () => {
+    expect(genesisStatusSchema.safeParse({ status: 'FAILED' }).success).toBe(false);
   });
 });
 

@@ -6,10 +6,12 @@ import {
   baseUnitsSchema,
   canonicalClockSchema,
   cardDecisionSchema,
+  cardTypeSchema,
   clientRequestIdSchema,
   confidenceSnapshotSchema,
   distributionIdSchema,
   hash32Schema,
+  raritySchema,
   roundIdSchema,
   roundStateSchema,
   tiebreakBlockAgrees,
@@ -278,6 +280,72 @@ export const profileSchema = z
   .strict();
 
 export type Profile = z.infer<typeof profileSchema>;
+
+// ---------------------------------------------------------------------------
+// Genesis (§47.4, §69.6)
+// ---------------------------------------------------------------------------
+
+/**
+ * A recorded Genesis card, with everything needed to recompute it (§9, §76.6).
+ *
+ * The seed inputs — wallet, request id and the finalized Robinhood Chain block
+ * hash — are all here, with the slot and rarity table they produced, so the
+ * audit tool can check a card without trusting the service that dealt it.
+ */
+export const genesisClaimSchema = z
+  .object({
+    genesisId: z.string().regex(/^[0-9]{6,}$/),
+    requestId: z.string().min(1).max(64),
+    wallet: walletAddressSchema,
+    rarity: raritySchema,
+    cardType: cardTypeSchema,
+    initialUses: z.int().min(1),
+    slot: z.int().min(0).max(999_999),
+    seed: z.string().regex(/^[0-9a-f]{64}$/),
+    entropyBlock: z.int().min(1),
+    entropyBlockHash: hash32Schema,
+    secretAvailable: z.boolean(),
+    rarityTableVersion: z.string().min(1),
+    finalizedAt: utcTimestampSchema,
+  })
+  .strict();
+
+/**
+ * Where the signed-in wallet's Genesis claim has got to (§69.6).
+ *
+ * `UNPUBLISHED` is a server that does not read Robinhood Chain — the local
+ * stack — and so cannot deal a card at all; every other state is the flow's.
+ */
+export const genesisStatusSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('UNPUBLISHED') }).strict(),
+  z.object({ status: z.literal('NONE') }).strict(),
+  z
+    .object({
+      status: z.literal('NOT_ELIGIBLE_BALANCE'),
+      balance: baseUnitsSchema,
+      threshold: baseUnitsSchema,
+      decimals: z.int().min(0).max(36),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal('PENDING_FINALITY'),
+      requestId: z.string().min(1).max(64),
+      targetBlock: z.int().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal('SECRET_RESERVATION_PENDING'),
+      requestId: z.string().min(1).max(64),
+    })
+    .strict(),
+  z.object({ status: z.literal('READY'), claim: genesisClaimSchema }).strict(),
+  z.object({ status: z.literal('ALREADY_CLAIMED'), claim: genesisClaimSchema }).strict(),
+]);
+
+export type GenesisClaimBody = z.infer<typeof genesisClaimSchema>;
+export type GenesisStatusBody = z.infer<typeof genesisStatusSchema>;
 
 // ---------------------------------------------------------------------------
 // Auth (§47.3)
