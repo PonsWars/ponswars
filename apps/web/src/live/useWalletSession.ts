@@ -295,7 +295,9 @@ async function offerSwitch(
     return {
       kind: 'REFUSED',
       message: `PonsWars runs on ${chainLabel(expected)} and your wallet is on another network.`,
-      nextStep: 'Switch networks in your wallet, then connect again.',
+      // The step is the line the bar shows, so it is the one that names the
+      // network: "switch networks" alone leaves a player guessing which.
+      nextStep: `Switch your wallet to ${chainLabel(expected)}, then connect again.`,
     };
   }
 
@@ -305,7 +307,7 @@ async function offerSwitch(
     : {
         kind: 'REFUSED',
         message: `PonsWars runs on ${chainLabel(expected)}.`,
-        nextStep: 'Switch networks in your wallet, then connect again.',
+        nextStep: `Switch your wallet to ${chainLabel(expected)}, then connect again.`,
       };
 }
 
@@ -320,7 +322,7 @@ function fromWallet(failure: WalletFailure): WalletStatus {
       return {
         kind: 'REFUSED',
         message: `PonsWars runs on ${chainLabel(failure.expected)}.`,
-        nextStep: 'Switch networks in your wallet, then connect again.',
+        nextStep: `Switch your wallet to ${chainLabel(failure.expected)}, then connect again.`,
       };
     case 'FAILED':
       return {
