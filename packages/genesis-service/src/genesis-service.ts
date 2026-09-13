@@ -237,6 +237,8 @@ export interface RevealableGenesis {
   readonly initialUses: number;
   readonly slot: number;
   readonly seed: string;
+  /** Whether Secret was reachable when this was resolved (§8.3); part of the evidence. */
+  readonly secretAvailable: boolean;
   readonly rarityTableVersion: string;
   /** Present exactly when the rarity is `SECRET`. */
   readonly secretReservation: SecretReservation | null;
@@ -303,6 +305,7 @@ export function finalizeGenesis(
       initialUses: resolved.initialUses,
       slot: resolved.outcome.slot,
       seed: resolved.outcome.seed,
+      secretAvailable: resolved.outcome.secretAvailable,
       rarityTableVersion: resolved.outcome.rarityTableVersion,
       secretReservation: reservation,
       finalizedAt: at,
