@@ -49,9 +49,10 @@ file, and it claims the file before touching the database, so a snapshot is
 never taken without its standings landing on disk.
 
 **The pool balance is read by you, from the Rewards Distribution wallet, at
-the moment you run this.** Nothing reads the chain yet (§59.3 leaves the RPC
-provider open). When something does, it supplies this one number and the step
-is otherwise unchanged. Both amounts are base units: whole numbers, no decimal
+the moment you run this.** The server reads Robinhood Chain for tiebreaks and
+`$WAR` balances, but not for the pool balance yet, so it is still read by hand at
+the snapshot. When that is automated, it supplies
+this one number and the step is otherwise unchanged. Both amounts are base units: whole numbers, no decimal
 point, which is why the command refuses one.
 
 ## Before the snapshot

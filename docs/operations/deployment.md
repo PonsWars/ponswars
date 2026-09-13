@@ -34,7 +34,16 @@ works, and a vendor's works the same way; which vendor is `OPEN`
 chain it serves and exits if that is not `CHAIN_ID`, before it connects to
 anything else.
 
-The chain is read for one thing today: §12.7's last tiebreak step. Only a battle
+Startup also reads `decimals()` from `WAR_TOKEN_ADDRESS` and `SPY_TOKEN_ADDRESS`
+and exits if either differs from `WAR_TOKEN_DECIMALS` / `SPY_TOKEN_DECIMALS`, or
+if an address is not a token on that network. A decimals value that is off by
+one converts every amount by a power of ten, and nothing else would notice.
+
+A signed-in wallet's profile carries its `$WAR` balance, read at the latest
+block when the profile is asked for. A read that fails or takes longer than
+2.5 seconds answers `UNAVAILABLE`, and the rest of the profile arrives anyway.
+
+The chain decides one thing: §12.7's last tiebreak step. Only a battle
 level through every market component reaches it, and for that battle the server
 waits for the first Robinhood Chain block at or after the cutoff to be
 **finalized** and breaks the tie with its hash. Finalization trails the head by

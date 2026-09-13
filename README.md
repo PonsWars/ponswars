@@ -132,9 +132,10 @@ read back from the ledgers finalization wrote.
 
 Once signed in, **PROFILE** and **REWARDS** show the wallet's own record from
 `GET /v1/profile` — battles, wins, upsets, War Points and the current
-distribution window. What only the chain can answer (the `$WAR` balance, the
-Genesis card, the pool balance) reads as not published, because nothing reads
-the chain until an RPC provider is chosen.
+distribution window. A deployment also reads the wallet's `$WAR` balance from
+Robinhood Chain; the local stack reads no chain, so there it reads as not
+published. The Genesis card and the pool balance are not read from the chain
+yet, and say so rather than showing an empty card or a zero.
 
 ## Operator tools
 
@@ -319,9 +320,9 @@ A wallet connects for real (§45.2). It signs an EIP-4361 challenge, the
 signature becomes a session that lives in PostgreSQL, and that session
 authenticates both the writes and the socket — a browser cannot put a header on
 a WebSocket, so the client proves its wallet in a frame before it subscribes to
-anything. Balance, card and reward values are still seeded, because the RPC
-provider and the Player service behind them are `OPEN`; the client shows a dash
-rather than a zero for a figure nobody has read.
+anything. The `$WAR` balance comes from Robinhood Chain where the server reads
+it; the Genesis card and reward pool are not read yet, and the client shows a
+dash rather than a zero for a figure nobody has read.
 
 Design tokens are transcribed into `@ponswars/ui-tokens` from the design-token
 specification, with a test asserting the stylesheet and the typed constants
