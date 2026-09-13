@@ -4,6 +4,7 @@ import {
   authSessionInfoSchema,
   authSessionSchema,
 } from '@ponswars/schemas';
+import { ROBINHOOD_CHAIN_NETWORKS } from '@ponswars/shared-types';
 import type { LiveEndpoints } from './endpoints.js';
 
 /**
@@ -64,6 +65,36 @@ export async function requestChallenge(
       chainId: parsed.chainId,
     };
   });
+}
+
+/**
+ * The Robinhood Chain network this deployment signs in on, or `null`.
+ *
+ * Asked rather than guessed, and asked the only way the API answers it: a
+ * challenge for the right chain is issued and one for any other is refused
+ * with `WRONG_CHAIN`. The masterplan fixes the network to Robinhood Chain, so
+ * there are two candidates and at most two requests — mainnet first, which is
+ * what a player's deployment is. A challenge issued by the probe is never
+ * signed and expires on its own.
+ *
+ * `null` for anything else: an unreachable server, a refusal for another
+ * reason, or a deployment on neither network. None of those is a chain a
+ * wallet should be asked to switch to.
+ */
+export async function deploymentChain(
+  endpoints: LiveEndpoints,
+  wallet: string,
+): Promise<number | null> {
+  for (const network of ROBINHOOD_CHAIN_NETWORKS) {
+    const probe = await requestChallenge(endpoints, wallet, network.chainId);
+    if (probe.ok) {
+      return probe.value.chainId === network.chainId ? network.chainId : null;
+    }
+    if (probe.failure.kind !== 'REFUSED' || probe.failure.code !== 'WRONG_CHAIN') {
+      return null;
+    }
+  }
+  return null;
 }
 
 /** Exchanges a signature for a session (§69.5). */

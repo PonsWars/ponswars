@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  deploymentChain,
   fetchSession,
   requestChallenge,
   rotateSession,
@@ -124,6 +125,63 @@ describe('asking for something to sign', () => {
     const result = await requestChallenge(ENDPOINTS, SESSION.wallet, 4663);
 
     expect(!result.ok && result.failure.kind).toBe('MALFORMED');
+  });
+});
+
+describe('finding the chain a deployment signs in on', () => {
+  /** A server on `chainId`: it issues a challenge for that chain and refuses any other. */
+  function deploymentOn(chainId: number | 'unreachable'): readonly number[] {
+    const asked: number[] = [];
+    vi.stubGlobal('fetch', (_url: string, init?: RequestInit): Promise<Response> => {
+      const body = JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as {
+        chainId: number;
+      };
+      asked.push(body.chainId);
+      if (chainId === 'unreachable') {
+        return Promise.reject(new TypeError('Failed to fetch'));
+      }
+      return Promise.resolve(
+        body.chainId === chainId
+          ? answer(201, { ...CHALLENGE, chainId })
+          : answer(400, {
+              code: 'WRONG_CHAIN',
+              message: 'This deployment accepts signatures from another chain only.',
+              stateIsSafe: true,
+              nextStep: 'Switch your wallet and connect again.',
+              correlationId: 'req_test',
+            }),
+      );
+    });
+    return asked;
+  }
+
+  it('finds Robinhood Chain mainnet with one request', async () => {
+    const asked = deploymentOn(4663);
+
+    expect(await deploymentChain(ENDPOINTS, SESSION.wallet)).toBe(4663);
+    expect(asked).toEqual([4663]);
+  });
+
+  it('finds the testnet once mainnet is refused', async () => {
+    // The probe used to ask for chain 1, which every deployment refuses — so a
+    // wallet on the wrong network was never offered the switch at all.
+    const asked = deploymentOn(46630);
+
+    expect(await deploymentChain(ENDPOINTS, SESSION.wallet)).toBe(46630);
+    expect(asked).toEqual([4663, 46630]);
+  });
+
+  it('names no chain for a deployment on neither network', async () => {
+    deploymentOn(8453);
+
+    expect(await deploymentChain(ENDPOINTS, SESSION.wallet)).toBeNull();
+  });
+
+  it('names no chain, and stops asking, when the server cannot be reached', async () => {
+    const asked = deploymentOn('unreachable');
+
+    expect(await deploymentChain(ENDPOINTS, SESSION.wallet)).toBeNull();
+    expect(asked).toEqual([4663]);
   });
 });
 
