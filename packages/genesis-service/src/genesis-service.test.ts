@@ -11,6 +11,7 @@ import {
   checkEligibility,
   commitEntropy,
   finalizeGenesis,
+  genesisRequestId,
   openRequest,
   resolveRequest,
   warThreshold,
@@ -31,7 +32,7 @@ const RESERVATION: SecretReservation = {
 
 /** Opens and commits a request, ready to resolve. */
 const committed = (requestId = 'req-1') =>
-  commitEntropy(openRequest(requestId, WALLET, T0), 1_000, BLOCK, T0);
+  commitEntropy(openRequest(requestId, WALLET, 1_000, T0), { number: 1_000, hash: BLOCK }, T0);
 
 /** Finds a request id that resolves to the given rarity under the funded table. */
 const requestResolvingTo = (rarity: string, secretAvailable = true): string => {
@@ -95,34 +96,51 @@ describe('eligibility', () => {
 });
 
 describe('request lifecycle', () => {
-  it('opens pending with no entropy', () => {
-    const request = openRequest('req-1', WALLET, T0);
+  it('opens pending, bound to its target block, with no entropy yet', () => {
+    // §76.1: the target is fixed before its block exists, not when its hash is known.
+    const request = openRequest('req-1', WALLET, 1_000, T0);
     expect(request.state).toBe('PENDING');
+    expect(request.entropyTargetBlock).toBe(1_000);
     expect(request.entropyBlockHash).toBeNull();
   });
 
-  it('binds a block on commit', () => {
+  it('commits the hash of its target block', () => {
     const request = committed();
     expect(request.state).toBe('COMMITTED');
     expect(request.entropyTargetBlock).toBe(1_000);
     expect(request.entropyBlockHash).toBe(BLOCK);
   });
 
-  it('refuses to select a different block', () => {
+  it('refuses the hash of any other block', () => {
     // §76.1: neither user nor backend may pick another block because the
-    // resulting rarity is undesirable. The surest enforcement is having no code
-    // path that overwrites one.
-    expect(() => commitEntropy(committed(), 2_000, `0x${'11'.repeat(32)}`, T0)).toThrow();
+    // resulting rarity is undesirable.
+    const request = openRequest('req-1', WALLET, 1_000, T0);
+    expect(() => commitEntropy(request, { number: 1_001, hash: BLOCK }, T0)).toThrow(
+      /bound to block 1000, not 1001/,
+    );
   });
 
-  it('rejects an invalid block number', () => {
-    const request = openRequest('req-1', WALLET, T0);
-    expect(() => commitEntropy(request, 0, BLOCK, T0)).toThrow(RangeError);
-    expect(() => commitEntropy(request, 1.5, BLOCK, T0)).toThrow(RangeError);
+  it('refuses to commit twice', () => {
+    expect(() => commitEntropy(committed(), { number: 1_000, hash: BLOCK }, T0)).toThrow();
+  });
+
+  it('rejects an invalid target block or hash', () => {
+    expect(() => openRequest('req-1', WALLET, 0, T0)).toThrow(RangeError);
+    expect(() => openRequest('req-1', WALLET, 1.5, T0)).toThrow(RangeError);
+    const request = openRequest('req-1', WALLET, 1_000, T0);
+    expect(() => commitEntropy(request, { number: 1_000, hash: '0x1234' }, T0)).toThrow(RangeError);
   });
 
   it('refuses to resolve before entropy is committed', () => {
-    expect(() => resolveRequest(openRequest('req-1', WALLET, T0), true)).toThrow();
+    expect(() => resolveRequest(openRequest('req-1', WALLET, 1_000, T0), true)).toThrow();
+  });
+
+  it('gives a wallet one request id, forever', () => {
+    // The id is part of the seed (§9); a fresh id per attempt would be a reroll.
+    expect(genesisRequestId(WALLET)).toBe(genesisRequestId(WALLET));
+    expect(genesisRequestId(WALLET)).not.toBe(
+      genesisRequestId('0x0000000000000000000000000000000000000001' as WalletAddress),
+    );
   });
 });
 

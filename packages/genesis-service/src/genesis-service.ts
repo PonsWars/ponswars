@@ -85,27 +85,53 @@ export interface GenesisRequest {
    *
    * §76.1: *"Once a Genesis request receives its future finalized block target,
    * neither user nor backend may select a different block because the resulting
-   * rarity is undesirable."* Recorded at commit and never rewritten.
+   * rarity is undesirable."* So it is fixed when the request opens — before the
+   * block exists — and never rewritten. Chosen any later, and whoever chose it
+   * could already know its hash.
    */
-  readonly entropyTargetBlock: number | null;
+  readonly entropyTargetBlock: number;
   readonly entropyBlockHash: string | null;
   readonly requestedAt: UtcTimestamp;
   readonly committedAt: UtcTimestamp | null;
 }
 
+/**
+ * The one request id a wallet will ever have.
+ *
+ * §6 grants one Genesis card per wallet forever, and the request id is part of
+ * the seed (§9). An id derived from the wallet leaves nothing to re-issue: a
+ * second request for the same wallet is the same request, with the same target
+ * block and so the same card, and the database's primary key refuses anything
+ * else. A random id per attempt would make every retry a chance to reroll.
+ */
+export function genesisRequestId(wallet: WalletAddress): string {
+  return `genesis-${wallet}`;
+}
+
+/**
+ * Opens a request bound to a future block.
+ *
+ * @param targetBlock A block number the chain has not produced yet (§9). The
+ *   caller picks it from the chain head; this refuses anything that is not a
+ *   positive safe integer.
+ */
 export function openRequest(
   requestId: string,
   wallet: WalletAddress,
+  targetBlock: number,
   at: UtcTimestamp,
 ): GenesisRequest {
   if (requestId.length === 0) {
     throw new RangeError('Genesis request id must not be empty');
   }
+  if (!Number.isSafeInteger(targetBlock) || targetBlock <= 0) {
+    throw new RangeError('Entropy target block must be a positive integer');
+  }
   return {
     requestId,
     wallet,
     state: 'PENDING',
-    entropyTargetBlock: null,
+    entropyTargetBlock: targetBlock,
     entropyBlockHash: null,
     requestedAt: at,
     committedAt: null,
@@ -113,16 +139,15 @@ export function openRequest(
 }
 
 /**
- * Binds a request to a finalized block.
+ * Commits the hash of the request's own target block, once it is finalized.
  *
- * @throws Error if the request is not `PENDING`, or if it already carries a
- *   target. §76.1 forbids re-selecting a block, and the surest way to enforce
- *   that is to have no code path that overwrites one.
+ * @throws Error if the request is not `PENDING`, already has a hash, or the
+ *   block is not its target. §76.1 forbids another block, and the surest way to
+ *   enforce that is to accept no other.
  */
 export function commitEntropy(
   request: GenesisRequest,
-  targetBlock: number,
-  blockHash: string,
+  block: { readonly number: number; readonly hash: string },
   at: UtcTimestamp,
 ): GenesisRequest {
   if (!canTransitionGenesisRequest(request.state, 'COMMITTED')) {
@@ -130,17 +155,22 @@ export function commitEntropy(
   }
   if (request.entropyBlockHash !== null) {
     throw new Error(
-      `Request ${request.requestId} already has an entropy target; §76.1 forbids selecting another`,
+      `Request ${request.requestId} already has entropy; §76.1 forbids selecting another`,
     );
   }
-  if (!Number.isInteger(targetBlock) || targetBlock <= 0) {
-    throw new RangeError('Entropy target block must be a positive integer');
+  if (block.number !== request.entropyTargetBlock) {
+    throw new Error(
+      `Request ${request.requestId} is bound to block ${String(request.entropyTargetBlock)}, ` +
+        `not ${String(block.number)}; §76.1 forbids selecting another`,
+    );
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(block.hash)) {
+    throw new RangeError('Entropy block hash must be a 32-byte hex hash');
   }
   return {
     ...request,
     state: 'COMMITTED',
-    entropyTargetBlock: targetBlock,
-    entropyBlockHash: blockHash,
+    entropyBlockHash: block.hash.toLowerCase(),
     committedAt: at,
   };
 }
