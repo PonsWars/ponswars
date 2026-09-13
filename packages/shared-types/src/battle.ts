@@ -301,6 +301,15 @@ export interface FinalizedBattleResult {
   readonly victoryLabel: VictoryLabel;
   /** The step that decided the battle, when the totals tied (§12.7). */
   readonly tiebreakStep?: TiebreakStep;
+  /**
+   * The finalized Robinhood Chain block hash that broke the tie, present
+   * exactly when `tiebreakStep` is `chainDerived` (§12.7).
+   *
+   * Recorded with the result because it is the one input to that step the
+   * evidence bundle does not carry: without it a chain-decided result could be
+   * announced but never checked.
+   */
+  readonly tiebreakBlockHash?: string;
   /** Versions the result so historical battles stay reproducible (§66.4). */
   readonly scoringEngineVersion: string;
   readonly finalizedAt: UtcTimestamp;
