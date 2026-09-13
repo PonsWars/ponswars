@@ -22,7 +22,9 @@ because in an incident the temptation is to decide it fresh.
 | [A compromised session](compromised-session.md)     | A session is being used by somebody it does not belong to      |
 
 Deploying rather than repairing: [Deploying PonsWars](deployment.md) — what a
-deployment consists of, and what is still open before it can finish a round.
+deployment consists of, and what is still open — and
+[Deploying the contracts](contract-deployment.md) — putting the distributor and
+the Secret vault on Robinhood Chain, and granting their roles.
 
 Building rather than repairing: [Generated art](generated-art.md) — how the card
 and faction images are made — and [Third-party models](third-party-models.md) —
