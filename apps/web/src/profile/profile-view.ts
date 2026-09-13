@@ -1,5 +1,6 @@
 import type { Profile } from '@ponswars/schemas';
-import type { ProfileData } from './WarRoom.js';
+import { formatTokenAmount } from '../presentation/token-amount.js';
+import type { ProfileData, WarHoldingView } from './WarRoom.js';
 
 /**
  * The server's profile, as the war room shows it (§34, §69.9).
@@ -11,10 +12,10 @@ import type { ProfileData } from './WarRoom.js';
 export function warRoomFrom(profile: Profile): ProfileData {
   return {
     addressFragment: `${profile.wallet.slice(0, 5)}…${profile.wallet.slice(-3)}`,
-    // Balance, holder status and the card are the chain's, and the server says
-    // it has not read them. The war room shows that, rather than a zero balance
-    // and an unclaimed card that would both be statements about this wallet.
-    holdings: { status: 'UNPUBLISHED' },
+    // The card is the chain's and the server says it has not read it. The war
+    // room shows that, rather than an unclaimed card that would be a statement
+    // about this wallet nothing has checked.
+    holdings: { war: warHoldingFrom(profile.holdings.war), genesis: { status: 'UNPUBLISHED' } },
     lifetime: {
       battles: profile.lifetime.battles,
       wins: profile.lifetime.wins,
@@ -44,6 +45,17 @@ export function warRoomFrom(profile: Profile): ProfileData {
             roundId: roundLabel(profile.biggestUpset.roundId),
           },
   };
+}
+
+/** The server's `$WAR` holding, written down. Holder status is any balance at all. */
+export function warHoldingFrom(war: Profile['holdings']['war']): WarHoldingView {
+  return war.status === 'READ'
+    ? {
+        status: 'READ',
+        balance: formatTokenAmount(war.balance, war.decimals),
+        holder: war.balance !== '0',
+      }
+    : { status: war.status };
 }
 
 /**

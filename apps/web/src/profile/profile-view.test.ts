@@ -1,6 +1,6 @@
 import type { Profile } from '@ponswars/schemas';
 import { describe, expect, it } from 'vitest';
-import { roundLabel, warRoomFrom } from './profile-view.js';
+import { roundLabel, warHoldingFrom, warRoomFrom } from './profile-view.js';
 
 /**
  * The server's profile, written down for the war room.
@@ -67,7 +67,26 @@ describe('the war room, from a live profile', () => {
   it('says the chain holdings are unpublished rather than empty', () => {
     // A zero balance and an unclaimed card would both be statements about this
     // wallet that nothing has checked.
-    expect(room.holdings).toEqual({ status: 'UNPUBLISHED' });
+    expect(room.holdings).toEqual({
+      war: { status: 'UNPUBLISHED' },
+      genesis: { status: 'UNPUBLISHED' },
+    });
+  });
+
+  it('writes down a $WAR balance read from the chain, with holder status', () => {
+    expect(
+      warHoldingFrom({ status: 'READ', balance: '1234567890000000000000000', decimals: 18 }),
+    ).toEqual({ status: 'READ', balance: '1,234,567.89', holder: true });
+    expect(warHoldingFrom({ status: 'READ', balance: '0', decimals: 18 })).toEqual({
+      status: 'READ',
+      balance: '0',
+      holder: false,
+    });
+  });
+
+  it('keeps a failed read apart from a server that reads no chain', () => {
+    expect(warHoldingFrom({ status: 'UNAVAILABLE' })).toEqual({ status: 'UNAVAILABLE' });
+    expect(warHoldingFrom({ status: 'UNPUBLISHED' })).toEqual({ status: 'UNPUBLISHED' });
   });
 
   it('carries the server’s figures unchanged', () => {

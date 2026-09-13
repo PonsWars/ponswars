@@ -237,21 +237,22 @@ const PLACEHOLDER_GENESIS: GenesisOutcome = {
 const PLACEHOLDER_PROFILE: ProfileData = {
   addressFragment: PLACEHOLDER_WALLET.addressFragment,
   holdings: {
-    status: 'PUBLISHED',
-    warBalance: PLACEHOLDER_WALLET.warBalance,
-    warHolder: true,
-    // The card the Genesis preview reveals, with one charge spent — same id,
-    // same name, same rarity, same effect. It was a different card under the
-    // same Genesis number, which taught anyone who opened both screens that the
-    // reveal and the profile are unrelated.
-    card: {
-      genesisId: PLACEHOLDER_GENESIS.genesisId,
-      name: PLACEHOLDER_GENESIS.cardName,
-      cardType: PLACEHOLDER_GENESIS.cardType,
-      rarity: PLACEHOLDER_GENESIS.rarity,
-      effect: PLACEHOLDER_GENESIS.effect,
-      usesRemaining: 2,
-      secretTrophy: PLACEHOLDER_GENESIS.secretReservationSecured,
+    war: { status: 'READ', balance: PLACEHOLDER_WALLET.warBalance, holder: true },
+    genesis: {
+      status: 'PUBLISHED',
+      // The card the Genesis preview reveals, with one charge spent — same id,
+      // same name, same rarity, same effect. It was a different card under the
+      // same Genesis number, which taught anyone who opened both screens that the
+      // reveal and the profile are unrelated.
+      card: {
+        genesisId: PLACEHOLDER_GENESIS.genesisId,
+        name: PLACEHOLDER_GENESIS.cardName,
+        cardType: PLACEHOLDER_GENESIS.cardType,
+        rarity: PLACEHOLDER_GENESIS.rarity,
+        effect: PLACEHOLDER_GENESIS.effect,
+        usesRemaining: 2,
+        secretTrophy: PLACEHOLDER_GENESIS.secretReservationSecured,
+      },
     },
   },
   lifetime: {
