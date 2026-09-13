@@ -253,16 +253,6 @@ export interface RoundFinalization {
 }
 
 /**
- * Finalizes every battle and awards War Points.
- *
- * A VOID battle produces no result, no award and **no loss** (§4.4, §11) — its
- * pickers are simply absent from the award list, and the card refund is the
- * Player service's job.
- *
- * §22 writes War Points only during successful finalization, so this is the
- * single place they originate.
- */
-/**
  * Whether finalizing this round will need a finalized block hash (§12.7).
  *
  * Only a battle tied through every market component reaches the chain-derived
@@ -280,6 +270,16 @@ export function needsFinalizationBlockHash(state: RoundEngineState, config: Engi
   );
 }
 
+/**
+ * Finalizes every battle and awards War Points.
+ *
+ * A VOID battle produces no result, no award and **no loss** (§4.4, §11) — its
+ * pickers are simply absent from the award list, and the card refund is the
+ * Player service's job.
+ *
+ * §22 writes War Points only during successful finalization, so this is the
+ * single place they originate.
+ */
 export function finalizeRound(
   state: RoundEngineState,
   at: UtcTimestamp,
