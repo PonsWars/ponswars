@@ -259,6 +259,18 @@ importers:
         specifier: workspace:*
         version: link:../shared-types
 
+  packages/chain:
+    dependencies:
+      '@ponswars/round-service':
+        specifier: workspace:*
+        version: link:../round-service
+      '@ponswars/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+      viem:
+        specifier: ^2.56.3
+        version: 2.56.3(typescript@6.0.3)(zod@4.5.4)
+
   packages/config:
     dependencies:
       '@ponswars/shared-types':

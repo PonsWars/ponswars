@@ -1,0 +1,27 @@
+{
+  "name": "@ponswars/chain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Robinhood Chain, read over RPC: the finalized block a tiebreak is broken with (§12.7).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/round-service": "workspace:*",
+    "@ponswars/shared-types": "workspace:*",
+    "viem": "^2.56.3"
+  }
+}
