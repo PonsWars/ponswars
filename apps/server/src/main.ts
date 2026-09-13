@@ -292,7 +292,7 @@ async function main(): Promise<void> {
       // key that can reserve — so the Secret band deals Legendary (§8.3), the
       // rarity table records that it did, and no player is shown a Secret they
       // could not be paid.
-      secretAvailable: () => Promise.resolve(false),
+      secretVault: null,
       now,
     }),
     picks,

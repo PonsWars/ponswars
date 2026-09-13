@@ -1265,7 +1265,7 @@ describe('Genesis (§47.4, §69.6)', () => {
       },
       warBalanceOf: () => Promise.resolve(baseUnits(balance)),
       warDecimals: tokenDecimals(18),
-      secretAvailable: () => Promise.resolve(false),
+      secretVault: null,
       now: () => now,
     });
     return { server: buildServer({ ...serverDeps, genesis }), blocks };
