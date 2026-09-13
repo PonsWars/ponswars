@@ -194,6 +194,37 @@ const warHoldingSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('UNAVAILABLE') }).strict(),
 ]);
 
+/**
+ * The wallet's Genesis card as the profile shows it (§34.2).
+ *
+ * - `READ`: the record was read — `card` is the card with its charges left, or
+ *   `null` for a wallet that has not been dealt one. A depleted card is still a
+ *   card (§34.2), so zero charges is a card, not an absence.
+ * - `UNPUBLISHED`: this server deals no cards (it reads no chain).
+ */
+const genesisHoldingSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('READ'),
+      card: z
+        .object({
+          genesisId: z.string().regex(/^[0-9]{6,}$/),
+          rarity: raritySchema,
+          cardType: cardTypeSchema,
+          initialUses: z.int().min(1),
+          remainingUses: z.int().min(0),
+        })
+        .strict()
+        .refine((card) => card.remainingUses <= card.initialUses, {
+          message: 'a card cannot have more charges left than it was dealt',
+          path: ['remainingUses'],
+        })
+        .nullable(),
+    })
+    .strict(),
+  z.object({ status: z.literal('UNPUBLISHED') }).strict(),
+]);
+
 const historyOutcomeSchema = z.enum(['WIN', 'UPSET_VICTORY', 'MAJOR_UPSET', 'LOSS', 'VOID']);
 
 /**
@@ -272,8 +303,7 @@ export const profileSchema = z
     holdings: z
       .object({
         war: warHoldingSchema,
-        /** Genesis claims are not read from the chain yet. */
-        genesis: z.object({ status: z.literal('UNPUBLISHED') }).strict(),
+        genesis: genesisHoldingSchema,
       })
       .strict(),
   })
