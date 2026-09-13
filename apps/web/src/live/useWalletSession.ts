@@ -100,8 +100,25 @@ export function useWalletSession(): WalletSession {
     }
     const stored = readStoredSession();
     if (stored === null) {
-      setStatus(browserProvider() === null ? { kind: 'UNAVAILABLE' } : { kind: 'DISCONNECTED' });
-      return;
+      if (browserProvider() !== null) {
+        setStatus({ kind: 'DISCONNECTED' });
+        return;
+      }
+      setStatus({ kind: 'UNAVAILABLE' });
+      // A wallet may inject itself after the page has loaded — MetaMask says so
+      // with `ethereum#initialized` — and without this the HUD said NO WALLET
+      // for the rest of the visit to a player whose wallet had just arrived.
+      const arrived = (): void => {
+        if (browserProvider() !== null) {
+          setStatus((current) =>
+            current.kind === 'UNAVAILABLE' ? { kind: 'DISCONNECTED' } : current,
+          );
+        }
+      };
+      window.addEventListener('ethereum#initialized', arrived, { once: true });
+      return () => {
+        window.removeEventListener('ethereum#initialized', arrived);
+      };
     }
 
     let live = true;
