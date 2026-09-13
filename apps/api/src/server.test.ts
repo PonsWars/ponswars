@@ -1362,6 +1362,36 @@ describe('Genesis (§47.4, §69.6)', () => {
     expect(apiErrorSchema.parse(someoneElse.json()).code).toBe('GENESIS_REQUEST_NOT_FOUND');
   });
 
+  it('puts the dealt card on the profile, with the charges its card has left (§34.2)', async () => {
+    const { server, blocks } = withGenesis(MILLION);
+    const profile = async () =>
+      profileSchema.parse((await call(server, 'GET', '/v1/profile')).json()).holdings.genesis;
+
+    expect(await profile()).toEqual({ status: 'READ', card: null });
+
+    await call(server, 'POST', '/v1/genesis/request');
+    blocks.finalized = Number.MAX_SAFE_INTEGER;
+    const ready = genesisStatusSchema.parse((await call(server, 'GET', '/v1/genesis')).json());
+    if (ready.status !== 'READY') throw new Error(`expected a card, got ${ready.status}`);
+    // The card table is the store's; here the holding stands in for it.
+    holdings.set(WALLET, {
+      cardInstanceId: 'card-000001',
+      cardType: ready.claim.cardType,
+      remainingUses: ready.claim.initialUses - 1,
+    });
+
+    expect(await profile()).toEqual({
+      status: 'READ',
+      card: {
+        genesisId: '000001',
+        rarity: ready.claim.rarity,
+        cardType: ready.claim.cardType,
+        initialUses: ready.claim.initialUses,
+        remainingUses: ready.claim.initialUses - 1,
+      },
+    });
+  });
+
   it('says the chain did not answer, and that nothing was decided', async () => {
     const { server } = withGenesis(MILLION, true);
 

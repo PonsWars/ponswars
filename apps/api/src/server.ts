@@ -176,6 +176,7 @@ export interface ServerDeps {
   readonly genesis?: {
     status(wallet: WalletAddress): Promise<GenesisStatus>;
     request(wallet: WalletAddress): Promise<GenesisStatus>;
+    claimOf(wallet: WalletAddress): Promise<GenesisClaim | null>;
   };
 }
 
@@ -240,6 +241,52 @@ async function warHolding(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * The card a profile shows: the claim, with the charges its card has left.
+ *
+ * Read from the record only — a profile never finishes a pending claim. A claim
+ * with no card behind it is a broken record, not a wallet without a card, so it
+ * is raised rather than answered as `null`.
+ */
+async function genesisHolding(
+  deps: ServerDeps,
+  wallet: WalletAddress,
+): Promise<
+  | {
+      status: 'READ';
+      card: {
+        genesisId: string;
+        rarity: GenesisClaim['rarity'];
+        cardType: GenesisClaim['cardType'];
+        initialUses: number;
+        remainingUses: number;
+      } | null;
+    }
+  | { status: 'UNPUBLISHED' }
+> {
+  if (deps.genesis === undefined) {
+    return { status: 'UNPUBLISHED' };
+  }
+  const claim = await deps.genesis.claimOf(wallet);
+  if (claim === null) {
+    return { status: 'READ', card: null };
+  }
+  const holding = await deps.cards.cardOf(wallet);
+  if (holding?.cardInstanceId !== claim.cardInstanceId) {
+    throw new Error(`Genesis claim ${claim.genesisId} has no card on record for ${wallet}`);
+  }
+  return {
+    status: 'READ',
+    card: {
+      genesisId: claim.genesisId,
+      rarity: claim.rarity,
+      cardType: claim.cardType,
+      initialUses: claim.initialUses,
+      remainingUses: holding.remainingUses,
+    },
+  };
 }
 
 /** A Genesis status as the API says it (§69.6). */
@@ -832,18 +879,13 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       return send(reply, unauthenticated(correlationId()));
     }
 
-    const [record, war] = await Promise.all([
+    const [record, war, genesis] = await Promise.all([
       deps.playerRecords.recordOf(wallet),
       warHolding(deps.warBalanceOf, wallet),
+      genesisHolding(deps, wallet),
     ]);
     void reply.header('cache-control', 'private, no-store');
-    return reply.send(
-      profileSchema.parse({
-        ...record,
-        // Genesis claims are the chain's to answer too, and are not read yet.
-        holdings: { war, genesis: { status: 'UNPUBLISHED' } },
-      }),
-    );
+    return reply.send(profileSchema.parse({ ...record, holdings: { war, genesis } }));
   });
 
   /**
