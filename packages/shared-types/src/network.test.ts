@@ -3,6 +3,7 @@ import {
   ROBINHOOD_CHAIN_MAINNET_ID,
   ROBINHOOD_CHAIN_NETWORKS,
   ROBINHOOD_CHAIN_TESTNET_ID,
+  chainLabel,
   robinhoodChainNetwork,
 } from './network.js';
 
@@ -19,6 +20,12 @@ describe('Robinhood Chain networks', () => {
       expect(new URL(network.publicRpcUrl).protocol).toBe('https:');
       expect(new URL(network.explorerUrl).protocol).toBe('https:');
     }
+  });
+
+  it('are labelled by name and id, and any other chain by its id', () => {
+    expect(chainLabel(4663)).toBe('Robinhood Chain (4663)');
+    expect(chainLabel(46630)).toBe('Robinhood Chain Testnet (46630)');
+    expect(chainLabel(8453)).toBe('chain 8453');
   });
 
   it('finds a network by id, and nothing for any other chain', () => {

@@ -47,6 +47,20 @@ export const ROBINHOOD_CHAIN_NETWORKS = [
   },
 ] as const satisfies readonly RobinhoodChainNetwork[];
 
+/**
+ * A chain as a player should read it: `Robinhood Chain (4663)`.
+ *
+ * A bare id means nothing to most players and a bare name hides which of the
+ * two networks is meant, so a Robinhood Chain network gets both. Any other id
+ * is only ever a chain a wallet happens to be on, and is named by its number.
+ */
+export function chainLabel(chainId: number): string {
+  const network = robinhoodChainNetwork(chainId);
+  return network === null
+    ? `chain ${String(chainId)}`
+    : `${network.name} (${String(network.chainId)})`;
+}
+
 /** The Robinhood Chain network with this id, or `null` for any other chain. */
 export function robinhoodChainNetwork(chainId: number): RobinhoodChainNetwork | null {
   return ROBINHOOD_CHAIN_NETWORKS.find((network) => network.chainId === chainId) ?? null;
