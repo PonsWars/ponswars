@@ -2,6 +2,7 @@ import {
   EMPTY_EVIDENCE,
   sectorIds,
   type BattleEngineState,
+  type LockedPick,
   type RoundEngineState,
   type RoundFinalization,
   type WpAward,
@@ -11,8 +12,10 @@ import type { RoundStorePort } from '@ponswars/round-service';
 import {
   battleId as toBattleId,
   buildCanonicalClock,
+  isActiveTicker,
   roundId as toRoundId,
   utcTimestamp,
+  walletAddress,
   type CanonicalClock,
   type ConfidenceSnapshot,
   type FinalizedBattleResult,
@@ -158,6 +161,38 @@ export class PostgresRoundStore implements RoundStorePort {
    * rather than a missing one: it resumes exactly where an unscored battle
    * starts.
    */
+  /**
+   * The picks a round froze at lock, or none if it has not locked (§22, §25).
+   *
+   * Read back from the columns the pick store froze, in the order it froze
+   * them. A round restored after its lock needs them as much as it needs its
+   * scores: finalization pays War Points to exactly these picks. This returned
+   * none at all once, on the reasoning that the battles had already consumed
+   * them — and a restart during a live battle then finalized a round that paid
+   * nobody.
+   */
+  private async frozenPicks(roundId: string): Promise<readonly LockedPick[]> {
+    const { rows } = await this.db.query(
+      `SELECT wallet, locked_battle_id, locked_ticker, locked_card_decision
+         FROM player_picks
+        WHERE round_id = $1 AND locked_at IS NOT NULL
+        ORDER BY wallet COLLATE "C"`,
+      [roundId],
+    );
+    return rows.map((row) => {
+      const ticker = text(row['locked_ticker']);
+      if (!isActiveTicker(ticker)) {
+        throw new TypeError(`Frozen pick backs ${ticker}, which is not an active ticker`);
+      }
+      return {
+        wallet: walletAddress(text(row['wallet'])),
+        battleId: toBattleId(text(row['locked_battle_id'])),
+        backedTicker: ticker,
+        cardDeployed: text(row['locked_card_decision']) === 'USE',
+      };
+    });
+  }
+
   async loadLatest(): Promise<RoundEngineState | null> {
     const rounds = await this.db.query(
       `SELECT round_id, state, pick_open_at, matchmaking_seed
@@ -203,11 +238,7 @@ export class PostgresRoundStore implements RoundStorePort {
       state: text(round['state']) as RoundEngineState['state'],
       clock,
       matchmakingSeed: text(round['matchmaking_seed']),
-      // Picks are not part of the checkpoint. §22 freezes them into the engine
-      // at the moment of locking, so a round restored before its lock reads
-      // them from the pick store again, and one restored after has already
-      // consumed them into the battles above.
-      picks: [],
+      picks: await this.frozenPicks(roundId),
       battles: battles.rows.map((row) => toBattleState(row, clock)),
     };
   }

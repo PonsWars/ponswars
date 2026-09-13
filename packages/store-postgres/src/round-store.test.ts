@@ -20,6 +20,7 @@ import {
 } from '@ponswars/battle-math';
 import {
   ACTIVE_TICKERS,
+  clientRequestId,
   milliseconds,
   roundId as toRoundId,
   utcTimestamp,
@@ -30,6 +31,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PostgresPickStore } from './pick-store.js';
 import { PostgresRoundStore, readFinalizedResult } from './round-store.js';
 import type { SqlDatabase, SqlRow } from './sql.js';
 
@@ -439,6 +441,52 @@ describe('recovering from a restart', () => {
     expect(after?.momentum).toEqual(before?.momentum);
     expect(after?.evidenceHash).toBe(before?.evidenceHash);
     expect(after?.lastTickAt).toBe(before?.lastTickAt);
+  });
+
+  it('restores the picks a locked round froze, so a restart mid-battle still pays out', async () => {
+    // The bug this pins: a restored round came back with no picks, and a
+    // restart during a live battle finalized a round that paid nobody.
+    const round = openRound();
+    await store.saveState(round);
+    const picks = new PostgresPickStore(database(pg));
+    for (const [index, battle] of round.battles.entries()) {
+      await picks.submit({
+        wallet: wallet(index + 1),
+        roundId: round.roundId,
+        battleId: battle.setup.battleId,
+        backedTicker: battle.setup.left,
+        cardDecision: 'SAVE',
+        receivedAt: at(1_000),
+        clientRequestId: clientRequestId(`req-${String(index)}`),
+      });
+    }
+    const locked = lockRound(round, at(60_000), await picks.lockedPicks(round.roundId));
+    await store.saveState(locked);
+
+    const restored = await store.loadLatest();
+    expect(restored?.picks).toEqual(locked.picks);
+    if (restored === null) {
+      throw new Error('a saved round restores');
+    }
+
+    let live = restored;
+    for (const battle of live.battles) {
+      live = tickBattle(
+        live,
+        battle.setup.battleId,
+        tick(120_000, { left: side({ windowReturn: 2_000_000n }) }),
+        CONFIG,
+      );
+    }
+    const finalization = finalizeRound(live, at(600_000), BLOCK, CONFIG);
+    expect(finalization.awards.length).toBeGreaterThan(0);
+  });
+
+  it('restores no picks for a round that has not locked', async () => {
+    const round = openRound();
+    await store.saveState(round);
+
+    expect((await store.loadLatest())?.picks).toEqual([]);
   });
 
   it('restores the last observation each side was scored from', async () => {
