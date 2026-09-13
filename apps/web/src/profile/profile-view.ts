@@ -1,6 +1,8 @@
 import type { Profile } from '@ponswars/schemas';
+import { CARD_CATALOG } from '@ponswars/shared-types';
+import { cardEffectLine } from '../art/GenesisCardFace.js';
 import { formatTokenAmount } from '../presentation/token-amount.js';
-import type { ProfileData, WarHoldingView } from './WarRoom.js';
+import type { Holdings, ProfileData, WarHoldingView } from './WarRoom.js';
 
 /**
  * The server's profile, as the war room shows it (§34, §69.9).
@@ -12,10 +14,10 @@ import type { ProfileData, WarHoldingView } from './WarRoom.js';
 export function warRoomFrom(profile: Profile): ProfileData {
   return {
     addressFragment: `${profile.wallet.slice(0, 5)}…${profile.wallet.slice(-3)}`,
-    // The card is the chain's and the server says it has not read it. The war
-    // room shows that, rather than an unclaimed card that would be a statement
-    // about this wallet nothing has checked.
-    holdings: { war: warHoldingFrom(profile.holdings.war), genesis: { status: 'UNPUBLISHED' } },
+    holdings: {
+      war: warHoldingFrom(profile.holdings.war),
+      genesis: genesisHoldingFrom(profile.holdings.genesis),
+    },
     lifetime: {
       battles: profile.lifetime.battles,
       wins: profile.lifetime.wins,
@@ -43,6 +45,37 @@ export function warRoomFrom(profile: Profile): ProfileData {
             headline: `${profile.biggestUpset.winner} OVER ${profile.biggestUpset.loser}`,
             classification: profile.biggestUpset.outcome.replaceAll('_', ' '),
             roundId: roundLabel(profile.biggestUpset.roundId),
+          },
+  };
+}
+
+/**
+ * The server's Genesis card, as the war room shows it (§34.2).
+ *
+ * A server that deals no cards says so, and the war room shows that rather than
+ * an unclaimed card — which would be a statement about this wallet nothing had
+ * checked.
+ */
+export function genesisHoldingFrom(genesis: Profile['holdings']['genesis']): Holdings['genesis'] {
+  if (genesis.status === 'UNPUBLISHED') {
+    return { status: 'UNPUBLISHED' };
+  }
+  const { card } = genesis;
+  return {
+    status: 'PUBLISHED',
+    card:
+      card === null
+        ? null
+        : {
+            genesisId: card.genesisId,
+            name: CARD_CATALOG[card.cardType].name,
+            rarity: card.rarity,
+            cardType: card.cardType,
+            effect: cardEffectLine(card.cardType),
+            usesRemaining: card.remainingUses,
+            // Secret results are not dealt yet (§8.4); when they are, the
+            // trophy is the card's rarity rather than a separate claim.
+            secretTrophy: card.rarity === 'SECRET',
           },
   };
 }

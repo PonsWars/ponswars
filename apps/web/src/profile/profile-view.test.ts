@@ -1,6 +1,6 @@
 import type { Profile } from '@ponswars/schemas';
 import { describe, expect, it } from 'vitest';
-import { roundLabel, warHoldingFrom, warRoomFrom } from './profile-view.js';
+import { genesisHoldingFrom, roundLabel, warHoldingFrom, warRoomFrom } from './profile-view.js';
 
 /**
  * The server's profile, written down for the war room.
@@ -82,6 +82,38 @@ describe('the war room, from a live profile', () => {
       balance: '0',
       holder: false,
     });
+  });
+
+  it('shows the dealt card with its charges left, and an unclaimed wallet as unclaimed', () => {
+    expect(
+      genesisHoldingFrom({
+        status: 'READ',
+        card: {
+          genesisId: '000042',
+          rarity: 'RARE',
+          cardType: 'BULL_RUN',
+          initialUses: 3,
+          remainingUses: 0,
+        },
+      }),
+    ).toEqual({
+      status: 'PUBLISHED',
+      card: {
+        genesisId: '000042',
+        name: 'Bull Run',
+        rarity: 'RARE',
+        cardType: 'BULL_RUN',
+        effect: 'Market Support +2',
+        // §34.2: a depleted card is still the wallet's card.
+        usesRemaining: 0,
+        secretTrophy: false,
+      },
+    });
+    expect(genesisHoldingFrom({ status: 'READ', card: null })).toEqual({
+      status: 'PUBLISHED',
+      card: null,
+    });
+    expect(genesisHoldingFrom({ status: 'UNPUBLISHED' })).toEqual({ status: 'UNPUBLISHED' });
   });
 
   it('keeps a failed read apart from a server that reads no chain', () => {
