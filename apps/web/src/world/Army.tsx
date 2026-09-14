@@ -173,7 +173,7 @@ function withFactionRim(material: MeshStandardMaterial, tint: Color): MeshStanda
         `#include <emissivemap_fragment>
         {
           float facing = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
-          totalEmissiveRadiance += pwRim * pow(1.0 - facing, 3.0) * 0.9;
+          totalEmissiveRadiance += pwRim * pow(1.0 - facing, 3.5) * 0.6;
         }`,
       );
   };
