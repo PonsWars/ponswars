@@ -13,6 +13,7 @@
     { "path": "../auth/tsconfig.build.json" },
     { "path": "../battle-engine/tsconfig.build.json" },
     { "path": "../genesis-service/tsconfig.build.json" },
+    { "path": "../rewards-math/tsconfig.build.json" },
     { "path": "../round-service/tsconfig.build.json" },
     { "path": "../player-service/tsconfig.build.json" }
   ]

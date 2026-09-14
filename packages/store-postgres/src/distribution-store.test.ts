@@ -7,7 +7,7 @@ import {
   type ConfidenceCalibration,
   type ConfidenceLookback,
 } from '@ponswars/battle-math';
-import { allocateDistribution } from '@ponswars/rewards-math';
+import { allocateDistribution, buildMerkleTree, leafOf, verifyProof } from '@ponswars/rewards-math';
 import {
   ACTIVE_TICKERS,
   baseUnits,
@@ -294,5 +294,184 @@ describe('taking a snapshot', () => {
     });
 
     expect(result.totalAllocated + result.carriedForward).toBe(snapshot.poolBalance);
+  });
+});
+
+describe('calculating a window (§16, §17)', () => {
+  /** A snapshotted window, some of whose wallets are below the floor. */
+  async function snapshotted(distributionId: bigint, pool: bigint, wallets = 12) {
+    for (let n = 1; n <= wallets; n += 1) {
+      await award(wallet(n), n % 5, 30 + n * 7);
+    }
+    await closedWindow(distributionId);
+    return store.snapshot({ distributionId, poolBalance: baseUnits(pool) });
+  }
+
+  it('produces the root the verify tool recomputes from the snapshot', async () => {
+    const snapshot = await snapshotted(21n, 9_876_543n);
+
+    const calculated = await store.calculate({
+      distributionId: 21n,
+      minimumClaim: baseUnits(1_000n),
+    });
+
+    // Exactly what tools/verify-distribution.mjs does with the snapshot file.
+    const result = allocateDistribution({
+      poolBalance: snapshot.poolBalance,
+      minimumClaim: baseUnits(1_000n),
+      standings: snapshot.standings,
+    });
+    const claimable = result.allocations.filter((allocation) => allocation.amount > 0n);
+    const tree = buildMerkleTree(21n, claimable);
+    expect(calculated).toEqual({
+      distributionId: 21n,
+      state: 'CALCULATED',
+      root: tree.root,
+      total: tree.total,
+      claimable: claimable.length,
+      minimumClaim: 1_000n,
+      publicationTx: null,
+    });
+  });
+
+  it('records every qualified wallet, paid or carried, and carries the rest forward', async () => {
+    // Enough wallets that the 2% cap does not bind them all (§16.6).
+    const snapshot = await snapshotted(22n, 9_876_543n, 80);
+    // A threshold between the smallest and the largest amount, so some
+    // allocations are paid and the rest carry forward.
+    const amounts = allocateDistribution({
+      poolBalance: snapshot.poolBalance,
+      minimumClaim: baseUnits(0n),
+      standings: snapshot.standings,
+    })
+      .allocations.map((allocation) => allocation.amount)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const threshold = amounts[Math.floor(amounts.length / 2)] ?? 0n;
+    expect(amounts[0]).toBeLessThan(threshold);
+    await store.calculate({ distributionId: 22n, minimumClaim: baseUnits(threshold) });
+
+    const rows = await pg.query<{ state: string; paid: boolean; carried: boolean }>(
+      `SELECT state, amount > 0 AS paid, carried_forward > 0 AS carried FROM reward_allocations
+        WHERE distribution_id = '22'`,
+    );
+    expect(rows.rows.some((row) => row.state === 'CALCULATED' && row.paid)).toBe(true);
+    expect(rows.rows.some((row) => row.state === 'CARRIED_FORWARD' && row.carried)).toBe(true);
+    expect(rows.rows.every((row) => row.paid !== row.carried)).toBe(true);
+    const carried = await pg.query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM reward_carry_forward WHERE amount > 0',
+    );
+    expect(carried.rows[0]?.n).toBe(rows.rows.filter((row) => row.carried).length);
+  });
+
+  it('is calculated once, and only after its snapshot', async () => {
+    await snapshotted(23n, 1_000_000n);
+    await store.calculate({ distributionId: 23n, minimumClaim: baseUnits(1n) });
+
+    await expect(
+      store.calculate({ distributionId: 23n, minimumClaim: baseUnits(1n) }),
+    ).rejects.toThrow(/not SNAPSHOT/);
+    await closedWindow(24n);
+    await expect(
+      store.calculate({ distributionId: 24n, minimumClaim: baseUnits(1n) }),
+    ).rejects.toThrow(/is OPEN, not SNAPSHOT/);
+  });
+
+  it('has no root when nobody is above the minimum claim, and nothing to publish', async () => {
+    await snapshotted(25n, 1_000n);
+    const calculated = await store.calculate({
+      distributionId: 25n,
+      minimumClaim: baseUnits(1_000_000n),
+    });
+
+    expect(calculated.root).toBeNull();
+    expect(calculated.claimable).toBe(0);
+    await expect(
+      store.recordPublication({
+        distributionId: 25n,
+        onChainRoot: `0x${'11'.repeat(32)}`,
+        onChainTotal: baseUnits(0n),
+        publicationTx: `0x${'22'.repeat(32)}`,
+      }),
+    ).rejects.toThrow(/no root to publish/);
+  });
+
+  it('is marked published only against the root and total it calculated', async () => {
+    await snapshotted(26n, 9_876_543n);
+    const calculated = await store.calculate({
+      distributionId: 26n,
+      minimumClaim: baseUnits(1_000n),
+    });
+    if (calculated.root === null) throw new Error('expected a root');
+    const tx = `0x${'ab'.repeat(32)}` as const;
+
+    await expect(
+      store.recordPublication({
+        distributionId: 26n,
+        onChainRoot: `0x${'11'.repeat(32)}`,
+        onChainTotal: calculated.total,
+        publicationTx: tx,
+      }),
+    ).rejects.toThrow(/Nothing was recorded/);
+    await expect(
+      store.recordPublication({
+        distributionId: 26n,
+        onChainRoot: calculated.root,
+        onChainTotal: baseUnits(calculated.total - 1n),
+        publicationTx: tx,
+      }),
+    ).rejects.toThrow(/Nothing was recorded/);
+
+    const published = await store.recordPublication({
+      distributionId: 26n,
+      onChainRoot: calculated.root,
+      onChainTotal: calculated.total,
+      publicationTx: tx,
+    });
+    expect(published).toMatchObject({ state: 'PUBLISHED', publicationTx: tx });
+    await expect(
+      store.recordPublication({
+        distributionId: 26n,
+        onChainRoot: calculated.root,
+        onChainTotal: calculated.total,
+        publicationTx: tx,
+      }),
+    ).rejects.toThrow(/already PUBLISHED/);
+  });
+
+  it('hands a wallet the proof the contract will accept, once published', async () => {
+    const snapshot = await snapshotted(27n, 9_876_543n);
+    const calculated = await store.calculate({
+      distributionId: 27n,
+      minimumClaim: baseUnits(1_000n),
+    });
+    if (calculated.root === null) throw new Error('expected a root');
+    const paid = allocateDistribution({
+      poolBalance: snapshot.poolBalance,
+      minimumClaim: baseUnits(1_000n),
+      standings: snapshot.standings,
+    }).allocations.find((allocation) => allocation.amount > 0n);
+    if (paid === undefined) throw new Error('expected a paid wallet');
+
+    // Not before publication: an unpublished proof is a claim that reverts.
+    expect(await store.publishedClaims(paid.wallet)).toEqual([]);
+
+    await store.recordPublication({
+      distributionId: 27n,
+      onChainRoot: calculated.root,
+      onChainTotal: calculated.total,
+      publicationTx: `0x${'ab'.repeat(32)}`,
+    });
+    const claims = await store.publishedClaims(paid.wallet);
+
+    expect(claims).toHaveLength(1);
+    const [claim] = claims;
+    expect(claim).toMatchObject({
+      distributionId: 27n,
+      amount: paid.amount,
+      root: calculated.root,
+    });
+    expect(
+      verifyProof(leafOf(27n, paid.wallet, paid.amount), claim?.proof ?? [], calculated.root),
+    ).toBe(true);
   });
 });

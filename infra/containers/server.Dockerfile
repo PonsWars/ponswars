@@ -34,6 +34,7 @@ COPY packages/genesis-service/package.json packages/genesis-service/
 COPY packages/market-data/package.json packages/market-data/
 COPY packages/player-service/package.json packages/player-service/
 COPY packages/realtime/package.json packages/realtime/
+COPY packages/rewards-math/package.json packages/rewards-math/
 COPY packages/round-service/package.json packages/round-service/
 COPY packages/schemas/package.json packages/schemas/
 COPY packages/shared-types/package.json packages/shared-types/

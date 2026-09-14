@@ -399,6 +399,9 @@ importers:
       '@ponswars/player-service':
         specifier: workspace:*
         version: link:../player-service
+      '@ponswars/rewards-math':
+        specifier: workspace:*
+        version: link:../rewards-math
       '@ponswars/round-service':
         specifier: workspace:*
         version: link:../round-service
@@ -412,9 +415,6 @@ importers:
       '@ponswars/battle-math':
         specifier: workspace:*
         version: link:../battle-math
-      '@ponswars/rewards-math':
-        specifier: workspace:*
-        version: link:../rewards-math
       viem:
         specifier: ^2.56.3
         version: 2.56.3(typescript@6.0.3)(zod@4.5.4)

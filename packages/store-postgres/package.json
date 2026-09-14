@@ -24,13 +24,13 @@
     "@ponswars/battle-engine": "workspace:*",
     "@ponswars/genesis-service": "workspace:*",
     "@ponswars/player-service": "workspace:*",
+    "@ponswars/rewards-math": "workspace:*",
     "@ponswars/round-service": "workspace:*",
     "@ponswars/shared-types": "workspace:*"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@ponswars/battle-math": "workspace:*",
-    "@ponswars/rewards-math": "workspace:*",
     "viem": "^2.56.3"
   }
 }
