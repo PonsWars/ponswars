@@ -12,8 +12,14 @@ import { capped, CLIFF_DEPTH, islandRock, rimCity } from './rock.js';
  * city's accent windows are the Market's own cold light, not either side's.
  */
 
-/** The stone round the plateau's edge: darker than an islet's, closer to the paving. */
-const ISLAND_CAP = [0.045, 0.05, 0.055] as const;
+/**
+ * The stone round the plateau's edge.
+ *
+ * Very dark as a vertex colour because the rock is fully rough and dielectric:
+ * it takes all of the key light that the paving, at a third metal, turns away —
+ * at an islet's tone this ring read as a pale grey band round every plateau.
+ */
+const ISLAND_CAP = [0.008, 0.009, 0.011] as const;
 
 /** The rock's resolution at each detail level (§82.2). */
 const ROCK_RESOLUTION: Readonly<Record<DetailLevel, { around: number; rings: number }>> = {
