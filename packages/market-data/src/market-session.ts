@@ -108,6 +108,40 @@ export function nextOpenAt(at: UtcTimestamp, calendar: MarketCalendar): UtcTimes
 }
 
 /**
+ * The first instant at or after `at` from which the market stays open for
+ * `durationMs` — when a whole round can run (§3.1, §23.8).
+ *
+ * Opening a round five minutes before Friday's close would only schedule a
+ * battle to void when the market shuts under it. Sessions only begin and end
+ * on the hour in New York, so checking each hour boundary a span crosses, and
+ * its last instant, is enough to know it stays open.
+ */
+export function nextOpenWindow(
+  at: UtcTimestamp,
+  durationMs: number,
+  calendar: MarketCalendar,
+): UtcTimestamp {
+  let start = nextOpenAt(at, calendar);
+  for (let attempt = 0; attempt < 60 * 24; attempt += 1) {
+    const end = start + durationMs - 1;
+    let closesInside = !isMarketOpen(utcTimestamp(end), calendar);
+    for (
+      let hour = Math.floor(start / HOUR) * HOUR + HOUR;
+      !closesInside && hour <= end;
+      hour += HOUR
+    ) {
+      closesInside = !isMarketOpen(utcTimestamp(hour), calendar);
+    }
+    if (!closesInside) {
+      return start;
+    }
+    // Past the closure, then to wherever the market next opens.
+    start = nextOpenAt(utcTimestamp(Math.floor(end / HOUR) * HOUR + HOUR), calendar);
+  }
+  throw new RangeError('The market calendar has no window that long within sixty days');
+}
+
+/**
  * The same span on the `count` most recent earlier trading days (§12.2).
  *
  * What "normal volume for this stretch of the day" is measured against. Days

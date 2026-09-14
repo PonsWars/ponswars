@@ -4,6 +4,7 @@ import {
   comparableSpans,
   isMarketOpen,
   nextOpenAt,
+  nextOpenWindow,
   parseHolidays,
   tradingDayOf,
 } from './market-session.js';
@@ -58,6 +59,28 @@ describe('nextOpenAt', () => {
     // Labor Day, Monday 2026-09-07: the market reopens Monday 20:00 New York.
     const calendar = { holidays: parseHolidays('2026-09-07') };
     expect(nextOpenAt(at('2026-09-05T12:00:00Z'), calendar)).toBe(at('2026-09-08T00:00:00Z'));
+  });
+});
+
+describe('nextOpenWindow', () => {
+  const TEN_MINUTES = 600_000;
+
+  it('is now when a whole round fits before the close', () => {
+    const now = at('2026-09-18T23:45:00Z'); // Fri 19:45 New York
+    expect(nextOpenWindow(now, TEN_MINUTES, OPEN_CALENDAR)).toBe(now);
+  });
+
+  it('waits for the next session when a round would still be running at the close', () => {
+    // Fri 19:55 New York: a ten-minute round would end after 20:00.
+    expect(nextOpenWindow(at('2026-09-18T23:55:00Z'), TEN_MINUTES, OPEN_CALENDAR)).toBe(
+      at('2026-09-21T00:00:00Z'),
+    );
+  });
+
+  it('is the reopening itself from a closed market', () => {
+    expect(nextOpenWindow(at('2026-09-19T15:00:00Z'), TEN_MINUTES, OPEN_CALENDAR)).toBe(
+      at('2026-09-21T00:00:00Z'),
+    );
   });
 });
 
