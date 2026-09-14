@@ -50,6 +50,7 @@ import { Planet } from './Planet.js';
 import { islet } from './rock.js';
 import { rockGeometry } from './rock-geometry.js';
 import { withGround } from './ground.js';
+import { Scorch } from './Scorch.js';
 import { SectorLabel } from './SectorLabel.js';
 import { Traffic } from './Traffic.js';
 import { WorldInput } from './WorldInput.js';
@@ -658,6 +659,7 @@ function Sector({
             <boxGeometry key="paving" args={[1, 1, 1]} />
             <meshBasicMaterial key="paving-material" color="#2f6f86" transparent opacity={0.16} />
           </InstancedField>
+          {detail === 'FULL' ? <Scorch seed={terrainSeed(index, 8)} /> : null}
         </>
       ) : null}
 
