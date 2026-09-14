@@ -3,7 +3,7 @@ import { useEffect, useMemo, type JSX } from 'react';
 import { BufferAttribute, BufferGeometry, MeshStandardMaterial } from 'three';
 import { withCityLights } from './city-lights.js';
 import { InstancedField, type Placement } from './InstancedField.js';
-import { islandRock, rimCity } from './rock.js';
+import { capped, CLIFF_DEPTH, islandRock, rimCity } from './rock.js';
 
 /**
  * The body of a sector island: its rock and the city around its rim (§38.1, §38.9).
@@ -11,6 +11,9 @@ import { islandRock, rimCity } from './rock.js';
  * Neutral by construction (§38.3) — no faction colour in the rock, and the rim
  * city's accent windows are the Market's own cold light, not either side's.
  */
+
+/** The stone round the plateau's edge: darker than an islet's, closer to the paving. */
+const ISLAND_CAP = [0.045, 0.05, 0.055] as const;
 
 /** The rock's resolution at each detail level (§82.2). */
 const ROCK_RESOLUTION: Readonly<Record<DetailLevel, { around: number; rings: number }>> = {
@@ -62,12 +65,16 @@ export function IslandMass({
   const resolution = ROCK_RESOLUTION[detail];
 
   const rock = useMemo(() => {
-    const data = islandRock(seed, {
-      radius: radius * 0.98,
-      depth,
-      around: resolution.around,
-      rings: resolution.rings,
-    });
+    const data = capped(
+      islandRock(seed, {
+        radius: radius * 0.98,
+        depth,
+        around: resolution.around,
+        rings: resolution.rings,
+      }),
+      resolution.around,
+      ISLAND_CAP,
+    );
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
     geometry.setAttribute('color', new BufferAttribute(data.colors, 3));
@@ -81,13 +88,27 @@ export function IslandMass({
 
   const rockMaterial = useMemo(
     () =>
-      new MeshStandardMaterial({
-        vertexColors: true,
-        roughness: 0.94,
-        metalness: 0.08,
-        flatShading: true,
-      }),
-    [],
+      withCityLights(
+        new MeshStandardMaterial({
+          vertexColors: true,
+          roughness: 0.94,
+          metalness: 0.08,
+          flatShading: true,
+        }),
+        // Dwellings cut into the cliff face, and none in the root: a few warm
+        // windows down the wall under the city are what say the rock is lived
+        // in and not only stood on. Sparse, and larger than a tower's, because
+        // the wall is seen from further off.
+        {
+          accent: core ? '#ffd27a' : '#ffb45e',
+          density: core ? 0.12 : 0.08,
+          intensity: 3.2,
+          floor: 5,
+          bay: 4.2,
+          band: [-depth * CLIFF_DEPTH, -3],
+        },
+      ),
+    [core, depth],
   );
 
   const rim = useMemo<readonly Placement[]>(
@@ -145,7 +166,9 @@ export function IslandMass({
 
   return (
     <group>
-      <mesh geometry={rock} material={rockMaterial} position={[0, -9, 0]} />
+      {/* The rock's own top just under the plateau's, so the cliff rises to
+          the rim and the ragged edge past the plateau is stone, not a gap. */}
+      <mesh geometry={rock} material={rockMaterial} position={[0, top - 0.6, 0]} />
       {rim.length > 0 ? (
         <InstancedField placements={rim}>
           <boxGeometry key="rim-building" args={[1, 1, 1]} />
