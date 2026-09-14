@@ -30,9 +30,16 @@ export interface Placement {
 export function InstancedField({
   placements,
   children,
+  renderOrder,
 }: {
   readonly placements: readonly Placement[];
   readonly children: readonly JSX.Element[];
+  /**
+   * For a transparent field that must draw after another transparent surface
+   * it lies on — three sorts transparent objects by distance, and a decal on a
+   * floor is at the floor's distance, so it loses that sort half the time.
+   */
+  readonly renderOrder?: number;
 }): JSX.Element | null {
   const field = useRef<InstancedMesh>(null);
 
@@ -61,7 +68,11 @@ export function InstancedField({
   }
 
   return (
-    <instancedMesh ref={field} args={[undefined, undefined, placements.length]}>
+    <instancedMesh
+      ref={field}
+      args={[undefined, undefined, placements.length]}
+      renderOrder={renderOrder ?? 0}
+    >
       {children}
     </instancedMesh>
   );
