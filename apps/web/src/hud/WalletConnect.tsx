@@ -125,7 +125,16 @@ function Line({
       title={compact ? detail : undefined}
     >
       <div style={captionStyle}>{caption}</div>
-      <div style={{ fontFamily: 'var(--pw-font-display)', fontSize: 13 }}>{value}</div>
+      <div
+        style={{
+          fontFamily: 'var(--pw-font-display)',
+          fontSize: 15,
+          fontWeight: 600,
+          letterSpacing: '0.05em',
+        }}
+      >
+        {value}
+      </div>
       {detail === undefined || compact ? null : (
         <div style={{ ...captionStyle, letterSpacing: 0, maxWidth: 220 }}>{detail}</div>
       )}
@@ -137,7 +146,8 @@ const buttonStyle = {
   ...controlStyle,
   padding: 'var(--pw-space-2) var(--pw-space-3)',
   fontFamily: 'var(--pw-font-display)',
-  fontSize: 12,
+  fontSize: 14,
+  fontWeight: 600,
   letterSpacing: '0.08em',
   whiteSpace: 'nowrap' as const,
 };

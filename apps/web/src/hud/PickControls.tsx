@@ -119,7 +119,7 @@ export function PickControls({ battle }: { readonly battle: ClientBattle }): JSX
       {flow.mayChangePick ? (
         <button
           type="button"
-          style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
+          style={{ ...controlStyle, fontSize: 13, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
           onClick={() => {
             // §27.6: a pick may be changed until lock. Clearing returns the
             // player to CHOOSE_SIDE rather than to a half-committed state, and
@@ -298,7 +298,9 @@ function BackButton({
         ...controlStyle,
         padding: 'var(--pw-space-2) var(--pw-space-4)',
         fontFamily: 'var(--pw-font-display)',
-        fontSize: 13,
+        fontSize: 15,
+        fontWeight: 600,
+        letterSpacing: '0.06em',
         // §42.5 step 2: the chosen side takes subtle emphasis. A border, not a
         // fill — the world stays the hero (§42.1).
         borderColor: pending ? FACTION_ACCENT[ticker] : 'var(--pw-border-1)',

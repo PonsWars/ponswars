@@ -139,9 +139,10 @@ function Hero({
           style={{
             margin: 0,
             fontFamily: 'var(--pw-font-display)',
-            fontSize: 'clamp(34px, 6vw, 66px)',
-            lineHeight: 1.04,
-            letterSpacing: '-0.01em',
+            fontSize: 'clamp(38px, 6.4vw, 76px)',
+            fontWeight: 700,
+            lineHeight: 1,
+            letterSpacing: '0.005em',
             color: 'var(--pw-text-1)',
           }}
         >
@@ -538,7 +539,7 @@ function PillarCard({
         <button
           type="button"
           onClick={onAction}
-          style={{ ...controlStyle, fontSize: 11, justifySelf: 'start' }}
+          style={{ ...controlStyle, fontSize: 13, justifySelf: 'start' }}
         >
           {action}
         </button>

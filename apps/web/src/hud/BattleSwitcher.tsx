@@ -52,13 +52,24 @@ export function BattleSwitcher(): JSX.Element {
               battle.battleId === focusedBattleId ? 'var(--pw-accent)' : 'var(--pw-border-1)',
           }}
         >
-          <span style={{ fontSize: 12, fontFamily: 'var(--pw-font-display)' }}>
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              fontFamily: 'var(--pw-font-display)',
+            }}
+          >
             {battle.left} / {battle.right}
           </span>
           <span
             style={{
               display: 'block',
+              // The interface face at caption size, like every other caption;
+              // the button's own face is the display face.
+              fontFamily: 'var(--pw-font-ui)',
               fontSize: 10,
+              fontWeight: 500,
               letterSpacing: '0.1em',
               // §37.7 requires a clear selected-war indicator, and §37.8 keeps
               // YOUR WAR marked while the player spectates the other four.

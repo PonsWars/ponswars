@@ -21,7 +21,7 @@ export function PresentationLinks({
     <div style={{ display: 'flex', gap: 'var(--pw-space-2)' }}>
       <button
         type="button"
-        style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
+        style={{ ...controlStyle, fontSize: 13, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
         onClick={() => {
           onNavigate({ kind: 'FACTIONS', ticker: null });
         }}
@@ -30,7 +30,7 @@ export function PresentationLinks({
       </button>
       <button
         type="button"
-        style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
+        style={{ ...controlStyle, fontSize: 13, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
         onClick={() => {
           onNavigate({ kind: 'ABOUT' });
         }}
@@ -39,7 +39,7 @@ export function PresentationLinks({
       </button>
       <button
         type="button"
-        style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
+        style={{ ...controlStyle, fontSize: 13, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
         onClick={() => {
           onNavigate({ kind: 'PROFILE' });
         }}
@@ -48,7 +48,7 @@ export function PresentationLinks({
       </button>
       <button
         type="button"
-        style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
+        style={{ ...controlStyle, fontSize: 13, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
         onClick={() => {
           onNavigate({ kind: 'REWARDS' });
         }}
@@ -57,7 +57,7 @@ export function PresentationLinks({
       </button>
       <button
         type="button"
-        style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
+        style={{ ...controlStyle, fontSize: 13, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
         onClick={() => {
           onNavigate({ kind: 'GENESIS' });
         }}
@@ -66,7 +66,7 @@ export function PresentationLinks({
       </button>
       <button
         type="button"
-        style={{ ...controlStyle, fontSize: 11, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
+        style={{ ...controlStyle, fontSize: 13, padding: 'var(--pw-space-2) var(--pw-space-3)' }}
         onClick={() => {
           onNavigate({ kind: 'RESULT', battleId: null });
         }}

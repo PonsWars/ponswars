@@ -64,7 +64,9 @@ export function BattleIntel({
       <div
         style={{
           fontFamily: 'var(--pw-font-display)',
-          fontSize: 15,
+          fontSize: 18,
+          fontWeight: 600,
+          letterSpacing: '0.06em',
           color: 'var(--pw-text-1)',
           marginBottom: 'var(--pw-space-2)',
         }}

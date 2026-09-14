@@ -51,8 +51,9 @@ export function RoundStatus(): JSX.Element {
 
 const phaseStyle = {
   fontFamily: 'var(--pw-font-display)',
+  fontWeight: 600,
   letterSpacing: '0.08em',
-  fontSize: 12,
+  fontSize: 14,
 } as const;
 
 /**
