@@ -20,6 +20,7 @@ import {
   Box3,
   Color,
   DataTexture,
+  DoubleSide,
   MeshStandardMaterial,
   ShaderMaterial,
   Vector3,
@@ -152,29 +153,38 @@ function terrainSeed(index: number, part: number): number {
   return index * 977 + part * 13;
 }
 
+/** How strongly the barrier shows at full strength. Additive, so it blooms: kept low. */
+const FRONTLINE_OPACITY = 0.5;
+
 /**
- * A vertical fade for the frontline barrier: opaque at the ground, gone at the
- * top. One small texture shared by every sector.
+ * The frontline's two fades, each one small texture shared by every sector.
+ *
+ * - `BARRIER` runs up the standing sheet: bright at the ground, gone at the top.
+ * - `STRIP` runs across the line on the ground: bright in the middle, soft to
+ *   both edges.
  */
-let sharedBarrierFade: DataTexture | null = null;
-function useBarrierFade(): DataTexture {
+const FADES = {
+  BARRIER: (t: number) => Math.pow(1 - t, 2.6),
+  STRIP: (t: number) => Math.pow(1 - Math.abs(t * 2 - 1), 2.2),
+} as const;
+const sharedFades = new Map<keyof typeof FADES, DataTexture>();
+function useFade(kind: keyof typeof FADES): DataTexture {
   return useMemo(() => {
-    if (sharedBarrierFade !== null) {
-      return sharedBarrierFade;
+    const cached = sharedFades.get(kind);
+    if (cached !== undefined) {
+      return cached;
     }
     const height = 64;
     const data = new Uint8Array(4 * height);
     for (let row = 0; row < height; row += 1) {
-      const t = row / (height - 1);
-      // Bright core at the base, a soft shoulder, nothing at the top.
-      const value = Math.round(255 * Math.pow(1 - t, 1.8));
+      const value = Math.round(255 * FADES[kind](row / (height - 1)));
       data.fill(value, row * 4, row * 4 + 4);
     }
     const texture = new DataTexture(data, 1, height);
     texture.needsUpdate = true;
-    sharedBarrierFade = texture;
+    sharedFades.set(kind, texture);
     return texture;
-  }, []);
+  }, [kind]);
 }
 
 /**
@@ -516,7 +526,8 @@ function Sector({
   // line is. Starts on the authoritative value so the first frame is not an
   // animation from the middle of the field.
   const shown = useRef(held);
-  const barrierFade = useBarrierFade();
+  const barrierFade = useFade('BARRIER');
+  const stripFade = useFade('STRIP');
 
   // What the reshuffle moves on a sector: the two forward bases folding away
   // and the frontline collapsing to the centre (§15 steps 3, 4 and 9). Driven
@@ -559,11 +570,11 @@ function Sector({
       // Collapses toward the centre as it goes, rather than fading in place:
       // §15 calls the frontline a connection, and a connection comes apart.
       marker.position.x = (shown.current - 0.5) * CONTESTED_WIDTH * frame.frontline;
-      marker.scale.set(1, Math.max(frame.frontline, 0.0001), Math.max(frame.frontline, 0.0001));
+      marker.scale.set(Math.max(frame.frontline, 0.0001), Math.max(frame.frontline, 0.0001), 1);
       marker.visible = showing;
       const material = marker.material;
       if (!Array.isArray(material) && 'opacity' in material) {
-        material.opacity = 0.72 * frame.frontline;
+        material.opacity = FRONTLINE_OPACITY * frame.frontline;
       }
     }
   });
@@ -766,24 +777,47 @@ function Sector({
         authoritative momentum, never a source of it.
       */}
       {detail !== 'SILHOUETTE' && battle !== undefined ? (
-        <mesh ref={frontline} position={[0, 22, 0]}>
-          {/* Narrow and low enough to read across a district that now has a
-              skyline behind it. The first pass was a 28-unit wall in flat
-              white, and from the sector camera it hid the battlefield it was
-              drawn to explain (§36.2). */}
-          <boxGeometry args={[1.4, 22, 108]} />
+        <mesh
+          ref={frontline}
+          position={[0, SECTOR_PLATFORM_TOP + 8, 0]}
+          rotation={[0, Math.PI / 2, 0]}
+        >
+          {/* Low enough to read across a district that has a skyline behind
+              it: the first pass was a 28-unit wall in flat white, and from the
+              sector camera it hid the battlefield it was drawn to explain
+              (§36.2). A sheet rather than a box, because a box's top face took
+              the whole gradient and read as a bright bar from above; rotated to
+              stand across the field, and drawn from both sides. */}
+          <planeGeometry args={[108, 16]} />
           {/* An energy barrier rather than a wall: bright along the ground,
               fading upward, and additive, so it reads as light standing on the
               field — a solid pale slab read as a sheet of paper from above. */}
           <meshBasicMaterial
-            color="#8fe3ff"
+            color="#5fd0ff"
             alphaMap={barrierFade}
+            side={DoubleSide}
             transparent
-            opacity={0.72}
+            opacity={FRONTLINE_OPACITY}
             blending={AdditiveBlending}
             depthWrite={false}
             toneMapped={false}
           />
+          {/* The line on the ground under it. From the sector camera, which
+              looks down the length of the field, the sheet is edge-on and all
+              but vanishes — the strip is what says where the line is from
+              there. A child, so it moves and collapses with the sheet. */}
+          <mesh position={[0, -7.3, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[108, 7]} />
+            <meshBasicMaterial
+              color="#5fd0ff"
+              alphaMap={stripFade}
+              transparent
+              opacity={0.85}
+              blending={AdditiveBlending}
+              depthWrite={false}
+              toneMapped={false}
+            />
+          </mesh>
         </mesh>
       ) : null}
 
