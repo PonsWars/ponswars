@@ -7,12 +7,14 @@
  * (§59.4). This is small enough to read in one sitting, which is the property
  * that matters for the code standing between a player and their wallet.
  *
- * ## What it will never do
+ * ## What it will and will not ask for
  *
- * Ask for a transaction. Nothing here can move funds: the only signing method
- * called is `personal_sign`, and the message it signs is the one the server
- * issued. §45.2 puts real value behind a wallet transaction confirmation, and
- * that is somewhere else by design.
+ * One transaction, and only one: a reward claim (§16.8), which the player
+ * starts, which the wallet shows them in full before they approve it, and which
+ * pays the player's own address — the contract sends a claim to the account in
+ * its leaf, whoever submits it. Nothing here asks for an approval, a transfer
+ * or a transaction to any other contract. Sign-in is `personal_sign` over the
+ * message the server issued, which moves nothing.
  */
 
 import { robinhoodChainNetwork } from '@ponswars/shared-types';
@@ -148,6 +150,55 @@ export async function switchChain(
       return { ok: false, failure: describe(addError) };
     }
   }
+}
+
+/** A receipt as far as the claim flow cares: not landed yet, landed, or reverted. */
+export type TransactionOutcome = 'PENDING' | 'SUCCEEDED' | 'REVERTED';
+
+/**
+ * Sends a claim transaction from the connected account, and returns its hash.
+ *
+ * `eth_sendTransaction` with no value: the wallet estimates gas and shows the
+ * player the call before they approve it. A declined prompt is `DECLINED`, as
+ * it is everywhere else.
+ */
+export async function sendTransaction(
+  provider: Eip1193Provider,
+  transaction: { readonly from: string; readonly to: string; readonly data: string },
+): Promise<WalletResult<`0x${string}`>> {
+  try {
+    const hash = await provider.request({
+      method: 'eth_sendTransaction',
+      params: [
+        { from: transaction.from, to: transaction.to, data: transaction.data, value: '0x0' },
+      ],
+    });
+    if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) {
+      return {
+        ok: false,
+        failure: { kind: 'FAILED', detail: 'wallet returned no transaction hash' },
+      };
+    }
+    return { ok: true, value: hash as `0x${string}` };
+  } catch (error: unknown) {
+    return { ok: false, failure: describe(error) };
+  }
+}
+
+/** Where a sent transaction is, read through the wallet's own connection. */
+export async function transactionOutcome(
+  provider: Eip1193Provider,
+  hash: string,
+): Promise<TransactionOutcome> {
+  const receipt: unknown = await provider.request({
+    method: 'eth_getTransactionReceipt',
+    params: [hash],
+  });
+  if (typeof receipt !== 'object' || receipt === null || !('status' in receipt)) {
+    return 'PENDING';
+  }
+  const { status } = receipt as { status?: unknown };
+  return status === '0x1' || status === 1 ? 'SUCCEEDED' : 'REVERTED';
 }
 
 /**

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { switchChain, type Eip1193Provider } from './wallet-provider.js';
+import {
+  sendTransaction,
+  switchChain,
+  transactionOutcome,
+  type Eip1193Provider,
+} from './wallet-provider.js';
 
 /**
  * Switching a wallet to Robinhood Chain.
@@ -141,5 +146,41 @@ describe('switchChain', () => {
       failure: { kind: 'DECLINED' },
     });
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe('sending a claim', () => {
+  const TX = `0x${'ab'.repeat(32)}`;
+  const CLAIM = { from: `0x${'1'.repeat(40)}`, to: `0x${'2'.repeat(40)}`, data: '0x2e7ba6ef' };
+
+  it('sends it from the connected account with no value, and returns the hash', async () => {
+    const { provider, calls } = wallet(() => TX);
+
+    expect(await sendTransaction(provider, CLAIM)).toEqual({ ok: true, value: TX });
+    expect(calls).toEqual([
+      { method: 'eth_sendTransaction', params: [{ ...CLAIM, value: '0x0' }] },
+    ]);
+  });
+
+  it('treats a declined prompt as declined, and nonsense as a failure', async () => {
+    expect(
+      await sendTransaction(
+        wallet(() => {
+          throw walletError(4001);
+        }).provider,
+        CLAIM,
+      ),
+    ).toEqual({ ok: false, failure: { kind: 'DECLINED' } });
+    expect((await sendTransaction(wallet(() => 42).provider, CLAIM)).ok).toBe(false);
+  });
+
+  it('reads a receipt as pending, succeeded or reverted', async () => {
+    expect(await transactionOutcome(wallet(() => null).provider, TX)).toBe('PENDING');
+    expect(await transactionOutcome(wallet(() => ({ status: '0x1' })).provider, TX)).toBe(
+      'SUCCEEDED',
+    );
+    expect(await transactionOutcome(wallet(() => ({ status: '0x0' })).provider, TX)).toBe(
+      'REVERTED',
+    );
   });
 });
