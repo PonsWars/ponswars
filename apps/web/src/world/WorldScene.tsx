@@ -2,7 +2,6 @@ import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import {
   debrisField,
   districtBlocks,
-  islandCrags,
   reshuffleFrame,
   selectDetail,
   SETTLED_WORLD,
@@ -15,7 +14,16 @@ import {
 import { useGLTF } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { BackSide, Box3, Color, DataTexture, ShaderMaterial, Vector3 } from 'three';
+import {
+  AdditiveBlending,
+  BackSide,
+  Box3,
+  Color,
+  DataTexture,
+  MeshStandardMaterial,
+  ShaderMaterial,
+  Vector3,
+} from 'three';
 import type { BufferGeometry, Mesh } from 'three';
 import type { Group, PerspectiveCamera, PointLight } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
@@ -30,10 +38,13 @@ import {
 } from './layout.js';
 import { Army } from './Army.js';
 import { CloudSea, NOISE_GLSL } from './Atmosphere.js';
+import { withCityLights } from './city-lights.js';
 import { CoreBeam, CoreModel } from './CoreModel.js';
 import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigation-config.js';
 import { DeckProps, PropField, type Prop } from './DeckProps.js';
 import { InstancedField, preparedGeometry, type Placement } from './InstancedField.js';
+import { IslandMass } from './IslandMass.js';
+import { Planet } from './Planet.js';
 import { SectorLabel } from './SectorLabel.js';
 import { WorldInput } from './WorldInput.js';
 import { WorldLighting } from './WorldLighting.js';
@@ -115,9 +126,6 @@ const DISTRICT_DENSITY: Readonly<Record<DetailLevel, number>> = {
   CULLED: 0,
 };
 
-/** How many rocks hang under one plateau. */
-const CRAGS_PER_ISLAND = 8;
-
 /**
  * The width of the contested ground between the two districts (§38.3).
  *
@@ -142,6 +150,31 @@ const CONTESTED_WIDTH = 76;
  */
 function terrainSeed(index: number, part: number): number {
   return index * 977 + part * 13;
+}
+
+/**
+ * A vertical fade for the frontline barrier: opaque at the ground, gone at the
+ * top. One small texture shared by every sector.
+ */
+let sharedBarrierFade: DataTexture | null = null;
+function useBarrierFade(): DataTexture {
+  return useMemo(() => {
+    if (sharedBarrierFade !== null) {
+      return sharedBarrierFade;
+    }
+    const height = 64;
+    const data = new Uint8Array(4 * height);
+    for (let row = 0; row < height; row += 1) {
+      const t = row / (height - 1);
+      // Bright core at the base, a soft shoulder, nothing at the top.
+      const value = Math.round(255 * Math.pow(1 - t, 1.8));
+      data.fill(value, row * 4, row * 4 + 4);
+    }
+    const texture = new DataTexture(data, 1, height);
+    texture.needsUpdate = true;
+    sharedBarrierFade = texture;
+    return texture;
+  }, []);
 }
 
 /**
@@ -209,11 +242,17 @@ function MarketCore(): JSX.Element {
 
   return (
     <group ref={core} position={[MARKET_CORE.x, MARKET_CORE.y, MARKET_CORE.z]}>
-      {/* The plateau the core stands on: §38.9 asks for verticality through
-          plateaus and raised structures rather than a flat disc. */}
-      <mesh position={[0, -14, 0]}>
-        <cylinderGeometry args={[92, 118, 28, 6]} />
-        <meshStandardMaterial color="#0d161d" metalness={0.2} roughness={0.88} />
+      {/* The plateau the core stands on (§38.9): a paved crown on the largest
+          rock in the world, with the city packed round the citadel. */}
+      <mesh position={[0, -8, 0]}>
+        <cylinderGeometry args={[112, 108, 16, 48]} />
+        <meshStandardMaterial color="#10171c" metalness={0.4} roughness={0.7} />
+      </mesh>
+      <IslandMass seed={4_099} radius={124} detail="FULL" top={0} depth={230} core />
+      {/* The lit edge of the plateau: the core is findable by its light first. */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.4, 0]}>
+        <torusGeometry args={[110, 1.1, 6, 96]} />
+        <meshBasicMaterial color="#ffd27a" toneMapped={false} />
       </mesh>
 
       {/* The core itself, modelled in Blender (§38.2). Suspended on its own so
@@ -477,6 +516,7 @@ function Sector({
   // line is. Starts on the authoritative value so the first frame is not an
   // animation from the middle of the field.
   const shown = useRef(held);
+  const barrierFade = useBarrierFade();
 
   // What the reshuffle moves on a sector: the two forward bases folding away
   // and the frontline collapsing to the centre (§15 steps 3, 4 and 9). Driven
@@ -587,22 +627,21 @@ function Sector({
         <meshStandardMaterial
           // Lifting under the pointer, a step below the focused tone: the world
           // should answer a hover before it answers a click (§37.3).
-          color={isFocused ? '#22394a' : hovered ? '#1e3342' : '#1a2d3a'}
-          metalness={0.22}
-          roughness={0.8}
+          color={isFocused ? '#1c2a33' : hovered ? '#18242c' : '#121a20'}
+          metalness={0.35}
+          roughness={0.72}
         />
       </mesh>
 
-      {/* The underside, tapering into the void. What makes an island float. */}
-      <mesh position={[0, -46, 0]}>
-        <coneGeometry args={[92, 74, SEGMENTS[detail]]} />
-        <meshStandardMaterial color="#070d12" metalness={0.3} roughness={0.95} />
-      </mesh>
-
-      {/* Broken rock around that taper. Kept at silhouette range too: it is
-          part of the outline, and the outline is the whole of what a distant
+      {/* The rock it floats on and the city around its rim. Kept at
+          silhouette range too: the outline is the whole of what a distant
           island is. */}
-      <Crags seed={terrainSeed(index, 3)} />
+      <IslandMass
+        seed={terrainSeed(index, 3)}
+        radius={SECTOR_ISLAND_RADIUS}
+        detail={detail}
+        top={SECTOR_PLATFORM_TOP}
+      />
 
       {detail !== 'SILHOUETTE' ? (
         <>
@@ -632,7 +671,7 @@ function Sector({
               stands on it. */}
           <InstancedField placements={CONTESTED_PAVING}>
             <boxGeometry key="paving" args={[1, 1, 1]} />
-            <meshBasicMaterial key="paving-material" color="#2f6f86" transparent opacity={0.4} />
+            <meshBasicMaterial key="paving-material" color="#2f6f86" transparent opacity={0.16} />
           </InstancedField>
         </>
       ) : null}
@@ -732,8 +771,19 @@ function Sector({
               skyline behind it. The first pass was a 28-unit wall in flat
               white, and from the sector camera it hid the battlefield it was
               drawn to explain (§36.2). */}
-          <boxGeometry args={[2.4, 19, 108]} />
-          <meshBasicMaterial color="#cfe2ec" transparent opacity={0.72} />
+          <boxGeometry args={[1.4, 22, 108]} />
+          {/* An energy barrier rather than a wall: bright along the ground,
+              fading upward, and additive, so it reads as light standing on the
+              field — a solid pale slab read as a sheet of paper from above. */}
+          <meshBasicMaterial
+            color="#8fe3ff"
+            alphaMap={barrierFade}
+            transparent
+            opacity={0.72}
+            blending={AdditiveBlending}
+            depthWrite={false}
+            toneMapped={false}
+          />
         </mesh>
       ) : null}
 
@@ -818,6 +868,34 @@ function District({
     return { masses, crowns };
   }, [blocks]);
 
+  // The buildings, with their windows lit (§36.4). One material per district,
+  // shared across its pieces, because the accent is the district's.
+  const massMaterial = useMemo(
+    () =>
+      withCityLights(
+        new MeshStandardMaterial({
+          color: '#18222b',
+          metalness: 0.3,
+          roughness: 0.62,
+          envMapIntensity: 0.35,
+          emissive: '#081620',
+          emissiveIntensity: 0.4,
+        }),
+        {
+          accent,
+          density: detail === 'FULL' ? 0.36 : 0.3,
+          intensity: 2.4,
+        },
+      ),
+    [accent, detail],
+  );
+  useEffect(
+    () => () => {
+      massMaterial.dispose();
+    },
+    [massMaterial],
+  );
+
   return (
     <group position={[side * 62, 11, 0]}>
       {/* The apron, then the deck: two steps rather than one slab. Every
@@ -862,14 +940,7 @@ function District({
 
                 The probe gives them a sheen along their lit edges. What lights
                 them is the key. */}
-            <meshStandardMaterial
-              key={`mass-material-${piece}`}
-              color="#2b4152"
-              metalness={0.18}
-              roughness={0.52}
-              emissive="#0d2634"
-              emissiveIntensity={0.34}
-            />
+            <primitive key={`mass-material-${piece}`} object={massMaterial} attach="material" />
           </PieceField>
         ))}
 
@@ -1066,36 +1137,6 @@ function PieceField({
 }
 
 /**
- * The rock hanging under a plateau (§38.1).
- *
- * A cone alone reads as a spinning top. What says *floating island* is the
- * ragged edge: shards breaking away around the rim with the point at the
- * middle, which is the silhouette every one of the delivered world frames has.
- */
-function Crags({ seed }: { readonly seed: number }): JSX.Element | null {
-  const crags = useMemo(() => islandCrags(seed, 88, CRAGS_PER_ISLAND), [seed]);
-
-  const placements = useMemo<readonly Placement[]>(
-    () =>
-      crags.map((crag) => ({
-        position: [crag.x, -14 - crag.length / 2, crag.z],
-        scale: [crag.radius, crag.length, crag.radius],
-        // Turned over so the point hangs downward, then leaned outward from the
-        // axis — which is the way rock breaks away from a mass.
-        rotation: [Math.PI + crag.tiltX, 0, crag.tiltZ],
-      })),
-    [crags],
-  );
-
-  return (
-    <InstancedField placements={placements}>
-      <coneGeometry key="crag" args={[1, 1, 5]} />
-      <meshStandardMaterial key="crag-material" color="#080f15" metalness={0.25} roughness={0.95} />
-    </InstancedField>
-  );
-}
-
-/**
  * Loose rock in the space between the islands (§38.1, §36.14).
  *
  * Stars are infinitely far away, so they never move against the camera: a world
@@ -1113,7 +1154,9 @@ function Debris(): JSX.Element {
     () =>
       debrisField(4_207, 620, 1_500, 72).map((rock) => ({
         position: [rock.x, rock.y, rock.z],
-        scale: [rock.radius, rock.radius * 0.8, rock.radius],
+        // Half the generated size: at full size the nearest rocks filled a
+        // corner of the global view as black holes in the sky.
+        scale: [rock.radius * 0.5, rock.radius * 0.4, rock.radius * 0.5],
         rotation: [rock.tilt, rock.tilt * 1.7, rock.tilt * 0.4],
       })),
     [],
@@ -1131,9 +1174,10 @@ function Debris(): JSX.Element {
         <icosahedronGeometry key="rock" args={[1, 0]} />
         <meshStandardMaterial
           key="rock-material"
-          color="#0b131a"
-          metalness={0.2}
-          roughness={0.98}
+          color="#2b2723"
+          metalness={0.1}
+          roughness={0.95}
+          flatShading
         />
       </InstancedField>
     </group>
@@ -1483,7 +1527,10 @@ export function WorldScene(): JSX.Element {
           void rather than ending at a hard line (§38.10). Pulled in from 3000
           so the boundary is felt before it is reached. */}
       <fog attach="fog" args={['#05080b', 700, 2_600]} />
-      <ambientLight intensity={0.34} />
+      <ambientLight intensity={0.22} />
+      {/* Cold sky above and the cloud's own teal below, so the rock under an
+          island reads as rock lit from the weather rather than a black cut-out. */}
+      <hemisphereLight args={['#2c4d66', '#0e2a30', 0.7]} />
       {/* The key. Raised with the tone mapping: a filmic curve rolls the
           midtones off, so a light calibrated against a linear output leaves the
           structures reading as silhouettes. */}
@@ -1495,6 +1542,7 @@ export function WorldScene(): JSX.Element {
       <WorldLighting />
 
       <Void />
+      <Planet />
       <CloudSea />
       <Starfield />
       {/* Between the stars and the islands, so the void has a middle distance. */}
