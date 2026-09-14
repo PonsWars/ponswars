@@ -55,7 +55,12 @@ export type DriverEvent =
       readonly kind: 'FINALIZED';
       readonly round: RoundEngineState;
       readonly finalization: NonNullable<Awaited<ReturnType<typeof stepRound>>['finalization']>;
-    };
+    }
+  /**
+   * No round opens until `reopensAt` because the market is shut (§23.8).
+   * Said once per closure, not once a minute.
+   */
+  | { readonly kind: 'MARKET_CLOSED'; readonly reopensAt: UtcTimestamp };
 
 export interface DriverOptions {
   readonly ports: RoundPorts;
@@ -81,6 +86,18 @@ export interface DriverOptions {
   /** Where the current round can be read from, for anything serving it. */
   readonly onRound: (round: RoundEngineState) => void;
   readonly onEvent?: (event: DriverEvent) => void;
+  /**
+   * The first instant at or after `at` a whole round can run in (§23.8).
+   *
+   * The factions are stocks, and a battle fought while their market is shut is
+   * decided by nothing: a round is only opened where it can finish before the
+   * market closes. Absent, rounds open whenever the last one ends — which is
+   * what a market that never shuts, like the synthetic one, wants.
+   *
+   * A round already running when the market shuts is not stopped here; its
+   * feeds read `STALE` and it voids (§4.4).
+   */
+  readonly roundsOpenAt?: (at: UtcTimestamp) => UtcTimestamp;
   /**
    * Stops the loop between steps.
    *
@@ -156,6 +173,9 @@ export async function runRounds(options: DriverOptions): Promise<void> {
   // the War Point ledger's idempotency index — keyed on those same battle ids —
   // silently refused every award the new round made.
   let index = resumed === null ? (stored === null ? 0 : indexOf(stored) + 1) : indexOf(resumed);
+  if (resumed === null && !(await waitForMarket(options))) {
+    return;
+  }
   let clock =
     resumed?.clock ??
     clockForRound(
@@ -193,9 +213,13 @@ export async function runRounds(options: DriverOptions): Promise<void> {
     if (result.finalization !== undefined) {
       say({ kind: 'FINALIZED', round, finalization: result.finalization });
 
-      // §3.1: the next round opens where this one ended.
+      // §3.1: the next round opens where this one ended — or, if the market
+      // shut in the meantime, when it can run again (§23.8).
       index += 1;
-      clock = clockForRound(nextRoundOpensAt(clock), 0, now());
+      if (!(await waitForMarket(options))) {
+        return;
+      }
+      clock = clockForRound(latest(nextRoundOpensAt(clock), now()), 0, now());
       round = await openRound(index, clock, ports.marketData, now(), options);
       await persistOpened(round, ports);
       options.onRound(round);
@@ -251,6 +275,41 @@ function indexOf(round: RoundEngineState): number {
   return index;
 }
 
+/**
+ * Waits until a whole round can run, saying once why it is waiting.
+ *
+ * Re-asks after each wait rather than trusting the first answer: a sleep can
+ * wake early, and a calendar can be longer than one sleep. Resolves `false`
+ * when the signal stops the driver while it waits.
+ */
+async function waitForMarket(options: DriverOptions): Promise<boolean> {
+  const { roundsOpenAt, now, onEvent, signal } = options;
+  if (roundsOpenAt === undefined) {
+    return signal?.aborted !== true;
+  }
+  let announced: UtcTimestamp | null = null;
+  for (;;) {
+    if (signal?.aborted === true) {
+      return false;
+    }
+    const current = now();
+    const reopensAt = roundsOpenAt(current);
+    if (reopensAt <= current) {
+      return true;
+    }
+    if (announced !== reopensAt) {
+      announced = reopensAt;
+      onEvent?.({ kind: 'MARKET_CLOSED', reopensAt });
+    }
+    // At most a minute at a time, so a stop is honoured and a changed clock
+    // noticed without a long sleep in between.
+    await sleep(Math.min(reopensAt - current, MARKET_RECHECK_MS), signal);
+  }
+}
+
+/** The longest single wait for the market. */
+const MARKET_RECHECK_MS = 60_000;
+
 /** The later of two instants. */
 function latest(a: UtcTimestamp, b: UtcTimestamp): UtcTimestamp {
   return a > b ? a : b;
@@ -259,6 +318,11 @@ function latest(a: UtcTimestamp, b: UtcTimestamp): UtcTimestamp {
 /** A sleep that gives up when the signal does. */
 function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
   return new Promise((resolve) => {
+    // An already-aborted signal never fires `abort` again.
+    if (signal?.aborted === true) {
+      resolve();
+      return;
+    }
     const timer = setTimeout(() => {
       signal?.removeEventListener('abort', onAbort);
       resolve();

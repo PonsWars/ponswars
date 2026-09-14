@@ -282,6 +282,8 @@ function describe(event: DriverEvent): string {
         ),
         ...event.finalization.voided.map((voided) => `  ${voided} → VOID\n`),
       ].join('');
+    case 'MARKET_CLOSED':
+      return `market closed — the next round opens ${new Date(event.reopensAt).toISOString()}\n`;
   }
 }
 

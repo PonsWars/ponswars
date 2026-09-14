@@ -103,7 +103,11 @@ interface Started {
 }
 
 /** Starts the driver and stops it the moment it has a round to serve. */
-async function start(bundle: MemoryPorts, now: UtcTimestamp): Promise<Started> {
+async function start(
+  bundle: MemoryPorts,
+  now: UtcTimestamp,
+  roundsOpenAt?: (at: UtcTimestamp) => UtcTimestamp,
+): Promise<Started> {
   const events: DriverEvent[] = [];
   const served: RoundEngineState[] = [];
   const log: string[] = [];
@@ -135,7 +139,11 @@ async function start(bundle: MemoryPorts, now: UtcTimestamp): Promise<Started> {
     },
     onEvent: (event) => {
       events.push(event);
+      if (event.kind === 'MARKET_CLOSED') {
+        controller.abort();
+      }
     },
+    ...(roundsOpenAt === undefined ? {} : { roundsOpenAt }),
     signal: controller.signal,
   });
 
@@ -152,6 +160,24 @@ describe('the first start', () => {
     expect(served[0]?.clock.pickOpenAt).toBe(EPOCH);
     expect(log).toEqual([`save ${roundIdFor(0)} PICK_OPEN`, 'publish ROUND_OPENED']);
     expect(events.map((event) => event.kind)).toEqual(['OPENED']);
+  });
+});
+
+describe('a closed market', () => {
+  it('opens nothing and says when it reopens, rather than opening a round to void', async () => {
+    const reopensAt = utcTimestamp(EPOCH + 3_600_000);
+    const bundle = ports();
+    const { served, log, events } = await start(bundle, EPOCH, () => reopensAt);
+
+    expect(served).toEqual([]);
+    expect(log).toEqual([]);
+    expect(events).toEqual([{ kind: 'MARKET_CLOSED', reopensAt }]);
+  });
+
+  it('opens from now once the market is open', async () => {
+    const bundle = ports();
+    const { served } = await start(bundle, EPOCH, (at) => at);
+    expect(served[0]?.clock.pickOpenAt).toBe(EPOCH);
   });
 });
 
