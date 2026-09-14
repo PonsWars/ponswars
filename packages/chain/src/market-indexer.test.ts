@@ -79,18 +79,6 @@ const swap = (pool: Hex, amount0: bigint, amount1: bigint, block: number, tx?: s
     tx,
   );
 
-const launched = (block: number): RawLog =>
-  raw(
-    MARKET.ponsFactory,
-    encodeEventTopics({
-      abi: MARKET_EVENTS_ABI,
-      eventName: 'TokenLaunched',
-      args: { token: MEMECOIN, curve: CURVE, deployer: TRADER },
-    }) as Hex[],
-    encodeAbiParameters(parseAbiParameters('address, uint256, uint256'), [TOKEN, 1n, 1n]),
-    block,
-  );
-
 const registered = (block: number): RawLog =>
   raw(
     MARKET.ponsMemeHook,
@@ -183,6 +171,15 @@ function fakeChain(
       return Promise.resolve(`RH${String(ticker)} / USD`);
     },
     feedDecimals: () => Promise.resolve(8),
+    curveOrigins: (addresses) =>
+      Promise.resolve(
+        new Map(
+          addresses.map((address) => [
+            address,
+            address === CURVE ? { factory: MARKET.ponsFactory, pairToken: TOKEN } : null,
+          ]),
+        ),
+      ),
     feedLatest: () => Promise.resolve({ answer: 200n * 100_000_000n, updatedAt: blockTime(900) }),
   };
   return { rpc, head };
@@ -221,9 +218,8 @@ describe('RobinhoodMarketIndexer', () => {
     expect(market.coversUntil()).toBe(blockTime(1_000));
   });
 
-  it('counts Pons trading quoted in the ticker, sized in dollars and credited to the trader', async () => {
+  it('counts Pons trading quoted in the ticker — its curve asked about when first seen — sized in dollars and credited to the trader', async () => {
     const chain = fakeChain([
-      launched(20),
       registered(30),
       // 0.5 NVDA into the curve, at the $200 reference: $100.
       curveBuy(5n * 10n ** 17n, TRADER, 600),

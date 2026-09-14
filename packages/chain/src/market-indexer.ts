@@ -32,9 +32,12 @@ import type { RobinhoodMarketAddresses } from './robinhood-market.js';
  *   graduated pools Pons' hook registers;
  * - the Chainlink reference price for each.
  *
- * It starts by discovering the pools and curves from the whole of history, then
- * backfills the trading it is asked to retain, then follows the chain block by
- * block. Until the backfill is done `coversUntil` stays behind, and the market
+ * It starts by discovering the pools from the whole of history, then backfills
+ * the trading it is asked to retain, then follows the chain block by block.
+ * Bonding curves are not discovered up front — Pons has launched tens of
+ * thousands, nearly all quoted in ETH — but asked about the first time one
+ * trades: its own `factory()` and `pairToken()` say whether it is a Pons curve
+ * quoted in a Stock Token. Until the backfill is done `coversUntil` stays behind, and the market
  * reads `UNAVAILABLE` rather than mistaking a history it has not read for a
  * quiet one.
  *
@@ -57,6 +60,13 @@ export interface MarketRpc {
   feedDecimals(address: string): Promise<number>;
   /** The feed's latest answer at its own decimals, and when it updated (ms). */
   feedLatest(address: string): Promise<{ readonly answer: bigint; readonly updatedAt: number }>;
+  /**
+   * Which factory made each contract and what it is quoted in, where the
+   * contract answers as a Pons bonding curve; `null` where it does not.
+   */
+  curveOrigins(
+    addresses: readonly string[],
+  ): Promise<ReadonlyMap<string, { readonly factory: string; readonly pairToken: string } | null>>;
 }
 
 export interface MarketIndexerOptions {
@@ -100,6 +110,16 @@ export class RobinhoodMarketIndexer implements MarketSource {
   private readonly usdgPools = new Map<string, PoolSide>();
   private readonly ponsPools = new Map<string, PoolSide>();
   private readonly curves = new Map<string, ActiveTicker>();
+  /** Contracts already asked about that are not curves quoted in a ticker. */
+  private readonly notCurves = new Set<string>();
+  /** Curve trades seen before their curve was asked about. */
+  private pendingCurveTrades: {
+    readonly event: Extract<MarketEvent, { kind: 'CURVE_TRADE' }>;
+    readonly eventId: string;
+    readonly transactionHash: string;
+    readonly blockNumber: number;
+    readonly atMs: number;
+  }[] = [];
   private readonly dexTrades = new Map<ActiveTicker, DexTrade[]>();
   private readonly ponsTrades = new Map<ActiveTicker, PonsTrade[]>();
   private readonly seen = new Set<string>();
@@ -215,20 +235,13 @@ export class RobinhoodMarketIndexer implements MarketSource {
     }
     this.apply(
       await this.scan(
-        { address: addresses.ponsFactory, topics: [MARKET_TOPICS.tokenLaunched] },
-        0n,
-        head,
-      ),
-    );
-    this.apply(
-      await this.scan(
         { address: addresses.ponsMemeHook, topics: [MARKET_TOPICS.poolRegistered] },
         0n,
         head,
       ),
     );
     this.say(
-      `market: ${String(this.usdgPools.size)} USDG pools, ${String(this.curves.size)} Pons curves, ${String(this.ponsPools.size)} Pons pools`,
+      `market: ${String(this.usdgPools.size)} USDG pools, ${String(this.ponsPools.size)} Pons pools`,
     );
 
     await this.readTrades(tradesFrom, head, ponsFrom);
@@ -260,13 +273,6 @@ export class RobinhoodMarketIndexer implements MarketSource {
           address: addresses.poolManager,
           topics: [MARKET_TOPICS.initialize, null, quotes, quotes],
         },
-        from,
-        to,
-      ),
-    );
-    this.apply(
-      await this.scan(
-        { address: addresses.ponsFactory, topics: [MARKET_TOPICS.tokenLaunched] },
         from,
         to,
       ),
@@ -355,6 +361,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
         to,
       ),
     );
+    await this.resolveCurves();
     await this.resolveSenders();
   }
 
@@ -476,6 +483,10 @@ export class RobinhoodMarketIndexer implements MarketSource {
       }
       case 'CURVE_TRADE': {
         const ticker = this.curves.get(event.curve);
+        if (ticker === undefined && !this.notCurves.has(event.curve)) {
+          this.pendingCurveTrades.push({ event, eventId, transactionHash, blockNumber, atMs });
+          return;
+        }
         if (ticker !== undefined) {
           insertByTime(this.ponsTrades.get(ticker), {
             eventId,
@@ -488,6 +499,45 @@ export class RobinhoodMarketIndexer implements MarketSource {
         }
         return;
       }
+    }
+  }
+
+  /**
+   * Asks every contract seen trading as a curve what it is, then records the
+   * trades that were waiting on the answer.
+   *
+   * Only a curve made by the Pons V2 factory counts: anything can emit an event
+   * with the same signature, and one that did would otherwise buy Pons Power.
+   */
+  private async resolveCurves(): Promise<void> {
+    if (this.pendingCurveTrades.length === 0) {
+      return;
+    }
+    const factory = this.options.addresses.ponsFactory.toLowerCase();
+    const unknown = [
+      ...new Set(
+        this.pendingCurveTrades
+          .map(({ event }) => event.curve)
+          .filter((curve) => !this.curves.has(curve) && !this.notCurves.has(curve)),
+      ),
+    ];
+    const origins = await this.options.rpc.curveOrigins(unknown);
+    for (const curve of unknown) {
+      const origin = origins.get(curve) ?? null;
+      const ticker =
+        origin !== null && origin.factory.toLowerCase() === factory
+          ? this.tickerOf.get(origin.pairToken.toLowerCase())
+          : undefined;
+      if (ticker === undefined) {
+        this.notCurves.add(curve);
+      } else {
+        this.curves.set(curve, ticker);
+      }
+    }
+    const pending = this.pendingCurveTrades;
+    this.pendingCurveTrades = [];
+    for (const trade of pending) {
+      this.record(trade.event, trade.eventId, trade.transactionHash, trade.blockNumber, trade.atMs);
     }
   }
 
@@ -560,6 +610,9 @@ export class RobinhoodMarketIndexer implements MarketSource {
     }
     if (this.senders.size > 200_000) {
       this.senders.clear();
+    }
+    if (this.notCurves.size > 500_000) {
+      this.notCurves.clear();
     }
   }
 
