@@ -264,6 +264,34 @@ function MarketCore(): JSX.Element {
         <meshStandardMaterial color="#10171c" metalness={0.4} roughness={0.7} />
       </mesh>
       <IslandMass seed={4_099} radius={124} detail="FULL" top={0} depth={230} core />
+      {/* The city's own light, pooled on the plateau under the towers. Every
+          delivered frame bathes the core in warm light from below; without it
+          the citadel was dark towers on a dark disc with a ring round them. */}
+      <CoreGlow />
+      {/* Orbit rings, tilted and turning with the core: the Market running. */}
+      <mesh rotation={[Math.PI / 2 + 0.09, 0, 0]} position={[0, 46, 0]}>
+        <torusGeometry args={[150, 0.55, 6, 160]} />
+        <meshBasicMaterial
+          color="#ffd27a"
+          transparent
+          opacity={0.34}
+          blending={AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh rotation={[Math.PI / 2 - 0.06, 0.04, 0]} position={[0, 96, 0]}>
+        <torusGeometry args={[172, 0.4, 6, 160]} />
+        <meshBasicMaterial
+          color="#7fe3c4"
+          transparent
+          opacity={0.2}
+          blending={AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+
       {/* The lit edge of the plateau: the core is findable by its light first. */}
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.4, 0]}>
         <torusGeometry args={[110, 1.1, 6, 96]} />
@@ -303,6 +331,54 @@ function MarketCore(): JSX.Element {
         <meshBasicMaterial color="#16323d" transparent opacity={0.35} />
       </mesh>
     </group>
+  );
+}
+
+/**
+ * Warm light pooled on the core's plateau (§38.2).
+ *
+ * A disc drawn additively with a radial falloff: brightest among the towers,
+ * gone by the rim. Additive and depth-tested, so the towers standing in it
+ * occlude it and it reads as light on the ground between them.
+ */
+function CoreGlow(): JSX.Element {
+  const material = useMemo(
+    () =>
+      new ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+        toneMapped: false,
+        uniforms: { uColour: { value: new Color('#ffbf5e') } },
+        vertexShader: `
+          varying vec2 vPlane;
+          void main() {
+            vPlane = position.xy;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uColour;
+          varying vec2 vPlane;
+          void main() {
+            float r = length(vPlane) / 110.0;
+            float pool = exp(-r * r * 3.2);
+            gl_FragColor = vec4(uColour * pool * 0.42, 1.0);
+          }
+        `,
+      }),
+    [],
+  );
+  useEffect(
+    () => () => {
+      material.dispose();
+    },
+    [material],
+  );
+  return (
+    <mesh material={material} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.7, 0]}>
+      <circleGeometry args={[112, 64]} />
+    </mesh>
   );
 }
 
