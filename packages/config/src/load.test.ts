@@ -20,6 +20,20 @@ const VALID: Readonly<Record<string, string>> = {
   PRICE_FEED_STALE_AFTER_MS: '5000',
   VOLUME_FEED_STALE_AFTER_MS: '60000',
   PONS_FEED_STALE_AFTER_MS: '15000',
+  MARKET_PRICE_WINDOW_MS: '120000',
+  MARKET_MIN_TRADE_USD: '5',
+  MARKET_OUTLIER_BPS: '300',
+  MARKET_DIVERGENCE_BPS: '200',
+  MARKET_REFERENCE_MAX_AGE_MS: '93600000',
+  MARKET_MIN_WINDOW_TRADES: '2',
+  MARKET_VOLATILITY_LOOKBACK_MS: '3600000',
+  MARKET_VOLATILITY_FLOOR_BPS: '5',
+  MARKET_COMPARABLE_SESSIONS: '3',
+  MARKET_EXPECTED_VOLUME_FLOOR_USD: '1000',
+  MARKET_HOLIDAYS: '2026-11-26,2026-12-25',
+  PONS_MIN_ACTIVITY_USD: '1',
+  PONS_MAX_IDENTICAL_PER_WALLET: '5',
+  RPC_MIN_INTERVAL_MS: '150',
   BATTLE_ENGINE_TICK_MS: '1000',
   API_PORT: '4000',
   GATEWAY_PORT: '4001',
@@ -33,6 +47,18 @@ const VALID: Readonly<Record<string, string>> = {
 const withOverride = (
   patch: Readonly<Record<string, string | undefined>>,
 ): Record<string, string | undefined> => ({ ...VALID, ...patch });
+
+describe('the market holiday list', () => {
+  it('takes a list, and an empty value as a calendar with no holidays', () => {
+    expect(loadConfig(withOverride({ MARKET_HOLIDAYS: '' })).MARKET_HOLIDAYS).toEqual([]);
+    expect(loadConfig(VALID).MARKET_HOLIDAYS).toEqual(['2026-11-26', '2026-12-25']);
+  });
+
+  it('refuses a date that does not exist', () => {
+    expect(() => loadConfig(withOverride({ MARKET_HOLIDAYS: '2026-02-30' }))).toThrow(ConfigError);
+    expect(() => loadConfig(withOverride({ MARKET_HOLIDAYS: '2026-13-01' }))).toThrow(ConfigError);
+  });
+});
 
 describe('the origin list', () => {
   it('accepts an empty value as a real answer', () => {

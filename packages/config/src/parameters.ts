@@ -60,13 +60,16 @@ export type NodeEnv = (typeof NODE_ENVS)[number];
 /**
  * The market data adapters that exist.
  *
- * `synthetic` is the one written so far and is a development tool: it produces
- * a plausible market from a seed and is not a market. A production vendor is an
- * `OPEN` decision (§59.3), so this list is short on purpose — an environment
- * asking for a vendor nobody has written fails at startup with the name it
- * asked for, rather than starting and scoring a round against nothing.
+ * - `onchain` reads the market from Robinhood Chain itself: Stock Token trades
+ *   on its DEX pools, guarded by Chainlink's on-chain feeds, and Pons activity
+ *   quoted in each token. The production source (§23).
+ * - `synthetic` is a development tool: a plausible market from a seed, not a
+ *   market.
+ *
+ * An environment asking for an adapter nobody has written fails at startup
+ * with the name it asked for, rather than scoring a round against nothing.
  */
-const MARKET_DATA_PROVIDERS = ['synthetic'] as const;
+const MARKET_DATA_PROVIDERS = ['onchain', 'synthetic'] as const;
 
 export type MarketDataProvider = (typeof MARKET_DATA_PROVIDERS)[number];
 
@@ -99,6 +102,36 @@ function parseOriginList(raw: string): ParseResult<readonly string[]> {
     }
   }
   return { ok: true, value: origins };
+}
+
+/** Basis points, 1 to 10,000. */
+function parseBps(raw: string): ParseResult<number> {
+  return parseInteger(raw, { min: 1, max: 10_000 });
+}
+
+/**
+ * Exchange holidays: comma-separated `YYYY-MM-DD` New York dates.
+ *
+ * Empty is a real answer — a calendar with no holidays in it — and is parsed
+ * rather than treated as absent. A date that does not exist is refused: a typo
+ * here reopens the market on a day it is shut.
+ */
+function parseHolidayList(raw: string): ParseResult<readonly string[]> {
+  const dates = raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  for (const date of dates) {
+    const parsed = new Date(`${date}T12:00:00Z`);
+    const valid =
+      /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+      !Number.isNaN(parsed.getTime()) &&
+      parsed.toISOString().slice(0, 10) === date;
+    if (!valid) {
+      return { ok: false, error: `${date}: expected a YYYY-MM-DD date` };
+    }
+  }
+  return { ok: true, value: dates };
 }
 
 /** The Secret reserver: a key, or a deployment's explicit statement that there is none. */
@@ -258,6 +291,104 @@ export const PARAMETERS = {
     parse: parseDurationMs,
   } satisfies ParameterSpec<number>,
 
+  MARKET_PRICE_WINDOW_MS: {
+    group: 'feeds',
+    description:
+      'How far back from an instant DEX trades are pooled into one Stock Token price (§23.2). Longer is steadier and slower to follow the market.',
+    parse: parseDurationMs,
+  } satisfies ParameterSpec<number>,
+
+  MARKET_MIN_TRADE_USD: {
+    group: 'feeds',
+    description:
+      'Smallest trade, in USD, that counts towards a price or volume (§23.7). Below it a trade is dust — the cheapest way to push a thin pool.',
+    parse: parseDecimalString,
+  } satisfies ParameterSpec<string>,
+
+  MARKET_OUTLIER_BPS: {
+    group: 'feeds',
+    description:
+      'How far from the Chainlink reference a single trade may be before it is dropped as an outlier (§23.7), in basis points.',
+    parse: parseBps,
+  } satisfies ParameterSpec<number>,
+
+  MARKET_DIVERGENCE_BPS: {
+    group: 'feeds',
+    description:
+      'How far the DEX price may sit from the Chainlink reference before the feed is STALE and a live battle voids (§23.7, §4.4), in basis points. Must allow for the reference only updating on a 0.5% move.',
+    parse: parseBps,
+  } satisfies ParameterSpec<number>,
+
+  MARKET_REFERENCE_MAX_AGE_MS: {
+    group: 'feeds',
+    description:
+      'Age past which a Chainlink reference cannot vouch for a price (§23.7). The Robinhood feeds have a 24-hour heartbeat.',
+    parse: parseDurationMs,
+  } satisfies ParameterSpec<number>,
+
+  MARKET_MIN_WINDOW_TRADES: {
+    group: 'feeds',
+    description:
+      'Fewest trades in the price window for a HEALTHY reading; fewer is DEGRADED (§23.6).',
+    parse: (raw) => parseInteger(raw, { min: 1 }),
+  } satisfies ParameterSpec<number>,
+
+  MARKET_VOLATILITY_LOOKBACK_MS: {
+    group: 'feeds',
+    description:
+      'How far back an asset’s own volatility is measured, which a battle’s return is divided by (§12.1).',
+    parse: parseDurationMs,
+  } satisfies ParameterSpec<number>,
+
+  MARKET_VOLATILITY_FLOOR_BPS: {
+    group: 'feeds',
+    description:
+      'The smallest volatility a battle window may be given, in basis points (§12.1), so a still hour does not turn an ordinary move into many sigma.',
+    parse: parseBps,
+  } satisfies ParameterSpec<number>,
+
+  MARKET_COMPARABLE_SESSIONS: {
+    group: 'feeds',
+    description:
+      'How many earlier trading days relative volume is measured against (§12.2). The indexer keeps that much trading in memory.',
+    parse: (raw) => parseInteger(raw, { min: 1, max: 20 }),
+  } satisfies ParameterSpec<number>,
+
+  MARKET_EXPECTED_VOLUME_FLOOR_USD: {
+    group: 'feeds',
+    description:
+      'The smallest expected volume for a window, in USD (§12.2), so a ticker that barely traded last week does not make one trade today a surge.',
+    parse: parseDecimalString,
+  } satisfies ParameterSpec<string>,
+
+  MARKET_HOLIDAYS: {
+    group: 'feeds',
+    description:
+      'US exchange holidays as comma-separated YYYY-MM-DD dates. No round opens while the market is shut (§23.8). Published by the exchange a year at a time; empty means none.',
+    parse: parseHolidayList,
+  } satisfies ParameterSpec<readonly string[]>,
+
+  PONS_MIN_ACTIVITY_USD: {
+    group: 'feeds',
+    description:
+      'Smallest Pons trade, in USD, that counts as qualified activity (§12.3, §75.3). TUNABLE: calibrated, not guessed.',
+    parse: parseDecimalString,
+  } satisfies ParameterSpec<string>,
+
+  PONS_MAX_IDENTICAL_PER_WALLET: {
+    group: 'feeds',
+    description:
+      'How many same-sized Pons trades from one wallet count before the rest are a loop (§75.3). TUNABLE.',
+    parse: (raw) => parseInteger(raw, { min: 1 }),
+  } satisfies ParameterSpec<number>,
+
+  RPC_MIN_INTERVAL_MS: {
+    group: 'chain',
+    description:
+      'Least time between two market-indexer calls to RPC_URL. The public endpoint answers bursts with a challenge page; a vendor has a rate it bills or cuts at.',
+    parse: parseDurationMs,
+  } satisfies ParameterSpec<number>,
+
   BATTLE_ENGINE_TICK_MS: {
     group: 'feeds',
     description:
@@ -290,7 +421,7 @@ export const PARAMETERS = {
   MARKET_DATA_PROVIDER: {
     group: 'serving',
     description:
-      'Which market data adapter to run (§59.3, §23.6). OPEN: no vendor is chosen, so there is nothing to default to and startup refuses rather than inventing one.',
+      'Which market to score battles from (§59.3, §23.6): `onchain` reads Stock Token trading on Robinhood Chain mainnet, checked against Chainlink; `synthetic` generates prices and says so. No default — a deployment that scored real battles from made-up prices must not be one typo away.',
     parse: (raw) => parseEnum(raw, MARKET_DATA_PROVIDERS),
   } satisfies ParameterSpec<MarketDataProvider>,
 
