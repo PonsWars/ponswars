@@ -34,6 +34,13 @@ export interface CityLightOptions {
   /** Floor height and bay width, in world units. */
   readonly floor?: number;
   readonly bay?: number;
+  /**
+   * The heights, in the mesh's own space, between which windows are lit.
+   *
+   * For a surface that is only partly a building: the cliff under an island has
+   * dwellings cut into its face and none in the root below it.
+   */
+  readonly band?: readonly [number, number];
 }
 
 const WARM = new Color('#ffc98a');
@@ -53,6 +60,7 @@ export function withCityLights(
   const accent = new Color(options.accent);
   const floor = options.floor ?? 3.2;
   const bay = options.bay ?? 2.6;
+  const band = options.band ?? [-1e9, 1e9];
 
   material.onBeforeCompile = (shader) => {
     shader.uniforms['pwWarm'] = { value: WARM };
@@ -61,17 +69,20 @@ export function withCityLights(
     shader.uniforms['pwDensity'] = { value: options.density };
     shader.uniforms['pwIntensity'] = { value: options.intensity };
     shader.uniforms['pwCell'] = { value: [bay, floor] };
+    shader.uniforms['pwBand'] = { value: [band[0], band[1]] };
 
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
         `#include <common>
         varying vec3 pwWorldPosition;
-        varying vec3 pwWorldNormal;`,
+        varying vec3 pwWorldNormal;
+        varying float pwLocalY;`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
+        pwLocalY = transformed.y;
         {
           vec4 pwLocal = vec4(transformed, 1.0);
           vec3 pwNormal = objectNormal;
@@ -80,7 +91,11 @@ export function withCityLights(
             pwNormal = mat3(instanceMatrix) * pwNormal;
           #endif
           pwWorldPosition = (modelMatrix * pwLocal).xyz;
-          pwWorldNormal = normalize(mat3(modelMatrix) * pwNormal);
+          // Not normalized here. A degenerate triangle — the fan closing a
+          // rock's root — carries a zero normal, and normalizing zero is NaN:
+          // one NaN pixel in the emission and the bloom smears it across the
+          // whole frame, which renders black.
+          pwWorldNormal = mat3(modelMatrix) * pwNormal;
         }`,
       );
 
@@ -94,8 +109,10 @@ export function withCityLights(
         uniform float pwDensity;
         uniform float pwIntensity;
         uniform vec2 pwCell;
+        uniform vec2 pwBand;
         varying vec3 pwWorldPosition;
         varying vec3 pwWorldNormal;
+        varying float pwLocalY;
         float pwWindowHash(vec3 p) {
           p = fract(p * vec3(0.1031, 0.1030, 0.0973));
           p += dot(p, p.yxz + 33.33);
@@ -106,7 +123,7 @@ export function withCityLights(
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
         {
-          vec3 n = normalize(pwWorldNormal);
+          vec3 n = pwWorldNormal / max(length(pwWorldNormal), 1e-5);
           // Walls only: a roof or a floor carries no windows.
           float wall = 1.0 - smoothstep(0.35, 0.6, abs(n.y));
           // Along the wall: whichever horizontal axis the wall runs along.
@@ -157,14 +174,16 @@ export function withCityLights(
           float runVisible = (1.0 - resolved) * (1.0 - smoothstep(0.25, 0.6, floorFootprint));
           vec3 runTone = pwWindowHash(vec3(run, 7.0)) < 0.25 ? pwAccent : pwWarm;
           glow += runTone * runLit * runBand * runVisible * 0.2;
-          totalEmissiveRadiance += glow * wall * pwIntensity;
+          float inBand = smoothstep(pwBand.x, pwBand.x + 4.0, pwLocalY)
+                       * (1.0 - smoothstep(pwBand.y - 2.0, pwBand.y, pwLocalY));
+          totalEmissiveRadiance += glow * wall * inBand * pwIntensity;
         }`,
       );
   };
   // Distinct programs for distinct options, rather than one cached program
   // silently shared by every accent.
   material.customProgramCacheKey = () =>
-    `pw-city-lights:${options.accent}:${String(options.density)}:${String(options.intensity)}:${String(floor)}:${String(bay)}`;
+    `pw-city-lights:${options.accent}:${String(options.density)}:${String(options.intensity)}:${String(floor)}:${String(bay)}:${String(band[0])}:${String(band[1])}`;
   material.needsUpdate = true;
   return material;
 }
