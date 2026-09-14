@@ -85,9 +85,10 @@ Each role is optional, and an unset one is granted to nobody:
 | `PAUSER_ROLE`                 | both                 | The incident responder                           |
 | `TREASURY_ROLE`               | both                 | The treasury multisig; withdraws uncommitted SPY |
 
-**Do not grant `SECRET_RESERVER` yet.** The Genesis service cannot reserve a
-Secret today ([Secret vault coverage](secret-vault.md)). A reserver it does not
-control would be a key that can promise vault SPY to wallets for no reason.
+**Grant `SECRET_RESERVER` only to the key the server runs with**, set as its
+`SECRET_RESERVER_KEY` ([Turning Secret on](secret-vault.md)). A reserver the
+Genesis service does not control is a key that can promise vault SPY to wallets
+for no reason.
 
 ## What never happens
 

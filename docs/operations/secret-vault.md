@@ -27,16 +27,34 @@ totalReserved`, and the contract tests cover it.
 An operator reading the raw vault balance and concluding there is coverage is
 the most likely way this goes wrong.
 
-## In this build, Secret is off
+## Turning Secret on
 
-The Genesis service deals cards today, but it holds no key with the vault's
-reserver role, so it cannot reserve a Secret reward before revealing one. It
-therefore treats Secret as unavailable whatever the vault holds: the Secret band
-deals Legendary, and each claim records `rarity-table-v1-secret-disabled`.
+Secret needs two things, and funding the vault is only one of them. The Genesis
+service must also hold a key with the vault's `RESERVER_ROLE`:
 
-Funding the vault does not turn Secret on. Wiring a reserver does — and until
-then, a funded vault is coverage no player can reach, which is safe and is also
-worth knowing before anyone announces Secret as live.
+1. Fund the vault with at least `0.2 SPY` (§44.8).
+2. Grant `RESERVER_ROLE` to a dedicated key
+   ([Deploying the contracts](contract-deployment.md)). It signs `reserve` and
+   nothing else, and needs gas ETH.
+3. Set `SECRET_RESERVER_KEY` to that key and restart. Startup refuses a key the
+   vault has not granted the role, and the banner reads `Secret on`.
+
+With `SECRET_RESERVER_KEY=disabled`, the service treats Secret as unavailable
+whatever the vault holds: the band deals Legendary and each claim records
+`rarity-table-v1-secret-disabled`. A funded vault is then coverage no player can
+reach — safe, and worth knowing before anyone announces Secret as live.
+
+What the service does with a Secret draw, once on:
+
+- reserves on chain **before** recording the claim, and records the reservation
+  transaction with it;
+- if the reservation fails for any reason but coverage, keeps the committed
+  entropy, shows nothing, and retries on the next read — the card cannot change
+  while it waits;
+- if the vault ran out between resolving and reserving, deals Legendary under the
+  disabled table, as below;
+- if it crashed after the transaction but before the claim, finds the
+  reservation already on chain instead of reserving twice.
 
 ## When coverage runs out
 

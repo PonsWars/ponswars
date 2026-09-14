@@ -53,11 +53,14 @@ Genesis page waits and re-reads on its own. The claim, the card with its charges
 and the wallet's claimed flag are written in one transaction, and a claim cannot
 be updated or deleted. Every card recomputes with `pnpm run audit:genesis`.
 
-**Secret results are off.** Revealing a Secret needs its SPY reward reserved in
-the Secret Stock Vault first (§8.4, §76.5), and this service holds no key with
-the vault's reserver role. So the Secret band deals Legendary (§8.3) and each
-claim records the `rarity-table-v1-secret-disabled` table it was dealt under.
-Funding the vault does not change that on its own; wiring a reserver does.
+**Secret results follow `SECRET_RESERVER_KEY`.** Revealing a Secret needs its
+SPY reward reserved in the Secret Stock Vault first (§8.4, §76.5), and only a key
+holding the vault's `RESERVER_ROLE` can reserve. With `SECRET_RESERVER_KEY=disabled`
+the Secret band deals Legendary (§8.3), and each claim records the
+`rarity-table-v1-secret-disabled` table. With a key, startup checks the key holds
+the role and refuses to start if it does not; a Secret is then reserved on chain
+before it is recorded, and a reservation that fails is retried on the next read.
+The banner says which. The key needs gas ETH for `reserve` transactions.
 
 **The last tiebreak step (§12.7).** Only a battle
 level through every market component reaches it, and for that battle the server
@@ -76,7 +79,6 @@ start asks for the same block.
 | Decision                   | Effect until it is made                                         |
 | -------------------------- | --------------------------------------------------------------- |
 | Market data (§102)         | Prices are synthetic; the banner says so on every start         |
-| Secret reservation signer  | Secret results are off; their band deals Legendary (§8.3)       |
 | Robinhood Chain RPC vendor | The public endpoint works, with no uptime or rate-limit promise |
 | Redis (§21.3)              | `REDIS_URL` is required and validated but nothing reads it yet  |
 
