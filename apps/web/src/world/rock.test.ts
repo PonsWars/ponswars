@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { islandRock, rimCity } from './rock.js';
+import { islandRock, islet, rimCity } from './rock.js';
 
 const SHAPE = { radius: 120, depth: 150, around: 48, rings: 12 };
 
@@ -30,6 +30,35 @@ describe('islandRock', () => {
     expect(indices.length % 3).toBe(0);
     expect(Math.max(...indices)).toBe(vertices - 1);
     expect(Array.from(colors).every((value) => value >= 0 && value <= 1)).toBe(true);
+  });
+});
+
+describe('islet', () => {
+  it('is a closed rock a unit wide, capped on top with a face that looks up', () => {
+    const { positions, colors, indices } = islet(5);
+    const vertices = positions.length / 3;
+
+    expect(colors.length).toBe(positions.length);
+    expect(Math.max(...indices)).toBe(vertices - 1);
+    for (let index = 0; index < positions.length; index += 3) {
+      expect(Math.hypot(positions[index] ?? 0, positions[index + 2] ?? 0)).toBeLessThan(1.3);
+    }
+
+    // The last triangle is part of the cap: its normal must point up.
+    const at = (vertex: number): [number, number, number] => [
+      positions[vertex * 3] ?? 0,
+      positions[vertex * 3 + 1] ?? 0,
+      positions[vertex * 3 + 2] ?? 0,
+    ];
+    const [c, b, a] = Array.from(indices.slice(-3), (vertex) => at(vertex)) as [
+      [number, number, number],
+      [number, number, number],
+      [number, number, number],
+    ];
+    const u = [b[0] - c[0], b[1] - c[1], b[2] - c[2]];
+    const v = [a[0] - c[0], a[1] - c[1], a[2] - c[2]];
+    const normalY = (u[2] ?? 0) * (v[0] ?? 0) - (u[0] ?? 0) * (v[2] ?? 0);
+    expect(normalY).toBeGreaterThan(0);
   });
 });
 

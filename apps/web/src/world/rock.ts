@@ -142,6 +142,55 @@ export function islandRock(seed: number, shape: RockShape): RockData {
   return { positions, colors, indices: Uint32Array.from(indices) };
 }
 
+/** The weathered top of a small rock: dark stone with a little growth on it. */
+const CAP = [0.055, 0.062, 0.052] as const;
+
+/**
+ * A small floating islet: the same broken rock as an island, a unit wide, with
+ * its top closed over (§38.1).
+ *
+ * The void between the islands was scattered with black icosahedra, and a black
+ * low-poly ball in the sky reads as a hole rather than a rock. Every delivered
+ * world frame fills that middle distance with islets instead — the same stone
+ * as the islands, broken off them — so that is what these are.
+ *
+ * A unit wide so one shape can be instanced at any size.
+ */
+export function islet(seed: number): RockData {
+  const around = 12;
+  // Built at ten units and scaled down: the generator pads every ring by a
+  // fixed amount that is nothing on an island and most of a unit-wide rock.
+  const built = 10;
+  const rock = islandRock(seed, { radius: built, depth: built * 1.3, around, rings: 5 });
+  const rockVertices = rock.positions.length / 3;
+
+  // One centre vertex, and a fan from it to the shelf ring (ring 0).
+  const positions = new Float32Array(rock.positions.length + 3);
+  positions.set(rock.positions.map((value) => value / built));
+  const centre = rockVertices;
+  positions.set([0, 0.04, 0], centre * 3);
+
+  const colors = new Float32Array(rock.colors.length + 3);
+  colors.set(rock.colors);
+  colors.set(CAP, centre * 3);
+  // The shelf ring takes the cap's colour too. It carries the island's sunlit
+  // shelf tone, which on an island is hidden under the plateau — and on an
+  // islet is most of the cap, which read as a pale plate in the sky.
+  for (let step = 0; step < around; step += 1) {
+    colors.set(CAP, step * 3);
+  }
+
+  const indices = Array.from(rock.indices);
+  for (let step = 0; step < around; step += 1) {
+    const a = step;
+    const b = (step + 1) % around;
+    // Wound to face up: (centre, a, b) faces down on a ring laid out this way.
+    indices.push(centre, b, a);
+  }
+
+  return { positions, colors, indices: Uint32Array.from(indices) };
+}
+
 /** One small building on an island's rim. */
 export interface RimBuilding {
   readonly x: number;
