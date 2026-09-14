@@ -29,6 +29,21 @@ export interface MarketObservation {
 }
 
 /**
+ * The instant a battle is observed at, and where its scoring window opened.
+ *
+ * §12.1: the return is taken over the battle window, which *"begins exactly at
+ * lock"*. A market that only knew the instant could not say what the price was
+ * at lock — the synthetic walk never needed to, and a real one cannot score
+ * without it.
+ */
+export interface ObservationWindow {
+  /** Where the scoring window opened: the battle's lock (§12.1). */
+  readonly opensAt: UtcTimestamp;
+  /** The instant being observed. */
+  readonly at: UtcTimestamp;
+}
+
+/**
  * The market and Pons data a battle is scored from.
  *
  * Returns health alongside the numbers rather than throwing on a bad feed. §23.6
@@ -36,7 +51,7 @@ export interface MarketObservation {
  * engine makes — a source that threw would take the decision away from it.
  */
 export interface MarketDataPort {
-  observe(ticker: ActiveTicker, at: UtcTimestamp): Promise<MarketObservation>;
+  observe(ticker: ActiveTicker, window: ObservationWindow): Promise<MarketObservation>;
   /**
    * What a ticker did over the fifteen minutes before Pick Phase (§10.1).
    *

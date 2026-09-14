@@ -127,9 +127,10 @@ async function performTick(
   const toPublish: { readonly battleId: string; readonly update: unknown }[] = [];
 
   for (const battle of state.battles) {
+    const window = { opensAt: battle.setup.clock.battleStartAt, at: now };
     const [left, right] = await Promise.all([
-      ports.marketData.observe(battle.setup.left, now),
-      ports.marketData.observe(battle.setup.right, now),
+      ports.marketData.observe(battle.setup.left, window),
+      ports.marketData.observe(battle.setup.right, window),
     ]);
 
     const outcome = applyTick(

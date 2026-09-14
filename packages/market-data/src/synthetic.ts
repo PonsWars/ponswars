@@ -1,5 +1,5 @@
 import { DeterministicPrng, NO_CARD_SUPPORT, type ConfidenceLookback } from '@ponswars/battle-math';
-import type { MarketDataPort, MarketObservation } from '@ponswars/round-service';
+import type { MarketDataPort, MarketObservation, ObservationWindow } from '@ponswars/round-service';
 import { CONFIDENCE_LOOKBACK, type ActiveTicker, type UtcTimestamp } from '@ponswars/shared-types';
 
 /**
@@ -95,7 +95,12 @@ export const DEFAULT_SYNTHETIC_MARKET: SyntheticMarketOptions = {
 export class SyntheticMarket implements MarketDataPort {
   constructor(private readonly options: SyntheticMarketOptions = DEFAULT_SYNTHETIC_MARKET) {}
 
-  observe(ticker: ActiveTicker, at: UtcTimestamp): Promise<MarketObservation> {
+  /**
+   * `window.opensAt` is not read. The walk is summed over its own bounded
+   * history rather than from lock, which is what it was measured against —
+   * this is a stand-in for a market, not one.
+   */
+  observe(ticker: ActiveTicker, { at }: ObservationWindow): Promise<MarketObservation> {
     const step = Math.floor(at / this.options.stepMs);
     const prng = new DeterministicPrng(this.options.seedHex, `SYNTH|${String(step)}|${ticker}`);
 

@@ -19,7 +19,7 @@ async function walk(steps: number, ticker: ActiveTicker = 'NVDA'): Promise<numbe
   const values: number[] = [];
   for (let index = 0; index < steps; index += 1) {
     const at = utcTimestamp(START + index * DEFAULT_SYNTHETIC_MARKET.stepMs);
-    values.push(Number((await market.observe(ticker, at)).inputs.windowReturn));
+    values.push(Number((await market.observe(ticker, { opensAt: START, at })).inputs.windowReturn));
   }
   return values;
 }
@@ -67,9 +67,9 @@ describe('the walk', () => {
   it('is stable within a step and moves between them', async () => {
     // The cadence is coarser than the tick rate on purpose: observations inside
     // one step agree, so a second of ticks does not shake the frontline.
-    const early = await market.observe('NVDA', utcTimestamp(START + 1_000));
-    const late = await market.observe('NVDA', utcTimestamp(START + 14_000));
-    const next = await market.observe('NVDA', utcTimestamp(START + 16_000));
+    const early = await market.observe('NVDA', { opensAt: START, at: utcTimestamp(START + 1_000) });
+    const late = await market.observe('NVDA', { opensAt: START, at: utcTimestamp(START + 14_000) });
+    const next = await market.observe('NVDA', { opensAt: START, at: utcTimestamp(START + 16_000) });
 
     expect(late.inputs.windowReturn).toBe(early.inputs.windowReturn);
     expect(next.inputs.windowReturn).not.toBe(early.inputs.windowReturn);
@@ -80,14 +80,20 @@ describe('determinism', () => {
   it('gives the same observation for the same instant', async () => {
     // Seeded, like everything else here. A market that differed between two
     // reads of the same moment would make a local session unreproducible.
-    const first = await market.observe('AAPL', utcTimestamp(START + 60_000));
-    const second = await market.observe('AAPL', utcTimestamp(START + 60_000));
+    const first = await market.observe('AAPL', {
+      opensAt: START,
+      at: utcTimestamp(START + 60_000),
+    });
+    const second = await market.observe('AAPL', {
+      opensAt: START,
+      at: utcTimestamp(START + 60_000),
+    });
     expect(second).toEqual(first);
   });
 
   it('gives different tickers different streams', async () => {
-    const nvda = await market.observe('NVDA', utcTimestamp(START + 60_000));
-    const aapl = await market.observe('AAPL', utcTimestamp(START + 60_000));
+    const nvda = await market.observe('NVDA', { opensAt: START, at: utcTimestamp(START + 60_000) });
+    const aapl = await market.observe('AAPL', { opensAt: START, at: utcTimestamp(START + 60_000) });
     expect(nvda.inputs.windowReturn).not.toBe(aapl.inputs.windowReturn);
   });
 });
@@ -97,7 +103,7 @@ describe('what it refuses to invent', () => {
     // §12.4 makes card support a player-driven input aggregated from real
     // deployments. A market has no business producing it, and a synthetic one
     // producing it would make the card contribution look like market signal.
-    const observation = await market.observe('NVDA', START);
+    const observation = await market.observe('NVDA', { opensAt: START, at: START });
     expect(observation.inputs.cardSupport).toEqual({
       market: 0n,
       volume: 0n,
@@ -107,14 +113,14 @@ describe('what it refuses to invent', () => {
   });
 
   it('reports a healthy feed unless asked for degradation', async () => {
-    expect((await market.observe('NVDA', START)).health).toBe('HEALTHY');
+    expect((await market.observe('NVDA', { opensAt: START, at: START })).health).toBe('HEALTHY');
   });
 
   it('still produces numbers when the feed is degraded', async () => {
     // §23.6: degraded data is late but real. Only the label changes, because
     // that is the distinction the engine acts on.
     const flaky = new SyntheticMarket({ ...DEFAULT_SYNTHETIC_MARKET, degradedBps: 10_000 });
-    const observation = await flaky.observe('NVDA', START);
+    const observation = await flaky.observe('NVDA', { opensAt: START, at: START });
 
     expect(observation.health).toBe('DEGRADED');
     expect(observation.inputs.relativeVolume).toBeGreaterThan(0n);

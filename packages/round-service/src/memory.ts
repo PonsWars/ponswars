@@ -7,6 +7,7 @@ import type {
   ChainPort,
   MarketDataPort,
   MarketObservation,
+  ObservationWindow,
   PickPort,
   PublisherPort,
   RoundPorts,
@@ -120,8 +121,8 @@ export class MemoryMarketData implements MarketDataPort {
     ) => ConfidenceLookback,
   ) {}
 
-  observe(ticker: ActiveTicker, at: UtcTimestamp): Promise<MarketObservation> {
-    return Promise.resolve(this.source(ticker, at));
+  observe(ticker: ActiveTicker, window: ObservationWindow): Promise<MarketObservation> {
+    return Promise.resolve(this.source(ticker, window.at));
   }
 
   lookback(ticker: ActiveTicker, at: UtcTimestamp): Promise<ConfidenceLookback> {
