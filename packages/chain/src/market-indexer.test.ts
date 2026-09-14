@@ -254,6 +254,42 @@ describe('RobinhoodMarketIndexer', () => {
     expect(market.coversUntil()).toBe(blockTime(1_020));
   });
 
+  it('finds where its retention starts in a handful of reads, reading nothing older', async () => {
+    const head = 1_000_000;
+    const chain = fakeChain([
+      initialize(10),
+      // Ten minutes before the head is block 999_400: one trade well before it, one after.
+      swap(USDG_POOL, 300_000_000n, -(10n ** 18n), 999_000),
+      swap(USDG_POOL, 210_000_000n, -(10n ** 18n), 999_450),
+    ]);
+    chain.head.value = head;
+    let timestampReads = 0;
+    const rpc: MarketRpc = {
+      ...chain.rpc,
+      blockTimestamp: (block) => {
+        timestampReads += 1;
+        return chain.rpc.blockTimestamp(block);
+      },
+    };
+    const market = new RobinhoodMarketIndexer({
+      rpc,
+      addresses: MARKET,
+      tradeRetentionMs: 600_000,
+      volumeRetentionMs: 600_000,
+      minTradeQuote: 1_000_000n,
+      ponsRetentionMs: 600_000,
+      maxBlocksPerPoll: 10_000n,
+      referenceRefreshMs: 60_000,
+      now: () => blockTime(head),
+    });
+    await market.start();
+
+    expect(market.notional('NVDA', all)).toBe(210_000_000n);
+    expect(market.trades('NVDA', all)).toHaveLength(1);
+    // The head, and genesis plus one probe for each of the three searches.
+    expect(timestampReads).toBeLessThanOrEqual(10);
+  });
+
   it('refuses to start on a token that is not the ticker it is registered as', async () => {
     const chain = fakeChain([], { [TOKEN]: 'NVDAX' });
     await expect(indexer(chain.rpc).start()).rejects.toThrow('reports symbol "NVDAX"');

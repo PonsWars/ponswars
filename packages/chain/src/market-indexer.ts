@@ -98,6 +98,9 @@ const PRICE_DECIMALS = 8;
 
 const MINUTE = 60_000;
 
+/** How far before its target a block search may stop: a minute of extra blocks to read. */
+const BLOCK_SEARCH_TOLERANCE_MS = MINUTE;
+
 interface PoolSide {
   readonly ticker: ActiveTicker;
   /** Whether the ticker's side is `currency0`. */
@@ -634,20 +637,50 @@ export class RobinhoodMarketIndexer implements MarketSource {
     this.referencesReadAt = now;
   }
 
-  /** The newest block at or before `targetMs`, by bisection on timestamps. */
+  /**
+   * A block at or before `targetMs`, and no more than a block-search tolerance
+   * before it.
+   *
+   * Interpolation on timestamps, aimed half a tolerance early so its first
+   * guess usually lands inside it. Block times on Robinhood Chain are regular
+   * enough that this takes a read or two, where bisection over sixty million
+   * blocks took twenty-six — each a paced call to a throttled endpoint. A
+   * probe that fails to halve the range is followed by a bisection step, which
+   * bounds the worst case when blocks are not regular. Early is safe: the
+   * indexer reads a few more blocks; late would miss trades it needs.
+   */
   private async blockAtOrBefore(head: bigint, headAt: number, targetMs: number): Promise<bigint> {
     if (targetMs >= headAt) {
       return head;
     }
     let low = 0n;
+    let lowAt = await this.options.rpc.blockTimestamp(low);
+    if (lowAt > targetMs) {
+      return low;
+    }
     let high = head;
-    while (low < high) {
-      const middle = (low + high + 1n) / 2n;
-      if ((await this.options.rpc.blockTimestamp(middle)) <= targetMs) {
+    let highAt = headAt;
+    const aimMs = targetMs - BLOCK_SEARCH_TOLERANCE_MS / 2;
+    let bisect = false;
+    while (high - low > 1n && targetMs - lowAt > BLOCK_SEARCH_TOLERANCE_MS) {
+      const range = high - low;
+      const middle = bisect
+        ? (low + high) / 2n
+        : clampBetween(
+            low +
+              (range * BigInt(Math.max(0, aimMs - lowAt))) / BigInt(Math.max(1, highAt - lowAt)),
+            low,
+            high,
+          );
+      const at = await this.options.rpc.blockTimestamp(middle);
+      if (at <= targetMs) {
         low = middle;
+        lowAt = at;
       } else {
-        high = middle - 1n;
+        high = middle;
+        highAt = at;
       }
+      bisect = !bisect && (high - low) * 2n > range;
     }
     return low;
   }
@@ -727,6 +760,11 @@ function lowerBound(list: readonly Timed[], at: number): number {
     }
   }
   return low;
+}
+
+/** `value` moved strictly inside `(low, high)`, so every probe narrows the range. */
+function clampBetween(value: bigint, low: bigint, high: bigint): bigint {
+  return value <= low ? low + 1n : value >= high ? high - 1n : value;
 }
 
 function dropBefore(list: Timed[] | undefined, cutoff: number): void {
