@@ -137,11 +137,11 @@ export const PRESENTATION_ANCHOR: CameraPose = {
   // Further out than the global anchor, not just turned: a yaw alone swings the
   // near sectors off the edge of the frame, and a world with two islands
   // cropped by the window is a worse hero than a small one.
-  position: vec3(0, 800, 1_260),
+  position: vec3(0, 640, 1_020),
   // Left of the core and above it: aiming left moves the world right, aiming
   // high moves it down, and the two together clear the top-left corner where
   // the navigation bar and the headline sit.
-  target: vec3(-230, 130, 0),
+  target: vec3(-250, 70, 0),
 };
 
 function sectorAt(index: number): Vec3 {
