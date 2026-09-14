@@ -20,13 +20,7 @@ import {
 import { RATIO_SCALE, type ConfidenceCalibration } from '@ponswars/battle-math';
 import { ConfigError, loadConfig, type MarketDataProvider } from '@ponswars/config';
 import { startSocketServer } from '@ponswars/gateway';
-import { SyntheticMarket } from '@ponswars/market-data';
-import {
-  runRounds,
-  type DriverEvent,
-  type MarketDataPort,
-  type RoundPorts,
-} from '@ponswars/round-service';
+import { runRounds, type DriverEvent, type RoundPorts } from '@ponswars/round-service';
 import {
   baseUnits,
   chainLabel,
@@ -46,6 +40,7 @@ import {
   PostgresRoundStore,
   readFinalizedResult,
 } from '@ponswars/store-postgres';
+import { startMarket, type RunningMarket } from './market.js';
 import { connectPostgres } from './postgres.js';
 
 /**
@@ -64,13 +59,17 @@ import { connectPostgres } from './postgres.js';
  * assumed market vendor. `loadConfig` reports every missing parameter at once —
  * one restart to learn what is wrong rather than one per parameter.
  *
- * ## What is still a stand-in, and says so
+ * ## The market, and the stand-in for it
  *
- * The market, and only the market. `MARKET_DATA_PROVIDER` has one member today,
- * `synthetic`, and it is not a market: choosing a vendor is a commercial and
- * licensing decision that has not been made. A deployment running it prints a
- * line saying the prices are not real, every time it starts, because the
- * failure mode for a thing like this is somebody running it and believing it.
+ * `MARKET_DATA_PROVIDER=onchain` reads the Stock Tokens' own trading on
+ * Robinhood Chain, checked against their Chainlink feeds (§23.7), and opens a
+ * round only where one fits inside US market hours (§23.8). It backfills
+ * before the first round, so the API and gateway bind first: a health check
+ * answers during the backfill and readiness says the service is starting.
+ *
+ * `synthetic` is not a market. A deployment running it prints a line saying
+ * the prices are not real, every time it starts, because the failure mode for
+ * a thing like this is somebody running it and believing it.
  *
  * Authentication used to be the other one. It is real now (§45.2): a wallet
  * signs a challenge, the signature is verified, and the session that comes back
@@ -121,25 +120,6 @@ const CONFIDENCE_CALIBRATION: ConfidenceCalibration = {
   momentumStability: { stable: 26, mixed: 32 },
   matchup: { favored: 20, strongFavorite: 60, dominant: 120 },
 };
-
-/**
- * The market adapter this deployment was told to run.
- *
- * A `switch` over a closed union rather than a lookup, so adding a vendor to
- * the config type without writing its adapter fails to compile instead of
- * failing at three in the morning.
- */
-function marketFor(provider: MarketDataProvider): { port: MarketDataPort; real: boolean } {
-  // The union has one member today, so `no-unnecessary-condition` is right that
-  // the comparison always holds. It is a switch anyway: the day a second vendor
-  // is added to the config union, this function stops compiling and names the
-  // adapter nobody wrote. That is the whole point of the shape.
-  switch (provider) {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above
-    case 'synthetic':
-      return { port: new SyntheticMarket(), real: false };
-  }
-}
 
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
@@ -192,7 +172,6 @@ async function main(): Promise<void> {
    */
   const stopping = new AbortController();
 
-  const market = marketFor(config.MARKET_DATA_PROVIDER);
   const database = connectPostgres({
     connectionString: config.DATABASE_URL,
     // The driver's writes and the API's reads share this process. Ten is room
@@ -250,8 +229,8 @@ async function main(): Promise<void> {
   });
 
   let waitingFor: UtcTimestamp | null = null;
-  const ports: RoundPorts = {
-    marketData: market.port,
+  // Everything but the market, which is only ready once its backfill is.
+  const ports: Omit<RoundPorts, 'marketData'> = {
     picks,
     // §12.7: the first Robinhood Chain block at or after the cutoff, once it is
     // finalized, is what makes the last tiebreak step unpredictable in advance
@@ -356,7 +335,6 @@ async function main(): Promise<void> {
       config.CHAIN_ID,
       secretVault !== null,
       config.MARKET_DATA_PROVIDER,
-      market.real,
     ),
   );
 
@@ -396,25 +374,37 @@ async function main(): Promise<void> {
     shutdown('SIGINT');
   });
 
+  let market: RunningMarket | null = null;
   try {
-    await runRounds({
-      ports,
-      config: CONFIG,
-      calibration: CONFIDENCE_CALIBRATION,
-      now,
-      tickMs: config.BATTLE_ENGINE_TICK_MS,
-      // §26: per-deployment, and never generated here — a server that invented
-      // one would make two deployments of the same code produce different
-      // evidence for the same inputs.
-      baseSeedHex: `0x${'5c'.repeat(32)}`,
-      onRound: (next) => {
-        round = next;
-      },
-      onEvent: (event) => {
-        say(describe(event));
-      },
-      signal: stopping.signal,
-    });
+    try {
+      market = await startMarket(config, stopping.signal, say);
+    } catch (error) {
+      // Stopped during the backfill: nothing was written, so nothing to finish.
+      if (!stopping.signal.aborted) {
+        throw error;
+      }
+    }
+    if (market !== null) {
+      await runRounds({
+        ports: { ...ports, marketData: market.port },
+        config: CONFIG,
+        calibration: CONFIDENCE_CALIBRATION,
+        now,
+        tickMs: config.BATTLE_ENGINE_TICK_MS,
+        // §26: per-deployment, and never generated here — a server that invented
+        // one would make two deployments of the same code produce different
+        // evidence for the same inputs.
+        baseSeedHex: `0x${'5c'.repeat(32)}`,
+        onRound: (next) => {
+          round = next;
+        },
+        onEvent: (event) => {
+          say(describe(event));
+        },
+        ...(market.roundsOpenAt === undefined ? {} : { roundsOpenAt: market.roundsOpenAt }),
+        signal: stopping.signal,
+      });
+    }
   } finally {
     clearInterval(housekeeping);
     // `finally`, not the happy path. The driver can fail rather than stop — a
@@ -424,6 +414,9 @@ async function main(): Promise<void> {
     // `/v1/ready` with `200` and serving the last round it saw, forever. A
     // crash an orchestrator can see is worth more than a process that is
     // technically still running.
+    // The market stops following the chain whether the driver stopped or failed.
+    stopping.abort();
+    await market?.stopped;
     await api.close();
     await sockets.close();
     await database.close();
@@ -438,7 +431,6 @@ function banner(
   chainId: number,
   secret: boolean,
   provider: MarketDataProvider,
-  real: boolean,
 ): string {
   return [
     '',
@@ -447,14 +439,14 @@ function banner(
     `  Gateway   :${String(gatewayPort)}`,
     `  Chain     ${chainLabel(chainId)}`,
     `  Secret    ${secret ? 'on — rewards reserved before reveal' : 'off — its band deals Legendary'}`,
-    `  Market    ${provider}`,
-    ...(real
-      ? []
-      : [
+    `  Market    ${provider === 'onchain' ? 'onchain — Stock Token trading on Robinhood Chain' : provider}`,
+    ...(provider === 'synthetic'
+      ? [
           '',
           '  The market data is SYNTHETIC. These prices are generated, not',
-          '  observed. Choosing a vendor is an OPEN decision (§102).',
-        ]),
+          '  observed. Run MARKET_DATA_PROVIDER=onchain for real battles.',
+        ]
+      : []),
     '',
     '',
   ].join('\n');
