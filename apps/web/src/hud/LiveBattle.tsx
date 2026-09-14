@@ -6,7 +6,8 @@ import { captionStyle, humanize, panelStyle, readoutStyle } from './styles.js';
 /**
  * The live battle readout (§42.6).
  *
- * Matchup, momentum, backing state and deployed card. No score: §12.5 and §48.3
+ * Momentum, frontline, backing state and deployed card; the matchup is named by
+ * the banner over the same view. No score: §12.5 and §48.3
  * keep the exact score hidden for the whole live battle, and it is revealed on
  * the result screen rather than by flying closer.
  *
@@ -26,15 +27,9 @@ export function LiveBattle({
 }): JSX.Element {
   return (
     <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)', minWidth: 190 }}>
-      <div>
-        <div style={captionStyle}>WAR</div>
-        <div style={readoutStyle}>
-          <span style={{ color: FACTION_ACCENT[battle.left] }}>{battle.left}</span>
-          <span style={{ color: 'var(--pw-text-3)' }}> / </span>
-          <span style={{ color: FACTION_ACCENT[battle.right] }}>{battle.right}</span>
-        </div>
-      </div>
-
+      {/* The matchup itself is the banner across the top of this view
+          (`MatchupBanner`); naming it again here was the same two tickers
+          twice on one screen. */}
       <div>
         <div style={captionStyle}>WAR MOMENTUM</div>
         {/* Qualitative only. There is no numeric alternative in scope. */}
