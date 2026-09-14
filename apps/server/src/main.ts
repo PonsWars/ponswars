@@ -6,6 +6,7 @@ import {
   assertTokenDecimals,
   ChainSecretVault,
   finalizedBlockAt,
+  rpcDistributorContract,
   reserverVault,
   RpcChainPort,
   robinhoodChainRpc,
@@ -38,6 +39,7 @@ import {
 import {
   PostgresAuthStore,
   PostgresCardHoldings,
+  PostgresDistributionStore,
   PostgresGenesisStore,
   PostgresPickStore,
   PostgresPlayerRecords,
@@ -239,6 +241,14 @@ async function main(): Promise<void> {
   // by the time the process dies.
   await sockets.ready;
 
+  const distributions = new PostgresDistributionStore(database);
+  const distributor = rpcDistributorContract({
+    url: config.RPC_URL,
+    chainId: config.CHAIN_ID,
+    distributor: config.REWARDS_DISTRIBUTOR_ADDRESS,
+    publisherKey: null,
+  });
+
   let waitingFor: UtcTimestamp | null = null;
   const ports: RoundPorts = {
     marketData: market.port,
@@ -293,6 +303,15 @@ async function main(): Promise<void> {
       balance: await war.balanceOf(wallet),
       decimals: config.WAR_TOKEN_DECIMALS,
     }),
+    // §16.8, §17: published rewards, claimed by the player's own wallet from the
+    // distributor. Reads only — this process holds no key for it.
+    rewardClaims: {
+      chainId: config.CHAIN_ID,
+      distributor: config.REWARDS_DISTRIBUTOR_ADDRESS,
+      decimals: config.SPY_TOKEN_DECIMALS,
+      claimsOf: (wallet) => distributions.publishedClaims(wallet),
+      hasClaimed: (distributionId, wallet) => distributor.hasClaimed(distributionId, wallet),
+    },
     // §6, §9: a Genesis card, dealt from the finalized hash of a Robinhood Chain
     // block chosen before it existed, and recorded with its card in PostgreSQL.
     genesis: new GenesisFlow({
