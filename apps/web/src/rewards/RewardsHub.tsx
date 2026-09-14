@@ -41,37 +41,59 @@ export function RewardsHub({
   readonly onClaim: () => void;
 }): JSX.Element {
   return (
-    <>
+    <div style={{ display: 'grid', gap: 'var(--pw-space-4)' }}>
+      {/* Two columns: where this wallet stands on the left, what the pool is
+          doing on the right. It was five full-width panels in a column, which
+          is exactly the stack of figures about money the delivered hub avoids. */}
       <div
         style={{
-          ...panelStyle,
           display: 'grid',
-          gridTemplateColumns: 'auto 1fr',
-          alignItems: 'center',
-          gap: 'var(--pw-space-5)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: 'var(--pw-space-4)',
+          alignItems: 'start',
         }}
       >
-        {/* The object the whole page is about. §35 measures participation
-            against a published formula, and a column of figures about money is
-            exactly the shape the delivered hub avoids. */}
-        <RewardVault size={150} charged={pool !== null} />
+        <div style={{ display: 'grid', gap: 'var(--pw-space-4)' }}>
+          <div
+            style={{
+              ...panelStyle,
+              display: 'grid',
+              gridTemplateColumns: 'auto 1fr',
+              alignItems: 'center',
+              gap: 'var(--pw-space-5)',
+              padding: 'var(--pw-space-5)',
+              background:
+                'radial-gradient(ellipse 40% 80% at 18% 50%, rgba(156, 255, 56, 0.1), transparent 70%), var(--pw-surface-2)',
+            }}
+          >
+            {/* The object the whole page is about. §35 measures participation
+                against a published formula, and a column of figures about money
+                is exactly the shape the delivered hub avoids. */}
+            <RewardVault size={150} charged={pool !== null} />
 
-        <div style={{ display: 'grid', gap: 'var(--pw-space-3)', minWidth: 0 }}>
-          <div style={captionStyle}>{view.label}</div>
-          {view.kind === 'ACTIVE' ? <WindowCountdown closesAt={view.closesAt} /> : null}
-          <Qualification view={view} />
+            <div style={{ display: 'grid', gap: 'var(--pw-space-3)', minWidth: 0 }}>
+              <div style={captionStyle}>{view.label}</div>
+              {view.kind === 'ACTIVE' ? <WindowCountdown closesAt={view.closesAt} /> : null}
+              <Qualification view={view} />
+            </div>
+          </div>
+          {view.kind === 'ACTIVE' ? <WeightPanel view={view} /> : null}
+        </div>
+
+        <div style={{ display: 'grid', gap: 'var(--pw-space-4)' }}>
+          {view.kind === 'ACTIVE' ? (
+            <>
+              {pool === null ? null : <PoolPanel pool={pool} />}
+              <NoEstimateYet />
+            </>
+          ) : (
+            <FinalizedPanels view={view} claim={claim} onClaim={onClaim} />
+          )}
         </div>
       </div>
 
-      {view.kind === 'ACTIVE' ? (
-        <ActivePanels view={view} pool={pool} />
-      ) : (
-        <FinalizedPanels view={view} claim={claim} onClaim={onClaim} />
-      )}
-
       <RewardsFlow />
-      <FairDistributionCap />
-    </>
+    </div>
   );
 }
 
@@ -98,50 +120,54 @@ function Qualification({ view }: { readonly view: RewardView }): JSX.Element {
 }
 
 /**
- * §35.2 and §35.3: weight and pool status while the window is open.
+ * §35.2: this wallet's weight while the window is open.
  *
  * The explanatory line is not filler. Without it, a reward weight next to a pool
  * balance reads as a payout in waiting, which is precisely the impression §35.2
  * exists to prevent.
  */
-function ActivePanels({
+function WeightPanel({
   view,
-  pool,
 }: {
   readonly view: Extract<RewardView, { kind: 'ACTIVE' }>;
-  readonly pool: PoolStatus | null;
-}): JSX.Element {
+}): JSX.Element | null {
+  if (view.weightLabel === null) {
+    return null;
+  }
   return (
-    <>
-      {view.weightLabel === null ? null : (
-        <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
-          <div style={captionStyle}>YOUR REWARD WEIGHT</div>
-          <div className="pw-tabular" style={{ ...readoutStyle, fontSize: 26 }}>
-            {view.weightLabel}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--pw-text-2)' }}>
-            Based on <span className="pw-tabular">sqrt({view.warPoints} WP)</span>. Final SPY
-            allocation is calculated after the window closes.
-          </div>
-        </div>
-      )}
+    <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
+      <div style={captionStyle}>YOUR REWARD WEIGHT</div>
+      <div className="pw-tabular" style={{ ...readoutStyle, fontSize: 30 }}>
+        <span style={{ color: 'var(--pw-text-3)', fontSize: 18 }}>√{view.warPoints} = </span>
+        <span style={{ color: 'var(--pw-accent)' }}>{view.weightLabel}</span>
+      </div>
+      <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--pw-text-2)' }}>
+        Based on <span className="pw-tabular">sqrt({view.warPoints} WP)</span>. Final SPY allocation
+        is calculated after the window closes.
+      </div>
+    </div>
+  );
+}
 
-      {pool === null ? null : (
-        <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
-          <div style={captionStyle}>CURRENT REWARDS POOL</div>
-          <div className="pw-tabular" style={{ ...readoutStyle, fontSize: 22 }}>
-            {pool.balance} SPY
-          </div>
-          <PoolAllocation />
-          <div style={{ fontSize: 12, color: 'var(--pw-text-2)' }}>
-            {POOL_DISTRIBUTABLE_BPS / 100}% distributable at snapshot. The final distributable
-            amount is determined from the actual wallet balance at snapshot, not from this figure.
-          </div>
-        </div>
-      )}
-
-      <NoEstimateYet />
-    </>
+/**
+ * §35.3: the pool while the window is open, with the split it is divided on.
+ *
+ * The same caveat as the weight: the balance shown is not the amount that will
+ * be distributed, and the page says so beside it rather than in a footnote.
+ */
+function PoolPanel({ pool }: { readonly pool: PoolStatus }): JSX.Element {
+  return (
+    <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-3)' }}>
+      <div style={captionStyle}>CURRENT REWARDS POOL</div>
+      <div className="pw-tabular" style={{ ...readoutStyle, fontSize: 34 }}>
+        {pool.balance} <span style={{ color: 'var(--pw-text-3)', fontSize: 20 }}>SPY</span>
+      </div>
+      <PoolAllocation />
+      <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--pw-text-2)' }}>
+        {POOL_DISTRIBUTABLE_BPS / 100}% distributable at snapshot. The final distributable amount is
+        determined from the actual wallet balance at snapshot, not from this figure.
+      </div>
+    </div>
   );
 }
 
@@ -224,19 +250,6 @@ function ClaimAction({
   );
 }
 
-/** §35.8: the cap, explained before anyone hits it. */
-function FairDistributionCap(): JSX.Element {
-  return (
-    <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
-      <div style={captionStyle}>FAIR DISTRIBUTION CAP</div>
-      <div style={{ fontSize: 12, color: 'var(--pw-text-2)' }}>
-        A single wallet can receive at most {PER_WALLET_CAP_BPS / 100}% of each distribution pool.
-        Excess is redistributed according to the reward formula.
-      </div>
-    </div>
-  );
-}
-
 /**
  * The countdown to the window closing (§35.1).
  *
@@ -277,7 +290,7 @@ function WindowCountdown({ closesAt }: { readonly closesAt: number | null }): JS
   return (
     <div>
       <div style={captionStyle}>CLOSES IN</div>
-      <div className="pw-tabular" style={{ ...readoutStyle, fontSize: 22 }}>
+      <div className="pw-tabular" style={{ ...readoutStyle, fontSize: 38, lineHeight: 1.1 }}>
         {formatWindowCountdown(closesAt - now)}
       </div>
     </div>
@@ -401,11 +414,11 @@ function RewardsFlow(): JSX.Element {
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--pw-space-2)' }}>
               <span
                 className="pw-tabular"
-                style={{ ...readoutStyle, fontSize: 14, color: 'var(--pw-text-3)' }}
+                style={{ ...readoutStyle, fontSize: 22, color: 'var(--pw-accent)' }}
               >
                 {String(index + 1).padStart(2, '0')}
               </span>
-              <span style={{ ...readoutStyle, fontSize: 12 }}>{step.title}</span>
+              <span style={{ ...readoutStyle, fontSize: 15 }}>{step.title}</span>
             </div>
             <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--pw-text-2)' }}>
               {step.body}
@@ -413,6 +426,21 @@ function RewardsFlow(): JSX.Element {
           </li>
         ))}
       </ol>
+      {/* §35.8: the cap, explained before anyone hits it. A footnote to the
+          flow rather than a panel of its own: it is a rule of step three. */}
+      <div
+        style={{
+          fontSize: 12,
+          lineHeight: 1.5,
+          color: 'var(--pw-text-3)',
+          paddingTop: 'var(--pw-space-3)',
+          borderTop: 'var(--pw-line-hair) solid var(--pw-border-1)',
+        }}
+      >
+        <span style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>FAIR DISTRIBUTION CAP · </span>
+        A single wallet can receive at most {PER_WALLET_CAP_BPS / 100}% of each distribution pool.
+        Excess is redistributed according to the reward formula.
+      </div>
     </div>
   );
 }
