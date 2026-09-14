@@ -18,6 +18,8 @@ import {
   AdditiveBlending,
   BackSide,
   Box3,
+  BufferAttribute,
+  BufferGeometry,
   Color,
   DataTexture,
   DoubleSide,
@@ -25,7 +27,7 @@ import {
   ShaderMaterial,
   Vector3,
 } from 'three';
-import type { BufferGeometry, Mesh } from 'three';
+import type { Mesh } from 'three';
 import type { Group, PerspectiveCamera, PointLight } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
 import {
@@ -39,6 +41,7 @@ import {
 } from './layout.js';
 import { Army } from './Army.js';
 import { CloudSea, NOISE_GLSL } from './Atmosphere.js';
+import { CloudBanks } from './CloudBanks.js';
 import { withCityLights } from './city-lights.js';
 import { CoreBeam, CoreModel } from './CoreModel.js';
 import { RESHUFFLE, RESHUFFLE_REDUCED, VIEWPORT_FIT, VOID_SKY } from './navigation-config.js';
@@ -46,6 +49,7 @@ import { DeckProps, PropField, type Prop } from './DeckProps.js';
 import { InstancedField, preparedGeometry, type Placement } from './InstancedField.js';
 import { IslandMass } from './IslandMass.js';
 import { Planet } from './Planet.js';
+import { islet } from './rock.js';
 import { SectorLabel } from './SectorLabel.js';
 import { WorldInput } from './WorldInput.js';
 import { WorldLighting } from './WorldLighting.js';
@@ -1170,6 +1174,9 @@ function PieceField({
   );
 }
 
+/** How many islet shapes the field is drawn from. Enough that neighbours differ. */
+const ISLET_SHAPES = 3;
+
 /**
  * Loose rock in the space between the islands (§38.1, §36.14).
  *
@@ -1184,17 +1191,56 @@ function PieceField({
 function Debris(): JSX.Element {
   const field = useRef<Group>(null);
 
-  const placements = useMemo<readonly Placement[]>(
+  const shapes = useMemo(
     () =>
-      debrisField(4_207, 620, 1_500, 72).map((rock) => ({
-        position: [rock.x, rock.y, rock.z],
-        // Half the generated size: at full size the nearest rocks filled a
-        // corner of the global view as black holes in the sky.
-        scale: [rock.radius * 0.5, rock.radius * 0.4, rock.radius * 0.5],
-        rotation: [rock.tilt, rock.tilt * 1.7, rock.tilt * 0.4],
-      })),
+      Array.from({ length: ISLET_SHAPES }, (_, shape) => {
+        const data = islet(8_111 + shape * 37);
+        const indexed = new BufferGeometry();
+        indexed.setAttribute('position', new BufferAttribute(data.positions, 3));
+        indexed.setAttribute('color', new BufferAttribute(data.colors, 3));
+        indexed.setIndex(new BufferAttribute(data.indices, 1));
+        // Faceted, like the islands they broke off.
+        const faceted = indexed.toNonIndexed();
+        indexed.dispose();
+        faceted.computeVertexNormals();
+        return faceted;
+      }),
     [],
   );
+
+  const material = useMemo(
+    () =>
+      new MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.94,
+        metalness: 0.08,
+        flatShading: true,
+      }),
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      for (const shape of shapes) {
+        shape.dispose();
+      }
+      material.dispose();
+    },
+    [shapes, material],
+  );
+
+  const placements = useMemo<readonly (readonly Placement[])[]>(() => {
+    const rocks = debrisField(4_207, 620, 1_500, 84).map((rock) => ({
+      position: [rock.x, rock.y, rock.z] as const,
+      // Near level, so the capped tops read as tops: a tumbling islet shows its
+      // root to the sky and stops being a piece of the same world.
+      scale: [rock.radius * 0.42, rock.radius * 0.5, rock.radius * 0.42] as const,
+      rotation: [rock.tilt * 0.12, rock.tilt * 2, rock.tilt * 0.08] as const,
+    }));
+    return Array.from({ length: ISLET_SHAPES }, (_, shape) =>
+      rocks.filter((_, index) => index % ISLET_SHAPES === shape),
+    );
+  }, []);
 
   useFrame((_, delta) => {
     if (field.current !== null) {
@@ -1204,16 +1250,12 @@ function Debris(): JSX.Element {
 
   return (
     <group ref={field}>
-      <InstancedField placements={placements}>
-        <icosahedronGeometry key="rock" args={[1, 0]} />
-        <meshStandardMaterial
-          key="rock-material"
-          color="#2b2723"
-          metalness={0.1}
-          roughness={0.95}
-          flatShading
-        />
-      </InstancedField>
+      {shapes.map((shape, index) => (
+        <InstancedField key={index} placements={placements[index] ?? []}>
+          <primitive key="islet" object={shape} attach="geometry" />
+          <primitive key="islet-material" object={material} attach="material" />
+        </InstancedField>
+      ))}
     </group>
   );
 }
@@ -1578,6 +1620,7 @@ export function WorldScene(): JSX.Element {
       <Void />
       <Planet />
       <CloudSea />
+      <CloudBanks />
       <Starfield />
       {/* Between the stars and the islands, so the void has a middle distance. */}
       <Debris />
