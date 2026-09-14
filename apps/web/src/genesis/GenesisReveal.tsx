@@ -4,6 +4,7 @@ import { PonsWarsMark } from '../art/PonsWarsMark.js';
 import { RARITY_COLOR } from '@ponswars/ui-tokens';
 import { useEffect, useState, type JSX } from 'react';
 import { captionStyle, controlStyle, readoutStyle } from '../hud/styles.js';
+import { useNarrowViewport } from '../hud/useNarrowViewport.js';
 import { useSession } from '../state/session.js';
 import { revealPlan, type RevealPlan } from './reveal-sequence.js';
 
@@ -56,6 +57,7 @@ export function GenesisReveal({
   const revealed = finished && plan.complete;
   const tint = revealed ? RARITY_COLOR[outcome.rarity] : SEALED_TINT;
   const uses = RARITY_USES[outcome.rarity];
+  const narrow = useNarrowViewport();
 
   return (
     <section
@@ -66,8 +68,8 @@ export function GenesisReveal({
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         alignItems: 'center',
         gap: 'var(--pw-space-6)',
-        minHeight: 540,
-        padding: 'var(--pw-space-6)',
+        minHeight: narrow ? undefined : 540,
+        padding: narrow ? 'var(--pw-space-5) var(--pw-space-4)' : 'var(--pw-space-6)',
         borderRadius: 'var(--pw-radius-panel)',
         border: 'var(--pw-line-hair) solid var(--pw-border-1)',
         // The chamber the card is dealt in: dark, lit from under the card, and
@@ -77,7 +79,16 @@ export function GenesisReveal({
         transition: 'background var(--pw-dur-cinematic) var(--pw-ease-spatial)',
       }}
     >
-      <div style={{ display: 'grid', gap: 'var(--pw-space-4)', alignContent: 'center' }}>
+      {/* On a phone the card leads: §42.16 asks for a near-fullscreen reveal,
+          and a reveal whose card is below the fold is a page of text. */}
+      <div
+        style={{
+          display: 'grid',
+          gap: 'var(--pw-space-4)',
+          alignContent: 'center',
+          order: narrow ? 1 : 0,
+        }}
+      >
         <div style={captionStyle}>GENESIS PROTOCOL</div>
 
         {revealed ? (
@@ -200,7 +211,7 @@ export function GenesisReveal({
           position: 'relative',
           display: 'grid',
           placeItems: 'center',
-          minHeight: 460,
+          minHeight: narrow ? 420 : 460,
         }}
       >
         <div
