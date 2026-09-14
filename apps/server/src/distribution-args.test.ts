@@ -103,6 +103,28 @@ describe('anything else', () => {
     });
   });
 
+  it('reads a calculation: an id and the minimum claim in base units', () => {
+    expect(parseDistributionArgs(['calculate', '--id', '42', '--minimum-claim', '1000'])).toEqual({
+      ok: true,
+      command: { kind: 'CALCULATE', distributionId: 42n, minimumClaim: 1_000n },
+    });
+    expect(parseDistributionArgs(['calculate', '--id', '42', '--minimum-claim', '0.001']).ok).toBe(
+      false,
+    );
+  });
+
+  it('reads a publication only with the root the operator verified', () => {
+    const root = `0x${'AB'.repeat(32)}`;
+    expect(parseDistributionArgs(['publish', '--id', '42', '--expect-root', root])).toEqual({
+      ok: true,
+      command: { kind: 'PUBLISH', distributionId: 42n, expectRoot: root.toLowerCase() },
+    });
+    expect(parseDistributionArgs(['publish', '--id', '42']).ok).toBe(false);
+    expect(parseDistributionArgs(['publish', '--id', '42', '--expect-root', '0x1234']).ok).toBe(
+      false,
+    );
+  });
+
   it('refuses an id that is not a non-negative integer', () => {
     expect(
       parseDistributionArgs(['open', '--id', '-1', '--start', '2026-09-14T00:00:00Z']),

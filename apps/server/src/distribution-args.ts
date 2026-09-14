@@ -8,7 +8,9 @@
 
 export const DISTRIBUTION_USAGE = `Usage:
   node dist/distribution.js open --id <n> --start <ISO-8601 instant>
-  node dist/distribution.js snapshot --id <n> --pool-balance <base units> --minimum-claim <base units> --out <file>`;
+  node dist/distribution.js snapshot --id <n> --pool-balance <base units> --minimum-claim <base units> --out <file>
+  node dist/distribution.js calculate --id <n> --minimum-claim <base units>
+  node dist/distribution.js publish --id <n> --expect-root <root from verify-distribution>`;
 
 export type DistributionCommand =
   | { readonly kind: 'OPEN'; readonly distributionId: bigint; readonly windowStart: number }
@@ -18,6 +20,12 @@ export type DistributionCommand =
       readonly poolBalance: bigint;
       readonly minimumClaim: bigint;
       readonly out: string;
+    }
+  | { readonly kind: 'CALCULATE'; readonly distributionId: bigint; readonly minimumClaim: bigint }
+  | {
+      readonly kind: 'PUBLISH';
+      readonly distributionId: bigint;
+      readonly expectRoot: `0x${string}`;
     };
 
 export type Parsed =
@@ -42,12 +50,13 @@ export function parseDistributionArgs(args: readonly string[]): Parsed {
     flags.set(flag, value);
   }
 
-  const allowed =
-    verb === 'open'
-      ? ['--id', '--start']
-      : verb === 'snapshot'
-        ? ['--id', '--pool-balance', '--minimum-claim', '--out']
-        : null;
+  const ALLOWED: Readonly<Record<string, readonly string[]>> = {
+    open: ['--id', '--start'],
+    snapshot: ['--id', '--pool-balance', '--minimum-claim', '--out'],
+    calculate: ['--id', '--minimum-claim'],
+    publish: ['--id', '--expect-root'],
+  };
+  const allowed = verb === undefined ? null : (ALLOWED[verb] ?? null);
   if (allowed === null) {
     return { ok: false, problem: `Unknown command ${String(verb)}.` };
   }
@@ -76,6 +85,36 @@ export function parseDistributionArgs(args: readonly string[]): Parsed {
       };
     }
     return { ok: true, command: { kind: 'OPEN', distributionId: id, windowStart: start } };
+  }
+
+  if (verb === 'calculate') {
+    const minimumClaim = integer(flags.get('--minimum-claim'));
+    if (minimumClaim === null) {
+      return {
+        ok: false,
+        problem: '--minimum-claim is base units: a non-negative whole number, no decimal point.',
+      };
+    }
+    return { ok: true, command: { kind: 'CALCULATE', distributionId: id, minimumClaim } };
+  }
+
+  if (verb === 'publish') {
+    const root = flags.get('--expect-root') ?? '';
+    if (!/^0x[0-9a-fA-F]{64}$/.test(root)) {
+      return {
+        ok: false,
+        problem:
+          '--expect-root is the 32-byte root tools/verify-distribution.mjs printed for this window.',
+      };
+    }
+    return {
+      ok: true,
+      command: {
+        kind: 'PUBLISH',
+        distributionId: id,
+        expectRoot: root.toLowerCase() as `0x${string}`,
+      },
+    };
   }
 
   const poolBalance = integer(flags.get('--pool-balance'));
