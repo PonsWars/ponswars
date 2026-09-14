@@ -125,7 +125,8 @@ export function SectorLabel({
           <span
             style={{
               fontFamily: 'var(--pw-font-display)',
-              fontSize: 13,
+              fontSize: 16,
+              fontWeight: 600,
               letterSpacing: '0.06em',
             }}
           >
