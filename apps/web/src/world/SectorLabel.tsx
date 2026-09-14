@@ -44,10 +44,11 @@ export function SectorLabel({
   readonly onFocus: () => void;
 }): JSX.Element {
   const narrow = useNarrowViewport();
-  // Behind a page rather than in front of it. On a presented surface (§81.2)
-  // the world is the backdrop, and a label at full strength competes with the
-  // body copy it lands next to — the labels are how you navigate the world, and
-  // nobody is navigating it from the about page.
+  // Gone behind a page. On a presented surface (§81.2) the world is the
+  // backdrop, and the labels are how you navigate it — nobody is navigating it
+  // from the landing. Dimmed rather than hidden, they ghosted through the hero
+  // copy wherever an island sat behind it; the landing's own round strip is
+  // where the five matchups are read from there.
   const presenting = useSession((state) => state.camera.mode) === 'PROFILE_PRESENTATION';
 
   return (
@@ -62,8 +63,10 @@ export function SectorLabel({
       style={{
         pointerEvents: 'none',
         userSelect: 'none',
-        opacity: presenting ? 0.42 : 1,
-        transition: 'opacity var(--pw-dur-panel) var(--pw-ease-ui)',
+        opacity: presenting ? 0 : 1,
+        visibility: presenting ? 'hidden' : 'visible',
+        transition:
+          'opacity var(--pw-dur-panel) var(--pw-ease-ui), visibility var(--pw-dur-panel) var(--pw-ease-ui)',
       }}
       // No `occlude`. drei's blending mode renders an occlusion pass that
       // blanked the entire canvas here — the world went black with no error, on
