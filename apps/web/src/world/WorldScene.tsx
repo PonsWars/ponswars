@@ -47,6 +47,7 @@ import { DeckProps, PropField, type Prop } from './DeckProps.js';
 import { InstancedField, preparedGeometry, type Placement } from './InstancedField.js';
 import { Dropship, DROPSHIPS } from './Dropship.js';
 import { IslandMass } from './IslandMass.js';
+import { LightPool } from './LightPool.js';
 import { Planet } from './Planet.js';
 import { islet } from './rock.js';
 import { withGround } from './ground.js';
@@ -267,7 +268,7 @@ function MarketCore(): JSX.Element {
       {/* The city's own light, pooled on the plateau under the towers. Every
           delivered frame bathes the core in warm light from below; without it
           the citadel was dark towers on a dark disc with a ring round them. */}
-      <CoreGlow />
+      <LightPool radius={112} colour="#ffbf5e" strength={0.42} position={[0, 0.7, 0]} />
       {/* Orbit rings, tilted and turning with the core: the Market running. */}
       <mesh rotation={[Math.PI / 2 + 0.09, 0, 0]} position={[0, 46, 0]}>
         <torusGeometry args={[150, 0.55, 6, 160]} />
@@ -331,54 +332,6 @@ function MarketCore(): JSX.Element {
         <meshBasicMaterial color="#16323d" transparent opacity={0.35} />
       </mesh>
     </group>
-  );
-}
-
-/**
- * Warm light pooled on the core's plateau (§38.2).
- *
- * A disc drawn additively with a radial falloff: brightest among the towers,
- * gone by the rim. Additive and depth-tested, so the towers standing in it
- * occlude it and it reads as light on the ground between them.
- */
-function CoreGlow(): JSX.Element {
-  const material = useMemo(
-    () =>
-      new ShaderMaterial({
-        transparent: true,
-        depthWrite: false,
-        blending: AdditiveBlending,
-        toneMapped: false,
-        uniforms: { uColour: { value: new Color('#ffbf5e') } },
-        vertexShader: `
-          varying vec2 vPlane;
-          void main() {
-            vPlane = position.xy;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `,
-        fragmentShader: `
-          uniform vec3 uColour;
-          varying vec2 vPlane;
-          void main() {
-            float r = length(vPlane) / 110.0;
-            float pool = exp(-r * r * 3.2);
-            gl_FragColor = vec4(uColour * pool * 0.42, 1.0);
-          }
-        `,
-      }),
-    [],
-  );
-  useEffect(
-    () => () => {
-      material.dispose();
-    },
-    [material],
-  );
-  return (
-    <mesh material={material} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.7, 0]}>
-      <circleGeometry args={[112, 64]} />
-    </mesh>
   );
 }
 
@@ -977,6 +930,18 @@ function District({
         <boxGeometry args={[49.8, 1, 97.8]} />
         <meshBasicMaterial color={accent} transparent opacity={0.5} />
       </mesh>
+
+      {/* The district's own light on its deck, faintly in its colour: at the
+          global view this is what lets a side be told apart before its towers
+          resolve, and it is still light on the ground rather than a painted
+          deck (§36.5). */}
+      <LightPool
+        radius={52}
+        colour={accent}
+        strength={0.11}
+        stretch={[0.5, 1]}
+        position={[side * DISTRICT_SETBACK * 0.5, 10.3, 0]}
+      />
 
       {/* Outward of the army's ground: the city stands behind the ranks, not
           around them. */}
