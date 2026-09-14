@@ -138,6 +138,20 @@ export const BLOOM = {
 } as const;
 
 /**
+ * The darkening toward the frame's edges (§38.10).
+ *
+ * `CALIBRATE` (§59.4). Every delivered world frame falls off into shadow at its
+ * corners, which is what makes a render read as a shot rather than a viewport:
+ * the eye is held on the middle, where the world is. Kept light — `offset` is
+ * how far in it reaches and `darkness` how far toward black it goes at the
+ * corner — so the HUD in those corners never sits on a black hole.
+ */
+export const VIGNETTE = {
+  offset: 0.95,
+  darkness: 0.9,
+} as const;
+
+/**
  * The three colours the void is mixed from (§38.10).
  *
  * `CALIBRATE` (§59.4). Dark overhead, a little light gathered at the horizon,

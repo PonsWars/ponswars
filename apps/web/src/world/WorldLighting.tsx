@@ -15,9 +15,11 @@ import {
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { VignetteShader } from 'three/examples/jsm/shaders/VignetteShader.js';
 import { useSession } from '../state/session.js';
-import { BLOOM, ENVIRONMENT } from './navigation-config.js';
+import { BLOOM, ENVIRONMENT, VIGNETTE } from './navigation-config.js';
 
 /**
  * What the world is lit by, and what happens to the light afterwards (§36.5,
@@ -173,6 +175,16 @@ function Bloom({ tier }: { readonly tier: QualityTier }): null {
     // Tone mapping and the colour-space conversion happen here, at the end of
     // the chain, because everything before it works in linear light.
     made.addPass(new OutputPass());
+    // After the output conversion, so the falloff is even to the eye rather
+    // than in linear light, where it would crush the corners.
+    const vignette = new ShaderPass(VignetteShader);
+    const offset = vignette.uniforms['offset'];
+    const darkness = vignette.uniforms['darkness'];
+    if (offset !== undefined && darkness !== undefined) {
+      offset.value = VIGNETTE.offset;
+      darkness.value = VIGNETTE.darkness;
+    }
+    made.addPass(vignette);
     return made;
   }, [gl, scene, camera, size.width, size.height]);
 
