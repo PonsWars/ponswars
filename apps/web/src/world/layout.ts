@@ -109,7 +109,7 @@ export const SECTOR_SKYLINE_HEIGHT = 100;
  * once — §37.2 level one shows the complete world.
  */
 export const GLOBAL_ANCHOR: CameraPose = {
-  position: vec3(0, 760, 900),
+  position: vec3(0, 540, 1060),
   target: MARKET_CORE,
 };
 
