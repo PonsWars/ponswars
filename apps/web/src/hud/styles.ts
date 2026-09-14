@@ -64,22 +64,41 @@ export const controlStyle: CSSProperties = {
   minHeight: MIN_TOUCH_TARGET,
   minWidth: MIN_TOUCH_TARGET,
   color: 'var(--pw-text-1)',
+  // A command, in the display face (§36.12): the controls were the one place
+  // left in the interface system face, and a HUD button in a paragraph font
+  // reads as a web form.
+  fontFamily: 'var(--pw-font-display)',
+  fontSize: 14,
+  fontWeight: 600,
+  letterSpacing: '0.07em',
   cursor: 'pointer',
   transition: 'background var(--pw-dur-fast) var(--pw-ease-ui)',
 };
 
-/** A small caps label above a value. */
+/**
+ * A small caps label above a value.
+ *
+ * The interface face, not the display face. §36.12 gives the condensed
+ * industrial face to headlines, and at the nine and ten pixels a caption is set
+ * in, a condensed face closes up into a grey smear — which went unnoticed while
+ * the display face was not loaded and everything fell back to Arial Narrow.
+ */
 export const captionStyle: CSSProperties = {
   fontSize: 10,
+  fontWeight: 500,
   letterSpacing: '0.12em',
   color: 'var(--pw-text-3)',
-  fontFamily: 'var(--pw-font-display)',
+  fontFamily: 'var(--pw-font-ui)',
 };
 
 /** A headline value inside a panel. */
 export const readoutStyle: CSSProperties = {
   fontFamily: 'var(--pw-font-display)',
-  fontSize: 18,
+  fontSize: 20,
+  fontWeight: 600,
+  // Opened up a little: a condensed face at the thirteen pixels most readouts
+  // are set in runs its letters together.
+  letterSpacing: '0.05em',
   color: 'var(--pw-text-1)',
 };
 
