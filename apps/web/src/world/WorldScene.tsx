@@ -51,6 +51,7 @@ import { Planet } from './Planet.js';
 import { islet } from './rock.js';
 import { withGround } from './ground.js';
 import { SectorLabel } from './SectorLabel.js';
+import { Traffic } from './Traffic.js';
 import { WorldInput } from './WorldInput.js';
 import { WorldLighting } from './WorldLighting.js';
 
@@ -1570,6 +1571,7 @@ export function WorldScene(): JSX.Element {
 
       <MarketCore />
       <Routes battles={battles} />
+      <Traffic />
 
       {SECTOR_POSITIONS.map((_, index) => (
         <Sector
