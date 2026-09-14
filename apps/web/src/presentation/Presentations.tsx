@@ -2,7 +2,15 @@ import { About } from '../about/About.js';
 import { NavBar } from '../hud/NavBar.js';
 import { controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
 import { useState, type JSX } from 'react';
-import type { ActiveTicker, ConfidenceLabel, FinalizedBattleResult } from '@ponswars/shared-types';
+import {
+  CARD_CATALOG,
+  type ActiveTicker,
+  type CardType,
+  type ConfidenceLabel,
+  type FinalizedBattleResult,
+} from '@ponswars/shared-types';
+import { FACTION_ART } from '../art/manifest.js';
+import { GenesisCardFace } from '../art/GenesisCardFace.js';
 import { GenesisClaim, type GenesisPageData } from '../genesis/GenesisClaim.js';
 import { WarRoom, type ProfileData } from '../profile/WarRoom.js';
 import { RewardClaims, type RewardClaimsData } from '../rewards/RewardClaims.js';
@@ -75,6 +83,9 @@ export function Presentations({
             body={copy.body}
             action="BACK TO THE WORLD →"
             onAction={close}
+            {...(page === 'GENESIS'
+              ? { showcase: <GenesisShowcase /> }
+              : { art: page === 'REWARDS' ? SIGNED_OUT_ART.REWARDS : SIGNED_OUT_ART.PROFILE })}
           />
         );
       }
@@ -289,19 +300,138 @@ function EmptyState({
   body,
   action,
   onAction,
+  art,
+  showcase,
 }: {
   readonly headline: string;
   readonly body: string;
   readonly action: string;
   readonly onAction: () => void;
+  /** A plate across the top: what the page is about, before there is a record in it. */
+  readonly art?: string;
+  /** Something to look at beside the copy, where the page has one to show. */
+  readonly showcase?: JSX.Element;
 }): JSX.Element {
-  return (
-    <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-3)', maxWidth: 560 }}>
+  const copy = (
+    <div style={{ display: 'grid', gap: 'var(--pw-space-3)', alignContent: 'center' }}>
       <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>{headline}</h2>
       <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.55 }}>{body}</p>
       <button type="button" onClick={onAction} style={{ ...controlStyle, justifySelf: 'start' }}>
         {action}
       </button>
+    </div>
+  );
+
+  if (showcase !== undefined) {
+    return (
+      <div
+        style={{
+          ...panelStyle,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: 'var(--pw-space-5)',
+          alignItems: 'center',
+          padding: 'var(--pw-space-5)',
+        }}
+      >
+        {copy}
+        {showcase}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        ...panelStyle,
+        padding: 0,
+        overflow: 'hidden',
+        maxWidth: art === undefined ? 560 : 760,
+      }}
+    >
+      {art === undefined ? null : (
+        <div style={{ position: 'relative', height: 220 }}>
+          <img
+            src={art}
+            alt=""
+            decoding="async"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center 40%',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'linear-gradient(180deg, rgba(6,11,16,0) 45%, var(--pw-surface-2) 100%)',
+            }}
+          />
+        </div>
+      )}
+      <div style={{ padding: 'var(--pw-space-3) var(--pw-space-4) var(--pw-space-4)' }}>{copy}</div>
+    </div>
+  );
+}
+
+/**
+ * The plates the signed-out record pages stand under.
+ *
+ * An army rather than a record: a page with no wallet behind it has nothing of
+ * the visitor's to show, and a blank panel on an empty screen read as a page
+ * that had failed. Faction plates, because they are the art made at a width a
+ * banner can use — a card illustration is cut for a card and goes soft here.
+ * The AI Mech Legion for the war room, the benchmark faction (§28); the Market
+ * Federation for the rewards, the index every faction is measured against.
+ */
+const SIGNED_OUT_ART = {
+  PROFILE: FACTION_ART.NVDA,
+  REWARDS: FACTION_ART.SPY,
+} as const;
+
+/**
+ * Three cards from the pool, fanned, beside the Genesis sign-in.
+ *
+ * Catalog entries, not anyone's claim: no Genesis number and no charges spent,
+ * which is how `GenesisCardFace` draws a class rather than a card (§7.6). One of
+ * each of three rarities, so the fan says the pool has range without saying
+ * what this visitor will draw.
+ */
+const SHOWCASE: readonly CardType[] = ['REINFORCEMENT', 'GOLDEN_ARMY', 'WAR_MACHINE'];
+
+function GenesisShowcase(): JSX.Element {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'relative',
+        height: 330,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}
+    >
+      {SHOWCASE.map((type, index) => {
+        const offset = index - 1;
+        return (
+          <div
+            key={type}
+            style={{
+              position: 'absolute',
+              transform: `translateX(${String(offset * 120)}px) translateY(${String(Math.abs(offset) * 18)}px) rotate(${String(offset * 9)}deg) scale(${offset === 0 ? '1' : '0.86'})`,
+              zIndex: offset === 0 ? 2 : 1,
+              filter: offset === 0 ? 'none' : 'brightness(0.72)',
+              boxShadow: '0 18px 40px rgba(0, 0, 0, 0.55)',
+            }}
+          >
+            <GenesisCardFace cardType={type} rarity={CARD_CATALOG[type].rarity} width={190} />
+          </div>
+        );
+      })}
     </div>
   );
 }
