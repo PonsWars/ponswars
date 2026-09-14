@@ -288,6 +288,12 @@ importers:
       '@ponswars/genesis-service':
         specifier: workspace:*
         version: link:../genesis-service
+      '@ponswars/market-data':
+        specifier: workspace:*
+        version: link:../market-data
+      '@ponswars/pons-indexer':
+        specifier: workspace:*
+        version: link:../pons-indexer
       '@ponswars/round-service':
         specifier: workspace:*
         version: link:../round-service

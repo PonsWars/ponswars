@@ -11,6 +11,8 @@
   "references": [
     { "path": "../shared-types/tsconfig.build.json" },
     { "path": "../genesis-service/tsconfig.build.json" },
+    { "path": "../market-data/tsconfig.build.json" },
+    { "path": "../pons-indexer/tsconfig.build.json" },
     { "path": "../round-service/tsconfig.build.json" }
   ]
 }

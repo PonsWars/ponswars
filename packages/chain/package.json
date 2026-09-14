@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Robinhood Chain, read over RPC: the finalized block a tiebreak is broken with (§12.7).",
+  "description": "Robinhood Chain, read over RPC: the finalized block a tiebreak is broken with (\u00c2\u00a712.7).",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -21,6 +21,8 @@
   },
   "dependencies": {
     "@ponswars/genesis-service": "workspace:*",
+    "@ponswars/market-data": "workspace:*",
+    "@ponswars/pons-indexer": "workspace:*",
     "@ponswars/round-service": "workspace:*",
     "@ponswars/shared-types": "workspace:*",
     "viem": "^2.56.3"
