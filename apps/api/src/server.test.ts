@@ -21,6 +21,7 @@ import {
   currentRoundSchema,
   genesisStatusSchema,
   profileSchema,
+  rewardClaimsSchema,
   rosterSchema,
   serviceStatusSchema,
 } from '@ponswars/schemas';
@@ -1244,6 +1245,70 @@ describe('GET /v1/profile', () => {
     const response = await app.inject({ method: 'GET', url: '/v1/profile', headers: AUTH });
 
     expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+});
+
+describe('GET /v1/rewards/claims (§17, §35.6)', () => {
+  const PROOF = [`0x${'aa'.repeat(32)}`, `0x${'bb'.repeat(32)}`] as `0x${string}`[];
+  const withClaims = (hasClaimed: (id: bigint) => Promise<boolean>) =>
+    buildServer({
+      ...serverDeps,
+      rewardClaims: {
+        chainId: 46630,
+        distributor: `0x${'d1'.repeat(20)}`,
+        decimals: 18,
+        claimsOf: () =>
+          Promise.resolve([
+            { distributionId: 8n, amount: 400_000_000_000_000_000n, proof: PROOF },
+            { distributionId: 7n, amount: 10n, proof: [] },
+          ]),
+        hasClaimed: (id) => hasClaimed(id),
+      },
+    });
+
+  it('needs a signed-in wallet', async () => {
+    expect((await app.inject({ method: 'GET', url: '/v1/rewards/claims' })).statusCode).toBe(401);
+  });
+
+  it('is unpublished where there is no distributor', async () => {
+    const response = await app.inject({ method: 'GET', url: '/v1/rewards/claims', headers: AUTH });
+
+    expect(rewardClaimsSchema.parse(response.json())).toEqual({ status: 'UNPUBLISHED' });
+  });
+
+  it('hands over each claim as the contract takes it, with its claimed status from chain', async () => {
+    const server = withClaims((id) => Promise.resolve(id === 7n));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/v1/rewards/claims',
+      headers: AUTH,
+    });
+
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(rewardClaimsSchema.parse(response.json())).toEqual({
+      status: 'READ',
+      chainId: 46630,
+      distributor: `0x${'d1'.repeat(20)}`,
+      decimals: 18,
+      claims: [
+        { distributionId: '8', amount: '400000000000000000', proof: PROOF, claimed: false },
+        { distributionId: '7', amount: '10', proof: [], claimed: true },
+      ],
+    });
+  });
+
+  it('says the claimed status is unknown when the chain does not answer, not false', async () => {
+    const server = withClaims(() => Promise.reject(new Error('503')));
+
+    const body = rewardClaimsSchema.parse(
+      (await server.inject({ method: 'GET', url: '/v1/rewards/claims', headers: AUTH })).json(),
+    );
+
+    expect(body.status === 'READ' && body.claims.map((claim) => claim.claimed)).toEqual([
+      null,
+      null,
+    ]);
   });
 });
 

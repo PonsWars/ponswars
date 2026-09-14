@@ -14,6 +14,7 @@ import {
   cardDecisionRequestSchema,
   battleResultSchema,
   genesisStatusSchema,
+  rewardClaimsSchema,
   type GenesisClaimBody,
   type GenesisStatusBody,
   currentRoundSchema,
@@ -173,6 +174,24 @@ export interface ServerDeps {
    * Robinhood Chain block, and a server without one cannot deal a card it
    * could stand behind.
    */
+  /**
+   * Published rewards and where to claim them (§16.8, §17).
+   *
+   * Absent where there is no distributor to claim from.
+   */
+  readonly rewardClaims?: {
+    readonly chainId: number;
+    readonly distributor: `0x${string}`;
+    readonly decimals: number;
+    claimsOf(wallet: WalletAddress): Promise<
+      readonly {
+        readonly distributionId: bigint;
+        readonly amount: bigint;
+        readonly proof: readonly `0x${string}`[];
+      }[]
+    >;
+    hasClaimed(distributionId: bigint, wallet: WalletAddress): Promise<boolean>;
+  };
   readonly genesis?: {
     status(wallet: WalletAddress): Promise<GenesisStatus>;
     request(wallet: WalletAddress): Promise<GenesisStatus>;
@@ -225,6 +244,17 @@ async function warHolding(
   if (read === undefined) {
     return { status: 'UNPUBLISHED' };
   }
+  const holding = await withinChainTimeout(read(wallet));
+  return holding === null
+    ? { status: 'UNAVAILABLE' }
+    : { status: 'READ', balance: holding.balance.toString(), decimals: holding.decimals };
+}
+
+/**
+ * A chain read's answer, or `null` if it failed or outlasted
+ * {@link CHAIN_READ_TIMEOUT_MS} — so a slow endpoint costs the figure, not the page.
+ */
+async function withinChainTimeout<T>(read: Promise<T>): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<null>((resolve) => {
     timer = setTimeout(() => {
@@ -232,12 +262,9 @@ async function warHolding(
     }, CHAIN_READ_TIMEOUT_MS);
   });
   try {
-    const holding = await Promise.race([read(wallet), timedOut]);
-    return holding === null
-      ? { status: 'UNAVAILABLE' }
-      : { status: 'READ', balance: holding.balance.toString(), decimals: holding.decimals };
+    return await Promise.race([read, timedOut]);
   } catch {
-    return { status: 'UNAVAILABLE' };
+    return null;
   } finally {
     clearTimeout(timer);
   }
@@ -887,6 +914,45 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     ]);
     void reply.header('cache-control', 'private, no-store');
     return reply.send(profileSchema.parse({ ...record, holdings: { war, genesis } }));
+  });
+
+  /**
+   * `GET /v1/rewards/claims` (§16.8, §17, §35.6).
+   *
+   * The signed-in wallet's published allocations, each with the proof the
+   * contract takes, and whether it has been claimed as the contract says. A
+   * claim is never sent from here: the player's own wallet sends it, to
+   * themselves.
+   */
+  app.get('/v1/rewards/claims', async (request, reply) => {
+    const wallet = await deps.walletOf(request.headers.authorization);
+    if (wallet === null) {
+      return send(reply, unauthenticated(correlationId()));
+    }
+    void reply.header('cache-control', 'private, no-store');
+    const rewards = deps.rewardClaims;
+    if (rewards === undefined) {
+      return reply.send(rewardClaimsSchema.parse({ status: 'UNPUBLISHED' }));
+    }
+
+    const claims = await rewards.claimsOf(wallet);
+    const claimed = await Promise.all(
+      claims.map((claim) => withinChainTimeout(rewards.hasClaimed(claim.distributionId, wallet))),
+    );
+    return reply.send(
+      rewardClaimsSchema.parse({
+        status: 'READ',
+        chainId: rewards.chainId,
+        distributor: rewards.distributor,
+        decimals: rewards.decimals,
+        claims: claims.map((claim, index) => ({
+          distributionId: claim.distributionId.toString(),
+          amount: claim.amount.toString(),
+          proof: claim.proof,
+          claimed: claimed[index] ?? null,
+        })),
+      }),
+    );
   });
 
   /**
