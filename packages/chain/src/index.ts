@@ -6,3 +6,5 @@ export * from './rpc-vault.js';
 export * from './secret-vault.js';
 export * from './token.js';
 export * from './log-scan.js';
+export * from './market-events.js';
+export * from './robinhood-market.js';
