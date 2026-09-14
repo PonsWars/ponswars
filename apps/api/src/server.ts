@@ -43,6 +43,7 @@ import {
   genesisRequestNotFound,
   genesisUnavailable,
   invalidRequest,
+  marketClosed,
   noCardToUse,
   noPickToDecide,
   resultNotFound,
@@ -84,6 +85,14 @@ import {
 export interface ServerDeps {
   /** The round in play, or `null` before one is loaded. */
   readonly currentRound: () => RoundEngineState | null;
+  /**
+   * The first instant at or after `at` a whole round can run in (ADR 0007).
+   *
+   * Absent for a market that never shuts, where every instant is one. The same
+   * rule the round driver opens rounds by, so what a client is told about the
+   * next round is when the driver will open it.
+   */
+  readonly roundsOpenAt?: (at: UtcTimestamp) => UtcTimestamp;
   readonly picks: PickRepository;
   readonly config: EngineConfig;
   /**
@@ -398,6 +407,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   });
 
   const allowed = new Set(deps.allowedOrigins);
+  const roundsOpenAt = deps.roundsOpenAt ?? ((at: UtcTimestamp): UtcTimestamp => at);
 
   /**
    * Methods this server actually serves, collected as routes register.
@@ -511,6 +521,14 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   app.get('/v1/ready', (_request, reply) => {
     const round = deps.currentRound();
     if (round === null) {
+      // A service waiting out a closed market is working as intended, and one
+      // held out of rotation for a weekend would turn a deploy on a Saturday
+      // into an outage until Sunday night.
+      const now = deps.now();
+      const reopensAt = roundsOpenAt(now);
+      if (reopensAt > now) {
+        return reply.send({ status: 'ready', round: null, marketClosedUntil: reopensAt });
+      }
       return reply.code(503).send({ status: 'starting', reason: 'no round loaded yet' });
     }
     return reply.send({
@@ -660,7 +678,14 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   app.get('/v1/rounds/current', (_request, reply) => {
     const round = deps.currentRound();
     if (round === null) {
-      return send(reply, roundNotFound('current', correlationId()));
+      const now = deps.now();
+      const reopensAt = roundsOpenAt(now);
+      return send(
+        reply,
+        reopensAt > now
+          ? marketClosed(reopensAt, correlationId())
+          : roundNotFound('current', correlationId()),
+      );
     }
 
     const body = currentRoundSchema.parse({
@@ -673,6 +698,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       // would project every countdown ten minutes wrong, which is the one thing
       // §23.5 exists to prevent.
       clock: { ...round.clock, serverTime: deps.now() },
+      nextRoundOpensAt: roundsOpenAt(round.clock.battleEndAt),
       // The sector a battle occupies is its slot in the round (§38.4): five
       // fixed, neutral sectors, reused every round. It is positional rather
       // than stored, so it is derived here rather than duplicated onto setup.

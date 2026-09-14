@@ -213,10 +213,12 @@ const PLACEHOLDER_WALLET = {
  */
 function placeholderRound(): ClientRound {
   const now = utcTimestamp(Date.now());
+  const clock = buildCanonicalClock(now, now);
   return {
     roundId: 'preview-round',
     state: 'PICK_OPEN',
-    clock: buildCanonicalClock(now, now),
+    clock,
+    nextRoundOpensAt: clock.battleEndAt,
     feedHealth: 'HEALTHY',
   };
 }

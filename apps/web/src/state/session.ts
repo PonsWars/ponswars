@@ -161,6 +161,11 @@ export interface ClientRound {
   readonly state: RoundState;
   readonly clock: CanonicalClock;
   /**
+   * When the next round opens, as the server says: the battle end, or later
+   * when the market shuts first (ADR 0007). Never derived from the clock here.
+   */
+  readonly nextRoundOpensAt: UtcTimestamp;
+  /**
    * Public feed health (§23.6).
    *
    * `HEALTHY` or `DEGRADED` only — the client is told when data is late, but

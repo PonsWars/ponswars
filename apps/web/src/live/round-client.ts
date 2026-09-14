@@ -125,6 +125,7 @@ export function toSnapshot(body: ReturnType<typeof currentRoundSchema.parse>): R
         battleStartAt: utcTimestamp(body.clock.battleStartAt),
         battleEndAt: utcTimestamp(body.clock.battleEndAt),
       },
+      nextRoundOpensAt: utcTimestamp(body.nextRoundOpensAt),
       // §23.6 gives the client two words. The API does not publish it yet, and
       // a client that assumed `DEGRADED` would put a warning on a healthy feed
       // while one that assumed `HEALTHY` would hide a real one — so this states

@@ -523,9 +523,20 @@ export const currentRoundSchema = z
     roundId: roundIdSchema,
     state: roundStateSchema,
     clock: canonicalClockSchema,
+    /**
+     * When the next round opens. The battle end, since rounds are contiguous
+     * (§3.1) — unless the market shuts first, and then the first moment a whole
+     * round fits inside it again (ADR 0007). A client showing the battle end
+     * instead would count down to a round that is not coming.
+     */
+    nextRoundOpensAt: utcTimestampSchema,
     battles: z.array(liveBattleSchema).length(5),
   })
-  .strict();
+  .strict()
+  .refine((round) => round.nextRoundOpensAt >= round.clock.battleEndAt, {
+    message: 'nextRoundOpensAt cannot be before this round ends (§3.1)',
+    path: ['nextRoundOpensAt'],
+  });
 
 export type CurrentRound = z.infer<typeof currentRoundSchema>;
 

@@ -61,6 +61,24 @@ export function roundNotFound(roundId: string, correlationId: string): ErrorResp
 }
 
 /**
+ * No round is loaded because the market is shut (ADR 0007).
+ *
+ * Its own error rather than {@link roundNotFound}: a service that has not
+ * started and a market that closed for the weekend need different advice, and
+ * only one of them has an answer to "when".
+ */
+export function marketClosed(reopensAt: number, correlationId: string): ErrorResponse {
+  return error(
+    404,
+    'MARKET_CLOSED',
+    `No round is in play while the stock market is closed. The next round opens at ${new Date(reopensAt).toISOString()}.`,
+    true,
+    'Come back when the market reopens. Nothing is waiting on you.',
+    correlationId,
+  );
+}
+
+/**
  * The pick arrived after the lock (§3.2, §72.4).
  *
  * The server decides this, never the client's countdown — a device whose clock

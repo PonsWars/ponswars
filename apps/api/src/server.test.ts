@@ -235,6 +235,43 @@ describe('GET /v1/rounds/current', () => {
     expect(body.battles).toHaveLength(5);
     expect(new Set(body.battles.map((battle) => battle.sectorId)).size).toBe(5);
   });
+
+  it('opens the next round where this one ends, in a market that never shuts', async () => {
+    const body = currentRoundSchema.parse(
+      (await app.inject({ method: 'GET', url: '/v1/rounds/current' })).json(),
+    );
+    expect(body.nextRoundOpensAt).toBe(body.clock.battleEndAt);
+  });
+
+  it('names when the market reopens when it shuts before the next round', async () => {
+    const reopensAt = utcTimestamp(round.clock.battleEndAt + 48 * 3_600_000);
+    const closing = buildServer({ ...serverDeps, roundsOpenAt: () => reopensAt });
+
+    const body = currentRoundSchema.parse(
+      (await closing.inject({ method: 'GET', url: '/v1/rounds/current' })).json(),
+    );
+    expect(body.nextRoundOpensAt).toBe(reopensAt);
+
+    await closing.close();
+  });
+
+  it('says the market is closed, and until when, rather than that no round exists', async () => {
+    const reopensAt = utcTimestamp(now + 3_600_000);
+    const closed = buildServer({
+      ...serverDeps,
+      currentRound: () => null,
+      roundsOpenAt: (at) => (at < reopensAt ? reopensAt : at),
+    });
+
+    const response = await closed.inject({ method: 'GET', url: '/v1/rounds/current' });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'MARKET_CLOSED', stateIsSafe: true });
+    expect(response.json<{ message: string }>().message).toContain(
+      new Date(reopensAt).toISOString(),
+    );
+
+    await closed.close();
+  });
 });
 
 describe('PUT /v1/rounds/:roundId/pick', () => {
@@ -495,6 +532,21 @@ describe('GET /v1/ready', () => {
     expect(response.json()).toMatchObject({ status: 'starting' });
 
     await starting.close();
+  });
+
+  it('is ready while it waits out a closed market, since that is the service working', async () => {
+    const reopensAt = utcTimestamp(now + 3_600_000);
+    const closed = buildServer({
+      ...serverDeps,
+      currentRound: () => null,
+      roundsOpenAt: () => reopensAt,
+    });
+
+    const response = await closed.inject({ method: 'GET', url: '/v1/ready' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: 'ready', round: null, marketClosedUntil: reopensAt });
+
+    await closed.close();
   });
 
   it('stays alive while it is not ready', async () => {

@@ -73,6 +73,7 @@ const RESPONSE = {
     battleStartAt: 1_788_897_887_306,
     battleEndAt: 1_788_898_427_306,
   },
+  nextRoundOpensAt: 1_788_898_427_306,
   battles: BATTLES.map(([left, right, leftIntel, rightIntel], slot) => ({
     battleId: `round-0000000000-b${String(slot)}`,
     roundId: 'round-0000000000',
