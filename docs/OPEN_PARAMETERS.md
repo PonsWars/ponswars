@@ -61,21 +61,46 @@ Only the constants inside them are open.
 | Battle engine tick cadence                         | `BASELINE`  | Masterplan says _approximately_ one authoritative tick per second (§12.5, §23.1).                                            |
 | Frontend visual interpolation window               | `BASELINE`  | 3–5 seconds (§13.2). Presentation only — never applied to winner math.                                                       |
 
+### The on-chain market's guards
+
+`MARKET_DATA_PROVIDER=onchain` reads Stock Token trading on Robinhood Chain and
+checks it against Chainlink
+([ADR 0007](adr/0007-robinhood-chain-market-with-session-pause.md)). Each bound
+below decides when a reading is trusted, degraded or voids a battle, so each is
+a required parameter with no default.
+
+| Parameter                          | Status      | Notes                                                                                                      |
+| ---------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------- |
+| `MARKET_PRICE_WINDOW_MS`           | `CALIBRATE` | Trades pooled into one price. Longer is steadier and slower to follow the market.                          |
+| `MARKET_MIN_TRADE_USD`             | `CALIBRATE` | Dust below it counts towards neither price nor volume.                                                     |
+| `MARKET_OUTLIER_BPS`               | `CALIBRATE` | A trade this far from the reference is dropped.                                                            |
+| `MARKET_DIVERGENCE_BPS`            | `OPEN`      | A window price this far from the reference is `STALE` (§23.7). Decides voids, so a product decision.       |
+| `MARKET_REFERENCE_MAX_AGE_MS`      | `OPEN`      | Past it a reference guards nothing. The feeds have a 24-hour heartbeat.                                    |
+| `MARKET_MIN_WINDOW_TRADES`         | `CALIBRATE` | Fewer trades in the window is `DEGRADED`.                                                                  |
+| `MARKET_VOLATILITY_LOOKBACK_MS`    | `CALIBRATE` | The volatility a battle's return is divided by (§12.1).                                                    |
+| `MARKET_VOLATILITY_FLOOR_BPS`      | `CALIBRATE` | Keeps a still hour from turning an ordinary move into many sigma.                                          |
+| `MARKET_COMPARABLE_SESSIONS`       | `CALIBRATE` | Earlier trading days relative volume compares against (§12.2). Held in memory, so it lengthens startup.    |
+| `MARKET_EXPECTED_VOLUME_FLOOR_USD` | `CALIBRATE` | Keeps one trade on a ticker that barely traded last week from reading as a surge.                          |
+| `MARKET_HOLIDAYS`                  | `OPEN`      | Exchange holidays, published a year at a time. No round opens while the market is shut.                    |
+| `PONS_MIN_ACTIVITY_USD`            | `CALIBRATE` | Smallest qualified Pons trade (§12.3, §75.3).                                                              |
+| `PONS_MAX_IDENTICAL_PER_WALLET`    | `CALIBRATE` | Same-sized Pons trades from one wallet that count before the rest are a loop (§75.3).                      |
+| `RPC_MIN_INTERVAL_MS`              | `OPEN`      | Least time between indexer calls. Depends on the RPC vendor's rate; the public endpoint needs it generous. |
+
 ## 3. Infrastructure (§59.3)
 
-| Parameter                                          | Status |
-| -------------------------------------------------- | ------ |
-| Cloud / runtime provider                           | `OPEN` |
-| Robinhood Chain RPC vendor                         | `OPEN` |
-| Market-data provider configuration and credentials | `OPEN` |
-| Managed PostgreSQL provider                        | `OPEN` |
-| Managed Redis provider                             | `OPEN` |
-| CDN / object storage                               | `OPEN` |
-| Observability platform                             | `OPEN` |
-| Alert thresholds                                   | `OPEN` |
-| Asset and log retention durations                  | `OPEN` |
-| Launch concurrency target                          | `OPEN` |
-| WebSocket connection and rate limits               | `OPEN` |
+| Parameter                                          | Status                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| Cloud / runtime provider                           | `OPEN`                                                             |
+| Robinhood Chain RPC vendor                         | `OPEN`                                                             |
+| Market-data provider configuration and credentials | `OPEN` — `onchain` needs no vendor credentials, only an RPC vendor |
+| Managed PostgreSQL provider                        | `OPEN`                                                             |
+| Managed Redis provider                             | `OPEN`                                                             |
+| CDN / object storage                               | `OPEN`                                                             |
+| Observability platform                             | `OPEN`                                                             |
+| Alert thresholds                                   | `OPEN`                                                             |
+| Asset and log retention durations                  | `OPEN`                                                             |
+| Launch concurrency target                          | `OPEN`                                                             |
+| WebSocket connection and rate limits               | `OPEN`                                                             |
 
 ## 4. Wallet authentication (§45.2, §102)
 
