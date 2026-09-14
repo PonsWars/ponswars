@@ -2,8 +2,8 @@ import { ACTIVE_TICKERS, BATTLES_PER_ROUND, ROUND_DURATION } from '@ponswars/sha
 import { LAYER } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
 import { FactionEmblem } from '../art/FactionEmblem.js';
-import { FactionStandard } from '../art/FactionStandard.js';
 import { GenesisCardFace } from '../art/GenesisCardFace.js';
+import { FACTION_ART } from '../art/manifest.js';
 import { WorldRing } from '../art/WorldRing.js';
 import { NavBar } from '../hud/NavBar.js';
 import { formatCountdown, roundView } from '../hud/round-phase.js';
@@ -384,111 +384,191 @@ function Pillars({ onNavigate }: { readonly onNavigate: (next: Route) => void })
         gap: 'var(--pw-space-4)',
       }}
     >
-      <article
-        style={{
-          ...panelStyle,
-          display: 'grid',
-          gap: 'var(--pw-space-2)',
-          // Otherwise the shortest card spreads its two lines over the height
-          // of the tallest one, and the row reads as three broken cards.
-          alignContent: 'start',
+      <PillarCard
+        media={
+          <>
+            <PlateImage src={FACTION_ART.GME} position="center 55%" />
+            {/* The ten, as their emblems along the foot of the picture. The
+                panel claims ten factions; a picture of one army is the claim
+                without the evidence. */}
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 'var(--pw-space-3)',
+                display: 'flex',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              {ACTIVE_TICKERS.map((ticker) => (
+                <FactionEmblem key={ticker} ticker={ticker} size={20} />
+              ))}
+            </div>
+          </>
+        }
+        heading="TEN FACTIONS. INFINITE STORIES."
+        body="From AI to retail. From legacy to disruption. Every faction has a vision — which one are you with?"
+        action="EXPLORE FACTIONS →"
+        onAction={() => {
+          onNavigate({ kind: 'FACTIONS', ticker: null });
         }}
-      >
-        {/* The ten, as their standards. The panel claims ten factions; showing
-            four of them and a paragraph is the claim without the evidence. */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 'var(--pw-space-2)',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-          }}
-        >
-          {ACTIVE_TICKERS.map((ticker) => (
-            <FactionStandard key={ticker} ticker={ticker} height={86} />
-          ))}
-        </div>
-        <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>
-          TEN FACTIONS. INFINITE STORIES.
-        </h2>
-        <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.5 }}>
-          From AI to retail. From legacy to disruption. Every faction has a vision — which one are
-          you with?
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            onNavigate({ kind: 'FACTIONS', ticker: null });
-          }}
-          style={{ ...controlStyle, fontSize: 11, justifySelf: 'start' }}
-        >
-          EXPLORE FACTIONS →
-        </button>
-      </article>
+      />
 
-      <article
-        style={{
-          ...panelStyle,
-          display: 'grid',
-          gap: 'var(--pw-space-2)',
-          // Otherwise the shortest card spreads its two lines over the height
-          // of the tallest one, and the row reads as three broken cards.
-          alignContent: 'start',
+      <PillarCard
+        media={
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              // The card lit from behind in its own rarity's gold, so the object
+              // you are given is the brightest thing on the page's lower half.
+              background:
+                'radial-gradient(ellipse 55% 60% at 50% 55%, rgba(255, 196, 92, 0.22), rgba(255, 196, 92, 0) 70%)',
+            }}
+          >
+            {/* An actual card, drawn by the component the reveal uses. */}
+            <div
+              style={{
+                transform: 'rotate(-6deg)',
+                filter: 'drop-shadow(0 16px 28px rgba(0,0,0,0.6))',
+              }}
+            >
+              <GenesisCardFace cardType="GOLDEN_ARMY" rarity="LEGENDARY" width={112} />
+            </div>
+          </div>
+        }
+        heading="MORE THAN JUST A CARD."
+        body="Genesis Cards give you real impact on the battlefield. Rare. Powerful. Yours to command."
+        action="VIEW CARD SYSTEM →"
+        onAction={() => {
+          onNavigate({ kind: 'GENESIS' });
         }}
-      >
-        {/* An actual card, drawn by the component the reveal uses. It used to
-            be the raw art file, which is the illustration cut out of the master
-            — a picture of a battle, where the point of the panel is the object
-            you are given. */}
-        <div style={{ justifySelf: 'center' }}>
-          <GenesisCardFace cardType="GOLDEN_ARMY" rarity="LEGENDARY" width={132} />
-        </div>
-        <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>MORE THAN JUST A CARD.</h2>
-        <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.5 }}>
-          Genesis Cards give you real impact on the battlefield. Rare. Powerful. Yours to command.
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            onNavigate({ kind: 'GENESIS' });
-          }}
-          style={{ ...controlStyle, fontSize: 11, justifySelf: 'start' }}
-        >
-          VIEW CARD SYSTEM →
-        </button>
-      </article>
+      />
 
-      <article
-        style={{
-          ...panelStyle,
-          display: 'grid',
-          gap: 'var(--pw-space-2)',
-          // Otherwise the shortest card spreads its two lines over the height
-          // of the tallest one, and the row reads as three broken cards.
-          alignContent: 'start',
+      <PillarCard
+        media={
+          <>
+            <PlateImage src={FACTION_ART.TSLA} position="right 30%" />
+            {/* The shape of the place, over it: drawn from the same constants
+                the world is built from (§38.2, §38.3). */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <WorldRing size={120} />
+            </div>
+          </>
+        }
+        heading="REAL MARKETS. REAL IMPACT."
+        body="Powered by live market data, onchain activity, and a global community. This is more than a game — it is a new frontier for market play."
+        action="LEARN MORE →"
+        onAction={() => {
+          onNavigate({ kind: 'ABOUT' });
         }}
-      >
-        {/* The shape of the place, drawn from the same constants the world is
-            built from (§38.2, §38.3). */}
-        <div style={{ justifySelf: 'center' }}>
-          <WorldRing size={150} />
-        </div>
-        <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>REAL MARKETS. REAL IMPACT.</h2>
-        <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.5 }}>
-          Powered by live market data, onchain activity, and a global community. This is more than a
-          game — it is a new frontier for market play.
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            onNavigate({ kind: 'ABOUT' });
-          }}
-          style={{ ...controlStyle, fontSize: 11, justifySelf: 'start' }}
-        >
-          LEARN MORE →
-        </button>
-      </article>
+      />
     </section>
+  );
+}
+
+/**
+ * One of the three cards under the round strip: a picture, then the copy.
+ *
+ * Every delivered landing frame leads each of these with art. As three text
+ * panels with a small diagram in each they read as settings, and the lower half
+ * of the page is where a visitor decides whether the product is worth a click.
+ */
+function PillarCard({
+  media,
+  heading,
+  body,
+  action,
+  onAction,
+}: {
+  readonly media: JSX.Element;
+  readonly heading: string;
+  readonly body: string;
+  readonly action: string;
+  readonly onAction: () => void;
+}): JSX.Element {
+  return (
+    <article
+      style={{
+        ...panelStyle,
+        padding: 0,
+        overflow: 'hidden',
+        display: 'grid',
+        gridTemplateRows: 'auto 1fr',
+      }}
+    >
+      <div style={{ position: 'relative', height: 188 }}>
+        {media}
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 56,
+            background: 'linear-gradient(180deg, rgba(6,11,16,0), var(--pw-surface-2))',
+            pointerEvents: 'none',
+          }}
+        />
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gap: 'var(--pw-space-2)',
+          alignContent: 'start',
+          padding: 'var(--pw-space-3) var(--pw-space-4) var(--pw-space-4)',
+        }}
+      >
+        <h2 style={{ ...readoutStyle, margin: 0, fontSize: 18 }}>{heading}</h2>
+        <p style={{ margin: 0, color: 'var(--pw-text-2)', fontSize: 13, lineHeight: 1.5 }}>
+          {body}
+        </p>
+        <button
+          type="button"
+          onClick={onAction}
+          style={{ ...controlStyle, fontSize: 11, justifySelf: 'start' }}
+        >
+          {action}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function PlateImage({
+  src,
+  position,
+}: {
+  readonly src: string;
+  readonly position: string;
+}): JSX.Element {
+  return (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        objectPosition: position,
+      }}
+    />
   );
 }
 
