@@ -1,8 +1,18 @@
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, type JSX } from 'react';
-import { AdditiveBlending, BackSide, Color, ShaderMaterial, Vector3 } from 'three';
+import { useEffect, useMemo, useRef, type JSX } from 'react';
+import {
+  AdditiveBlending,
+  BackSide,
+  Color,
+  Matrix4,
+  Quaternion,
+  ShaderMaterial,
+  Vector3,
+  type Group,
+} from 'three';
 import { useSession } from '../state/session.js';
 import { NOISE_GLSL } from './Atmosphere.js';
+import { GLOBAL_ANCHOR } from './layout.js';
 
 /**
  * The world the market war hangs above (§38.10).
@@ -24,19 +34,49 @@ import { NOISE_GLSL } from './Atmosphere.js';
  * void a floor, never a disc competing with the islands for the middle.
  */
 const POSITION = new Vector3(3_770, -4_340, -4_090);
+/**
+ * The planet, framed as it is from the global anchor, carried with the camera.
+ *
+ * A backdrop, not a place: every pose frames the limb the way the art direction
+ * does, low in the right of the frame. Fixed in the world it did not — a
+ * sector camera looks down far more steeply than the global one, and from
+ * there the planet rose into the middle of the frame, behind the battle and the
+ * intel panel both.
+ *
+ * So the global anchor's view of it is recorded once, in the camera's own
+ * space, and replayed from wherever the camera is. The sun turns with it, so
+ * the lit side stays the lit side.
+ */
+const ANCHOR_EYE = new Vector3(
+  GLOBAL_ANCHOR.position.x,
+  GLOBAL_ANCHOR.position.y,
+  GLOBAL_ANCHOR.position.z,
+);
+const ANCHOR_TURN = new Quaternion().setFromRotationMatrix(
+  new Matrix4().lookAt(
+    ANCHOR_EYE,
+    new Vector3(GLOBAL_ANCHOR.target.x, GLOBAL_ANCHOR.target.y, GLOBAL_ANCHOR.target.z),
+    new Vector3(0, 1, 0),
+  ),
+);
+const ANCHOR_UNTURN = ANCHOR_TURN.clone().invert();
 const RADIUS = 1_700;
 /** Where the light comes from: high behind the camera's right shoulder. */
 const SUN = new Vector3(0.55, 0.45, 0.7).normalize();
 
 export function Planet(): JSX.Element {
   const reducedMotion = useSession((state) => state.reducedMotion);
+  const group = useRef<Group>(null);
+  const turn = useMemo(() => new Quaternion(), []);
+  const offset = useMemo(() => new Vector3(), []);
+  const sun = useMemo(() => SUN.clone(), []);
 
   const surface = useMemo(
     () =>
       new ShaderMaterial({
         fog: false,
         uniforms: {
-          uSun: { value: SUN },
+          uSun: { value: sun },
           uTime: { value: 0 },
           uOcean: { value: new Color('#06131f') },
           uLand: { value: new Color('#16242a') },
@@ -87,7 +127,7 @@ export function Planet(): JSX.Element {
           }
         `,
       }),
-    [],
+    [sun],
   );
 
   const halo = useMemo(
@@ -98,7 +138,7 @@ export function Planet(): JSX.Element {
         depthWrite: false,
         side: BackSide,
         blending: AdditiveBlending,
-        uniforms: { uRim: { value: new Color('#3d8fff') }, uSun: { value: SUN } },
+        uniforms: { uRim: { value: new Color('#3d8fff') }, uSun: { value: sun } },
         vertexShader: `
           varying vec3 vNormal;
           varying vec3 vView;
@@ -123,7 +163,7 @@ export function Planet(): JSX.Element {
           }
         `,
       }),
-    [],
+    [sun],
   );
 
   useEffect(
@@ -135,6 +175,14 @@ export function Planet(): JSX.Element {
   );
 
   useFrame((state) => {
+    // How far the camera has turned from the anchor, applied to all of it.
+    turn.copy(state.camera.quaternion).multiply(ANCHOR_UNTURN);
+    offset.copy(POSITION).sub(ANCHOR_EYE).applyQuaternion(turn);
+    if (group.current !== null) {
+      group.current.position.copy(state.camera.position).add(offset);
+      group.current.quaternion.copy(turn);
+    }
+    sun.copy(SUN).applyQuaternion(turn);
     if (reducedMotion) {
       return;
     }
@@ -145,12 +193,12 @@ export function Planet(): JSX.Element {
   });
 
   return (
-    <group position={POSITION} renderOrder={-1}>
+    <group ref={group} position={POSITION} renderOrder={-1}>
       <mesh material={surface} frustumCulled={false}>
         <sphereGeometry args={[RADIUS, 96, 64]} />
       </mesh>
       <mesh material={halo} frustumCulled={false}>
-        <sphereGeometry args={[RADIUS * 1.025, 96, 64]} />
+        <sphereGeometry args={[RADIUS * 1.012, 96, 64]} />
       </mesh>
     </group>
   );
