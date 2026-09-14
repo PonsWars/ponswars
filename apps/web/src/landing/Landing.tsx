@@ -66,7 +66,7 @@ export function Landing({
       <div
         style={{
           background:
-            'linear-gradient(100deg, rgba(5,8,11,0.97) 0%, rgba(5,8,11,0.94) 34%, rgba(5,8,11,0.62) 56%, rgba(5,8,11,0.12) 78%, rgba(5,8,11,0.04) 100%)',
+            'linear-gradient(100deg, rgba(5,8,11,0.96) 0%, rgba(5,8,11,0.9) 28%, rgba(5,8,11,0.45) 46%, rgba(5,8,11,0.06) 64%, rgba(5,8,11,0) 76%)',
         }}
       >
         <div
