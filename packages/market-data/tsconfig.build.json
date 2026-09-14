@@ -16,6 +16,9 @@
       "path": "../battle-math/tsconfig.build.json"
     },
     {
+      "path": "../pons-indexer/tsconfig.build.json"
+    },
+    {
       "path": "../round-service/tsconfig.build.json"
     }
   ]

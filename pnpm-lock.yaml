@@ -318,6 +318,9 @@ importers:
       '@ponswars/battle-math':
         specifier: workspace:*
         version: link:../battle-math
+      '@ponswars/pons-indexer':
+        specifier: workspace:*
+        version: link:../pons-indexer
       '@ponswars/round-service':
         specifier: workspace:*
         version: link:../round-service

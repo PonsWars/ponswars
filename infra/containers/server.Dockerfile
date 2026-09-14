@@ -33,6 +33,7 @@ COPY packages/config/package.json packages/config/
 COPY packages/genesis-service/package.json packages/genesis-service/
 COPY packages/market-data/package.json packages/market-data/
 COPY packages/player-service/package.json packages/player-service/
+COPY packages/pons-indexer/package.json packages/pons-indexer/
 COPY packages/realtime/package.json packages/realtime/
 COPY packages/rewards-math/package.json packages/rewards-math/
 COPY packages/round-service/package.json packages/round-service/
