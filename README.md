@@ -89,10 +89,11 @@ database are `OPEN` decisions (§102), and a stack that quietly picked one would
 be shipping that decision as policy. Replacing either is one constructor
 argument, which is the property the stack exists to demonstrate.
 
-The synthetic market is explicitly not a vendor adapter and must never become
-one. Choosing a provider is a commercial and licensing decision before it is an
-engineering one: showing real-time prices to visitors who have not logged in is
-redistribution under most market-data agreements, and priced accordingly.
+The synthetic market is explicitly not a real market and must never pass for
+one. The real one is the deployable server's `MARKET_DATA_PROVIDER=onchain`:
+Stock Token trading on Robinhood Chain mainnet, guarded by Chainlink, with no
+round opened while the US market is shut
+([ADR 0007](docs/adr/0007-robinhood-chain-market-with-session-pause.md)).
 
 ### Pointing the client at it
 
@@ -394,9 +395,8 @@ implementation. Listed so the blocking decision is visible rather than buried:
 
 | Step                                     | Blocked on                                                                                                                                            |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A market-data adapter                    | The vendor — a licensing and commercial decision before an engineering one (§102). The port and a synthetic stand-in behind it are built              |
 | A managed PostgreSQL provider            | Hosting (§102). The adapter, the schema and the migrations exist and are tested against real PostgreSQL; which service runs it is a deployment choice |
-| 17 · historical calibration              | The market-data vendor. The replay harness is built and takes recorded ticks from any source                                                          |
+| 17 · historical calibration              | Recorded sessions of the on-chain market (ADR 0007). The replay harness is built and takes recorded ticks from any source                             |
 | 18 · load testing                        | A hosting decision. There is now a running transport to put load on                                                                                   |
 | 19 · contract security review            | An independent auditor. Not something this repository can do to itself                                                                                |
 | 20 · infrastructure, backups, monitoring | Hosting. The runbooks that do not depend on it are written                                                                                            |

@@ -82,11 +82,44 @@ An endpoint that fails is retried every fifteen seconds and each failure is
 logged. A stop signal during the wait ends it without writing anything; the next
 start asks for the same block.
 
-| Decision                   | Effect until it is made                                         |
-| -------------------------- | --------------------------------------------------------------- |
-| Market data (§102)         | Prices are synthetic; the banner says so on every start         |
-| Robinhood Chain RPC vendor | The public endpoint works, with no uptime or rate-limit promise |
-| Redis (§21.3)              | `REDIS_URL` is required and validated but nothing reads it yet  |
+**Market data follows `MARKET_DATA_PROVIDER`.** `onchain` scores battles from
+Stock Token trading on Robinhood Chain mainnet, guarded by each token's
+Chainlink feed ([ADR 0007](../adr/0007-robinhood-chain-market-with-session-pause.md)).
+It refuses to start on testnet, where there are no Stock Tokens; run
+`synthetic` there, and the banner says the prices are generated.
+
+With `onchain`, startup backfills the market before the first round: pool
+discovery across all of history, then every trade in the last
+`MARKET_COMPARABLE_SESSIONS` trading days. The API and gateway bind first, so
+`/v1/health` answers throughout and `/v1/ready` stays `503` until a round
+loads — give the readiness probe minutes, not seconds. The log narrates it:
+
+```
+market: reading Robinhood Chain — no round opens until the backfill is done
+market: 959 USDG pools, 1460 Pons pools
+market: caught up
+```
+
+Once caught up it reads new blocks every second. A failed poll is logged once
+and retried; while the indexer is more than thirty seconds behind, its market
+is `STALE` and live battles void rather than score old data.
+
+**No round opens while the market is shut.** Stock Tokens trade 24/5, from
+Sunday 20:00 to Friday 20:00 New York time, except on `MARKET_HOLIDAYS`. A
+round only opens where all ten minutes fit inside that; otherwise the server
+waits and says when:
+
+```
+market closed — the next round opens 2026-09-20T20:00:00.000Z
+```
+
+Update `MARKET_HOLIDAYS` when the exchange publishes the next year's calendar.
+A holiday missing from it opens rounds that void.
+
+| Decision                   | Effect until it is made                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Robinhood Chain RPC vendor | Required for `onchain`: the public endpoint throttles the indexer with a challenge page, and backfills crawl behind the retries |
+| Redis (§21.3)              | `REDIS_URL` is required and validated but nothing reads it yet                                                                  |
 
 Authentication is no longer on that list. §45.2 is built: a wallet signs an
 EIP-4361 challenge, the signature is verified, and the session that comes back
