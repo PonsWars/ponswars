@@ -1,9 +1,10 @@
 import type { DetailLevel } from '@ponswars/world-runtime';
 import { useEffect, useMemo, type JSX } from 'react';
-import { BufferAttribute, BufferGeometry, MeshStandardMaterial } from 'three';
+import { MeshStandardMaterial } from 'three';
 import { withCityLights } from './city-lights.js';
 import { InstancedField, type Placement } from './InstancedField.js';
 import { capped, CLIFF_DEPTH, islandRock, rimCity } from './rock.js';
+import { rockGeometry } from './rock-geometry.js';
 
 /**
  * The body of a sector island: its rock and the city around its rim (§38.1, §38.9).
@@ -70,27 +71,22 @@ export function IslandMass({
 }): JSX.Element {
   const resolution = ROCK_RESOLUTION[detail];
 
-  const rock = useMemo(() => {
-    const data = capped(
-      islandRock(seed, {
-        radius: radius * 0.98,
-        depth,
-        around: resolution.around,
-        rings: resolution.rings,
-      }),
-      resolution.around,
-      ISLAND_CAP,
-    );
-    const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
-    geometry.setAttribute('color', new BufferAttribute(data.colors, 3));
-    geometry.setIndex(new BufferAttribute(data.indices, 1));
-    // Faceted: broken rock has edges, and smooth normals make it read as clay.
-    const faceted = geometry.toNonIndexed();
-    geometry.dispose();
-    faceted.computeVertexNormals();
-    return faceted;
-  }, [seed, radius, depth, resolution.around, resolution.rings]);
+  const rock = useMemo(
+    () =>
+      rockGeometry(
+        capped(
+          islandRock(seed, {
+            radius: radius * 0.98,
+            depth,
+            around: resolution.around,
+            rings: resolution.rings,
+          }),
+          resolution.around,
+          ISLAND_CAP,
+        ),
+      ),
+    [seed, radius, depth, resolution.around, resolution.rings],
+  );
 
   const rockMaterial = useMemo(
     () =>

@@ -17,15 +17,13 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX }
 import {
   AdditiveBlending,
   BackSide,
-  BufferAttribute,
-  BufferGeometry,
   Color,
   DataTexture,
   DoubleSide,
   MeshStandardMaterial,
   ShaderMaterial,
 } from 'three';
-import type { Mesh } from 'three';
+import type { BufferGeometry, Mesh } from 'three';
 import type { Group, PerspectiveCamera, PointLight } from 'three';
 import { currentZoom, nowUtc, useSession, type ClientBattle } from '../state/session.js';
 import {
@@ -50,6 +48,7 @@ import { IslandMass } from './IslandMass.js';
 import { LightPool } from './LightPool.js';
 import { Planet } from './Planet.js';
 import { islet } from './rock.js';
+import { rockGeometry } from './rock-geometry.js';
 import { withGround } from './ground.js';
 import { SectorLabel } from './SectorLabel.js';
 import { Traffic } from './Traffic.js';
@@ -1176,18 +1175,7 @@ function Debris(): JSX.Element {
 
   const shapes = useMemo(
     () =>
-      Array.from({ length: ISLET_SHAPES }, (_, shape) => {
-        const data = islet(8_111 + shape * 37);
-        const indexed = new BufferGeometry();
-        indexed.setAttribute('position', new BufferAttribute(data.positions, 3));
-        indexed.setAttribute('color', new BufferAttribute(data.colors, 3));
-        indexed.setIndex(new BufferAttribute(data.indices, 1));
-        // Faceted, like the islands they broke off.
-        const faceted = indexed.toNonIndexed();
-        indexed.dispose();
-        faceted.computeVertexNormals();
-        return faceted;
-      }),
+      Array.from({ length: ISLET_SHAPES }, (_, shape) => rockGeometry(islet(8_111 + shape * 37))),
     [],
   );
 
