@@ -70,6 +70,21 @@ Check before snapshotting:
   finalizing across the boundary is the one genuine ordering hazard here, and
   §45.8 names boundary-time races as a threat category.
 
+## Calculating the window
+
+```bash
+node apps/server/dist/distribution.js calculate --id 42 --minimum-claim <base units>
+```
+
+Use the same minimum claim the snapshot file carries. In one transaction it runs
+the allocation on the War Points the snapshot claimed, writes every qualified
+wallet's allocation — paid, with its Merkle leaf and proof, or carried forward —
+and records the root. It prints the root. A window is calculated once; a second
+run is refused, because what the first produced may already be on chain.
+
+If no wallet is above the minimum claim, there is no root: nothing is published
+and the whole pool carries forward (§16.7).
+
 ## Between calculation and publication
 
 This is the only window where an error is cheap. Use it.
@@ -106,6 +121,32 @@ it is asserting rather than trusting the exit code alone:
   ([ADR 0006](../adr/0006-cross-language-conformance-by-generated-fixture.md)),
   but that proves the encoding, not this tree.
 
+## Publishing
+
+```bash
+RPC_URL=… CHAIN_ID=46630 REWARDS_DISTRIBUTOR_ADDRESS=0x… DISTRIBUTION_PUBLISHER_KEY=0x… \
+  node apps/server/dist/distribution.js publish --id 42 --expect-root <root verify printed>
+```
+
+`--expect-root` is required: it is the root `verify-distribution` reproduced,
+and the job refuses if the calculated root is anything else. Before sending, it
+also refuses when:
+
+- the RPC endpoint is not the `CHAIN_ID` Robinhood Chain network;
+- the key does not hold `DISTRIBUTION_PUBLISHER_ROLE`;
+- the distributor's **uncommitted** SPY is less than the root's total — a root
+  the distributor cannot pay is one whose claims revert. Fund it first.
+
+It reads the root and total back from the contract and records those. If the id
+is already on chain with this root — a publication that landed before the
+database heard of it — it records that instead of publishing twice. If the id is
+on chain with a different root, the id is spent: stop, and treat it as an
+incident.
+
+Publishing from a multisig: leave `DISTRIBUTION_PUBLISHER_KEY` unset. The job
+prints the root and total to propose as `publishDistribution(id, root, total)`,
+and running it again after the transaction lands records it.
+
 ## After publication
 
 **The root is immutable.** §17: admin may not edit individual rewards after
@@ -118,6 +159,11 @@ and correct it in a later window. There is no mechanism to do otherwise and
 building one would break the promise the immutability is there to make.
 
 ## Claims
+
+A signed-in player sees each published allocation on the Rewards page with its
+claimed status read from the contract, and claims it from their own wallet: the
+page checks the wallet is the signed-in account and on Robinhood Chain, then
+sends `claim` with the stored proof. The server never sends a claim.
 
 The user-facing flow is `READY_TO_CLAIM → CONFIRM IN WALLET → SUBMITTING →
 CONFIRMED` (§35.6).

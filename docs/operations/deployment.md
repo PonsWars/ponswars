@@ -39,6 +39,12 @@ and exits if either differs from `WAR_TOKEN_DECIMALS` / `SPY_TOKEN_DECIMALS`, or
 if an address is not a token on that network. A decimals value that is off by
 one converts every amount by a power of ten, and nothing else would notice.
 
+The Rewards page reads each published allocation's claimed status from
+`RewardsDistributor` at `REWARDS_DISTRIBUTOR_ADDRESS`; players claim from their
+own wallets. Publishing a root is the distribution job's, with its own
+`DISTRIBUTION_PUBLISHER_KEY` — the server holds no publisher key
+([Rewards distribution](rewards-distribution.md)).
+
 A signed-in wallet's profile carries its `$WAR` balance, read at the latest
 block when the profile is asked for. A read that fails or takes longer than
 2.5 seconds answers `UNAVAILABLE`, and the rest of the profile arrives anyway.
