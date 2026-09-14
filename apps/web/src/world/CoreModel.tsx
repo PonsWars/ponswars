@@ -6,9 +6,11 @@ import {
   BufferGeometry,
   Color,
   Mesh,
+  MeshStandardMaterial,
   ShaderMaterial,
   type Object3D,
 } from 'three';
+import { withCityLights } from './city-lights.js';
 
 /**
  * The Market Core's structure and its beam (§38.2, §38.10).
@@ -52,20 +54,33 @@ export function CoreModel(): JSX.Element {
   // core by its light before they read its shape, and these rings are that
   // light — they have to clear the bloom threshold to throw it into the air.
   const bandColour = useMemo(() => new Color(CORE_ACCENT).multiplyScalar(1.15), []);
+  // The citadel lit from inside, gold over the Market's own teal: every
+  // delivered world frame makes the core the brightest city in the world.
+  const bodyMaterial = useMemo(
+    () =>
+      withCityLights(
+        new MeshStandardMaterial({
+          color: '#18222b',
+          metalness: 0.35,
+          roughness: 0.55,
+          envMapIntensity: 0.4,
+          emissive: '#0b2430',
+          emissiveIntensity: 0.5,
+        }),
+        { accent: '#ffd27a', density: 0.5, intensity: 3.2, floor: 3.4, bay: 2.4 },
+      ),
+    [],
+  );
+  useEffect(
+    () => () => {
+      bodyMaterial.dispose();
+    },
+    [bodyMaterial],
+  );
 
   return (
     <group>
-      {body === null ? null : (
-        <mesh geometry={body}>
-          <meshStandardMaterial
-            color="#1e3140"
-            metalness={0.22}
-            roughness={0.48}
-            emissive="#0e3040"
-            emissiveIntensity={0.42}
-          />
-        </mesh>
-      )}
+      {body === null ? null : <mesh geometry={body} material={bodyMaterial} />}
       {bands === null ? null : (
         <mesh geometry={bands}>
           <meshBasicMaterial color={bandColour} toneMapped={false} />
