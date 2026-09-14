@@ -67,8 +67,8 @@ export const NOISE_GLSL = `
  * put it *in* the weather rather than above it.
  */
 const LAYERS = [
-  { y: -170, scale: 0.0021, drift: 1, opacity: 0.88, lit: '#244a5f', shadow: '#08151e' },
-  { y: -260, scale: 0.0012, drift: 0.55, opacity: 0.72, lit: '#17344a', shadow: '#050d14' },
+  { y: -170, scale: 0.0021, drift: 1, opacity: 0.9, lit: '#2e5a72', shadow: '#0a1822' },
+  { y: -260, scale: 0.0012, drift: 0.55, opacity: 0.76, lit: '#1c3e56', shadow: '#060f17' },
 ] as const;
 
 /**
