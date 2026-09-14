@@ -9,3 +9,5 @@ export * from './log-scan.js';
 export * from './market-events.js';
 export * from './robinhood-market.js';
 export * from './market-indexer.js';
+export * from './rpc-market.js';
+export * from './paced.js';
