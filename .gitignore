@@ -17,6 +17,8 @@ coverage/
 .env
 .env.*
 !.env.example
+# Holds no values: it empties the endpoints for the showcase build mode.
+!apps/web/.env.showcase
 
 # Contracts (Foundry)
 # lib/ is deliberately NOT ignored: forge-std is a git submodule, and the
