@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isThrottled, pacer } from './paced.js';
+import { isThrottled, pacer, PacingStopped } from './paced.js';
 
 /** A fake clock whose sleeps advance it, so pacing is observable without waiting. */
 function clock(): { now: () => number; sleep: (ms: number) => Promise<void>; slept: number[] } {
@@ -64,6 +64,46 @@ describe('pacer', () => {
     const paced = pacer({ minIntervalMs: 0, retries: 0, backoffMs: 1, maxBackoffMs: 1, ...fake });
     await expect(paced(() => Promise.reject(new Error('boom')))).rejects.toThrow('boom');
     expect(await paced(() => Promise.resolve(7))).toBe(7);
+  });
+});
+
+describe('a stopped pacer', () => {
+  it('refuses queued calls and gives up a throttled retry', async () => {
+    const controller = new AbortController();
+    const fake = clock();
+    const paced = pacer({
+      minIntervalMs: 0,
+      retries: 5,
+      backoffMs: 100,
+      maxBackoffMs: 100,
+      signal: controller.signal,
+      ...fake,
+    });
+    let calls = 0;
+    const throttled = paced(() => {
+      calls += 1;
+      controller.abort();
+      return Promise.reject(new Error('HTTP request failed. Status: 429'));
+    });
+    const queued = paced(() => Promise.resolve('never'));
+    await expect(throttled).rejects.toBeInstanceOf(PacingStopped);
+    await expect(queued).rejects.toBeInstanceOf(PacingStopped);
+    expect(calls).toBe(1);
+  });
+
+  it('ends a real pause as soon as it is stopped', async () => {
+    const controller = new AbortController();
+    const paced = pacer({
+      minIntervalMs: 60_000,
+      retries: 0,
+      backoffMs: 1,
+      maxBackoffMs: 1,
+      signal: controller.signal,
+    });
+    await paced(() => Promise.resolve(1));
+    const second = paced(() => Promise.resolve(2));
+    controller.abort();
+    await expect(second).rejects.toBeInstanceOf(PacingStopped);
   });
 });
 

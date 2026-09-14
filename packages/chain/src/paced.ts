@@ -22,8 +22,22 @@ export interface PacingOptions {
   readonly backoffMs: number;
   /** The longest single pause. */
   readonly maxBackoffMs: number;
+  /**
+   * Stops the queue: a call not yet started, or waiting out a pause, fails
+   * with {@link PacingStopped} instead of running. A call already in flight
+   * is not interrupted.
+   */
+  readonly signal?: AbortSignal;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly now?: () => number;
+}
+
+/** A paced call refused because the queue was stopped. */
+export class PacingStopped extends Error {
+  constructor() {
+    super('paced calls stopped');
+    this.name = 'PacingStopped';
+  }
 }
 
 /** Whether an error is the endpoint throttling rather than refusing. */
@@ -59,16 +73,23 @@ function describe(error: unknown): string {
 
 /** A wrapper that paces and retries every function passed through it. */
 export function pacer(options: PacingOptions): <T>(call: () => Promise<T>) => Promise<T> {
-  const sleep =
-    options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const { signal } = options;
+  const sleep = options.sleep ?? ((ms: number) => abortableSleep(ms, signal));
   const now = options.now ?? Date.now;
+  const assertRunning = (): void => {
+    if (signal?.aborted === true) {
+      throw new PacingStopped();
+    }
+  };
   let tail: Promise<unknown> = Promise.resolve();
   let lastStart = -Infinity;
 
   const slot = async (): Promise<void> => {
+    assertRunning();
     const wait = lastStart + options.minIntervalMs - now();
     if (wait > 0) {
       await sleep(wait);
+      assertRunning();
     }
     lastStart = now();
   };
@@ -92,4 +113,21 @@ export function pacer(options: PacingOptions): <T>(call: () => Promise<T>) => Pr
     tail = result.catch(() => undefined);
     return result;
   };
+}
+
+/** A pause that ends early when the signal fires, leaving no listener behind. */
+function abortableSleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted === true) {
+      resolve();
+      return;
+    }
+    const done = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+  });
 }
