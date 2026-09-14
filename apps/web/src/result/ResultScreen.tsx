@@ -1,5 +1,6 @@
 import type { FinalizedBattleResult } from '@ponswars/shared-types';
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
+import { FactionEmblem } from '../art/FactionEmblem.js';
 import { FactionStandard } from '../art/FactionStandard.js';
 import { FACTION_ART } from '../art/manifest.js';
 import type { JSX } from 'react';
@@ -34,57 +35,60 @@ export function ResultScreen({
   const view = resultView(result);
 
   return (
-    <>
-      <div
+    <div style={{ display: 'grid', gap: 'var(--pw-space-4)' }}>
+      <section
         style={{
-          ...panelStyle,
           position: 'relative',
           overflow: 'hidden',
-          padding: 0,
-          minHeight: 200,
-          display: 'flex',
-          alignItems: 'flex-end',
-          borderLeft: `2px solid ${FACTION_ACCENT[view.winner]}`,
+          display: 'grid',
+          gap: 'var(--pw-space-5)',
+          padding: 'var(--pw-space-6) var(--pw-space-5)',
+          borderRadius: 'var(--pw-radius-panel)',
+          border: 'var(--pw-line-hair) solid var(--pw-border-1)',
+          background: 'var(--pw-surface-2)',
         }}
       >
-        {/* The army that won, in its own territory. The delivered result screen
-            fills the frame with them, and it is the one moment in a round where
-            a faction has earned the whole picture. */}
-        <img
-          src={FACTION_ART[view.winner]}
-          alt=""
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            opacity: 0.6,
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'linear-gradient(180deg, rgba(6,11,16,0.2) 0%, rgba(6,11,16,0.78) 55%, rgba(6,11,16,0.95) 100%)',
-          }}
-        />
+        {/* Both armies, each from its own side, meeting in the dark middle where
+            the verdict is. The delivered result screen fills the frame with the
+            two of them; the winner's side at full strength, the loser's dimmed —
+            §26 makes this a record, so the loser is shown, but it is the one
+            moment in a round where a faction has earned the picture. */}
+        <ArmyBackdrop side={view.left} edge="left" />
+        <ArmyBackdrop side={view.right} edge="right" />
 
         <div
           style={{
             position: 'relative',
             display: 'grid',
+            justifyItems: 'center',
             gap: 'var(--pw-space-2)',
-            padding: 'var(--pw-space-4)',
-            width: '100%',
+            textAlign: 'center',
           }}
         >
-          <div style={captionStyle}>RESULT</div>
-          <div style={{ ...readoutStyle, fontSize: 32, color: FACTION_ACCENT[view.winner] }}>
-            {view.winner} WINS
+          <div style={{ ...captionStyle, color: 'var(--pw-text-2)', letterSpacing: '0.3em' }}>
+            BATTLE COMPLETE
           </div>
-          <div style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>
+          <h2
+            style={{
+              ...readoutStyle,
+              margin: 0,
+              fontSize: 'clamp(40px, 7vw, 76px)',
+              fontWeight: 700,
+              lineHeight: 1,
+              color: FACTION_ACCENT[view.winner],
+              textShadow: `0 0 40px ${FACTION_ACCENT[view.winner]}55`,
+            }}
+          >
+            {view.winner} WINS
+          </h2>
+          <div
+            style={{
+              ...readoutStyle,
+              fontSize: 18,
+              letterSpacing: '0.42em',
+              color: 'var(--pw-text-1)',
+            }}
+          >
             {humanize(view.victoryLabel)}
           </div>
           {view.tiebreakStep === null ? null : (
@@ -95,12 +99,21 @@ export function ResultScreen({
             </div>
           )}
         </div>
+
+        <HeadToHead view={view} />
+      </section>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: 'var(--pw-space-4)',
+          alignItems: 'start',
+        }}
+      >
+        <Breakdown view={view} />
+        {player === null ? null : <PlayerPanel player={player} />}
       </div>
-
-      <HeadToHead view={view} />
-      <Breakdown view={view} />
-
-      {player === null ? null : <PlayerPanel player={player} />}
 
       <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
         <div style={captionStyle}>PROVENANCE</div>
@@ -129,7 +142,39 @@ export function ResultScreen({
           </div>
         )}
       </div>
-    </>
+    </div>
+  );
+}
+
+/** One army's plate, fading in from its own edge of the result. */
+function ArmyBackdrop({
+  side,
+  edge,
+}: {
+  readonly side: SideResultView;
+  readonly edge: 'left' | 'right';
+}): JSX.Element {
+  const fade = `linear-gradient(${edge === 'left' ? '90deg' : '270deg'}, #000 0%, rgba(0,0,0,0.6) 38%, transparent 62%)`;
+  return (
+    <img
+      src={FACTION_ART[side.ticker]}
+      alt=""
+      decoding="async"
+      style={{
+        position: 'absolute',
+        top: 0,
+        [edge]: 0,
+        width: '62%',
+        height: '100%',
+        objectFit: 'cover',
+        objectPosition: edge === 'left' ? 'left center' : 'right center',
+        opacity: side.won ? 0.75 : 0.32,
+        filter: side.won ? 'none' : 'grayscale(0.6)',
+        maskImage: fade,
+        WebkitMaskImage: fade,
+        pointerEvents: 'none',
+      }}
+    />
   );
 }
 
@@ -146,14 +191,30 @@ function HeadToHead({ view }: { readonly view: ResultView }): JSX.Element {
     <div
       style={{
         ...panelStyle,
+        position: 'relative',
+        justifySelf: 'center',
+        width: 'min(100%, 640px)',
         display: 'grid',
         gridTemplateColumns: '1fr auto 1fr',
         alignItems: 'center',
         gap: 'var(--pw-space-4)',
+        padding: 'var(--pw-space-4) var(--pw-space-5)',
       }}
     >
       <Total side={view.left} align="start" />
-      <div style={{ ...captionStyle, color: 'var(--pw-text-3)' }}>VS</div>
+      <div style={{ display: 'grid', justifyItems: 'center', gap: 4 }}>
+        <div
+          style={{
+            ...readoutStyle,
+            fontSize: 22,
+            letterSpacing: '0.1em',
+            color: 'var(--pw-text-3)',
+          }}
+        >
+          VS
+        </div>
+        <div style={{ ...captionStyle, fontSize: 9 }}>FINAL SCORE</div>
+      </div>
       <Total side={view.right} align="end" />
     </div>
   );
@@ -178,7 +239,7 @@ function Total({
       {/* The standard the army fought under, the same one hanging in the sector
           the battle was fought in. A result screen is the record of a war, and
           the delivered one flies both flags over it. */}
-      <FactionStandard ticker={side.ticker} height={104} />
+      <FactionStandard ticker={side.ticker} height={96} />
 
       <div style={{ display: 'grid', gap: 2, justifyItems: align, textAlign: align }}>
         <div style={{ ...captionStyle, color: FACTION_ACCENT[side.ticker] }}>{side.ticker}</div>
@@ -325,30 +386,56 @@ function Bar({
 
 /** What this result meant for the player (§27.8, §11). */
 function PlayerPanel({ player }: { readonly player: PlayerResultView }): JSX.Element {
+  const accent = FACTION_ACCENT[player.backed];
   return (
-    <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}>
-      <div style={captionStyle}>YOUR WAR</div>
-      <div style={{ ...readoutStyle, fontSize: 18 }}>
-        YOU BACKED <span style={{ color: FACTION_ACCENT[player.backed] }}>{player.backed}</span>
-      </div>
-      <div
-        style={{
-          ...captionStyle,
-          color: player.won ? 'var(--pw-accent)' : 'var(--pw-text-3)',
-        }}
-      >
-        {player.won ? 'WON' : 'LOST'}
-      </div>
-      <div className="pw-tabular" style={{ ...readoutStyle, fontSize: 22 }}>
-        +{player.warPoints} WP
-      </div>
-      <div style={{ display: 'flex', gap: 'var(--pw-space-3)' }}>
-        {player.upset ? (
-          <span style={{ ...captionStyle, color: 'var(--pw-accent)' }}>UPSET</span>
-        ) : null}
-        {player.cardAssist ? (
-          <span style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>CARD ASSIST</span>
-        ) : null}
+    <div
+      style={{
+        ...panelStyle,
+        display: 'grid',
+        gridTemplateColumns: 'auto 1fr',
+        alignItems: 'center',
+        gap: 'var(--pw-space-4)',
+        borderLeft: `2px solid ${accent}`,
+      }}
+    >
+      <FactionEmblem ticker={player.backed} size={52} />
+      <div style={{ display: 'grid', gap: 'var(--pw-space-1)' }}>
+        <div style={captionStyle}>YOUR WAR</div>
+        <div style={{ ...readoutStyle, fontSize: 20 }}>
+          YOU BACKED <span style={{ color: accent }}>{player.backed}</span>
+          <span
+            style={{
+              ...captionStyle,
+              marginLeft: 'var(--pw-space-2)',
+              padding: '2px 8px',
+              borderRadius: 999,
+              verticalAlign: 'middle',
+              border: `1px solid ${player.won ? 'var(--pw-accent)' : 'var(--pw-border-1)'}`,
+              color: player.won ? 'var(--pw-accent)' : 'var(--pw-text-3)',
+            }}
+          >
+            {player.won ? 'WON' : 'LOST'}
+          </span>
+        </div>
+        <div
+          className="pw-tabular"
+          style={{
+            ...readoutStyle,
+            fontSize: 38,
+            lineHeight: 1.1,
+            color: player.won ? 'var(--pw-accent)' : 'var(--pw-text-1)',
+          }}
+        >
+          +{player.warPoints} WP
+        </div>
+        <div style={{ display: 'flex', gap: 'var(--pw-space-3)' }}>
+          {player.upset ? (
+            <span style={{ ...captionStyle, color: 'var(--pw-rarity-legendary)' }}>UPSET</span>
+          ) : null}
+          {player.cardAssist ? (
+            <span style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>CARD ASSIST</span>
+          ) : null}
+        </div>
       </div>
     </div>
   );
