@@ -67,6 +67,70 @@ describe('pacer', () => {
   });
 });
 
+describe('a pacer in front of a slow endpoint', () => {
+  it('starts the next call on time rather than after the last answer', async () => {
+    const fake = clock();
+    const paced = pacer({ minIntervalMs: 100, retries: 0, backoffMs: 1, maxBackoffMs: 1, ...fake });
+    const started: number[] = [];
+    let answer: (() => void) | undefined;
+    const slow = paced(() => {
+      started.push(fake.now());
+      return new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+    });
+    const quick = paced(() => {
+      started.push(fake.now());
+      return Promise.resolve();
+    });
+    await quick;
+    expect(started).toEqual([0, 100]);
+    answer?.();
+    await slow;
+  });
+
+  it('holds back every call asked for once one has been throttled', async () => {
+    const fake = clock();
+    const paced = pacer({
+      minIntervalMs: 10,
+      retries: 1,
+      backoffMs: 1_000,
+      maxBackoffMs: 1_000,
+      ...fake,
+    });
+    const started: number[] = [];
+    let throttle: ((error: Error) => void) | undefined;
+    const throttled = paced(() => {
+      started.push(fake.now());
+      return started.length === 1
+        ? new Promise<void>((_resolve, reject) => {
+            throttle = reject;
+          })
+        : Promise.resolve();
+    });
+    await settled();
+    throttle?.(new Error('HTTP request failed. Status: 429'));
+    await settled();
+    const next = paced(() => {
+      started.push(fake.now());
+      return Promise.resolve();
+    });
+    await Promise.all([throttled, next]);
+    expect(started).toHaveLength(3);
+    expect(started[0]).toBe(0);
+    for (const at of started.slice(1)) {
+      expect(at).toBeGreaterThanOrEqual(1_000);
+    }
+  });
+});
+
+/** Lets every already-queued continuation run. */
+async function settled(): Promise<void> {
+  for (let turn = 0; turn < 10; turn += 1) {
+    await Promise.resolve();
+  }
+}
+
 describe('a stopped pacer', () => {
   it('refuses queued calls and gives up a throttled retry', async () => {
     const controller = new AbortController();

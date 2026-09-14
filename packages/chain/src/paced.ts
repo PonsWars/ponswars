@@ -5,8 +5,18 @@
  * whole-history discovery alone is dozens of log queries — and the public
  * Robinhood Chain endpoint answers a burst like that with a Cloudflare
  * challenge page instead of JSON. So every call goes through one queue that
- * spaces calls apart, and a call the endpoint throttles is retried after a
- * growing pause instead of failing the indexer.
+ * spaces the starts of calls apart, and a call the endpoint throttles is
+ * retried after a growing pause instead of failing the indexer.
+ *
+ * Starts are spaced, not calls: one may begin while the one before is still
+ * waiting on its answer. A queue that waited for each answer would cap every
+ * endpoint at one over its latency — three or four calls a second — whatever
+ * rate it allowed. And a throttle pauses the whole queue, not only the call
+ * that hit it, since the endpoint is saying so about all of them.
+ *
+ * Not a JSON-RPC batch: an endpoint counts every request inside a batch
+ * against its rate, so a batch saves nothing there, and a throttled batch
+ * comes back as one error where a list of answers was expected.
  *
  * Only throttling is retried. Anything else — a revert, a malformed answer —
  * is passed on at once, because retrying a call that is wrong is a slower way
@@ -83,35 +93,37 @@ export function pacer(options: PacingOptions): <T>(call: () => Promise<T>) => Pr
   };
   let tail: Promise<unknown> = Promise.resolve();
   let lastStart = -Infinity;
+  /** No call starts before this: set by a throttle, for the whole queue. */
+  let resumeAt = -Infinity;
 
-  const slot = async (): Promise<void> => {
-    assertRunning();
-    const wait = lastStart + options.minIntervalMs - now();
-    if (wait > 0) {
-      await sleep(wait);
+  /** Waits for this call's turn to start. Turns are handed out in the order asked. */
+  const slot = (): Promise<void> => {
+    const turn = tail.then(async () => {
       assertRunning();
-    }
-    lastStart = now();
+      const wait = Math.max(lastStart + options.minIntervalMs, resumeAt) - now();
+      if (wait > 0) {
+        await sleep(wait);
+        assertRunning();
+      }
+      lastStart = now();
+    });
+    tail = turn.catch(() => undefined);
+    return turn;
   };
 
-  return <T>(call: () => Promise<T>): Promise<T> => {
-    const run = async (): Promise<T> => {
-      for (let attempt = 0; ; attempt += 1) {
-        await slot();
-        try {
-          return await call();
-        } catch (error) {
-          if (attempt >= options.retries || !isThrottled(error)) {
-            throw error;
-          }
-          await sleep(Math.min(options.maxBackoffMs, options.backoffMs * 2 ** attempt));
+  return async <T>(call: () => Promise<T>): Promise<T> => {
+    for (let attempt = 0; ; attempt += 1) {
+      await slot();
+      try {
+        return await call();
+      } catch (error) {
+        if (attempt >= options.retries || !isThrottled(error)) {
+          throw error;
         }
+        const pause = Math.min(options.maxBackoffMs, options.backoffMs * 2 ** attempt);
+        resumeAt = Math.max(resumeAt, now() + pause);
       }
-    };
-    // Serial: one call at a time, in the order they were asked for.
-    const result = tail.then(run, run);
-    tail = result.catch(() => undefined);
-    return result;
+    }
   };
 }
 
