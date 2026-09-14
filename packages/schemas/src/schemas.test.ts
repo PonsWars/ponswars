@@ -341,6 +341,7 @@ describe('Genesis status (§69.6)', () => {
     entropyBlockHash: `0x${'cd'.repeat(32)}`,
     secretAvailable: false,
     rarityTableVersion: 'rarity-table-v1-secret-disabled',
+    secretReservationTx: null,
     finalizedAt: T0,
   };
 
@@ -359,6 +360,23 @@ describe('Genesis status (§69.6)', () => {
         genesisStatusSchema.safeParse({ status: 'READY', claim: { ...claim, ...bad } }).success,
       ).toBe(false);
     }
+  });
+
+  it('carries a Secret’s reservation transaction, and refuses one without it (§76.5)', () => {
+    const secret = { ...claim, rarity: 'SECRET', cardType: 'SECRET_STOCK_DROP' };
+    expect(
+      genesisStatusSchema.safeParse({
+        status: 'READY',
+        claim: { ...secret, secretReservationTx: `0x${'5e'.repeat(32)}` },
+      }).success,
+    ).toBe(true);
+    expect(genesisStatusSchema.safeParse({ status: 'READY', claim: secret }).success).toBe(false);
+    expect(
+      genesisStatusSchema.safeParse({
+        status: 'READY',
+        claim: { ...claim, secretReservationTx: `0x${'5e'.repeat(32)}` },
+      }).success,
+    ).toBe(false);
   });
 
   it('says why a wallet is not eligible, in base units with decimals', () => {

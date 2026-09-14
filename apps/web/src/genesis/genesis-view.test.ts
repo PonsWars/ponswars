@@ -14,6 +14,7 @@ const CLAIM = {
   entropyBlockHash: `0x${'cd'.repeat(32)}`,
   secretAvailable: false,
   rarityTableVersion: 'rarity-table-v1-secret-disabled',
+  secretReservationTx: null,
   finalizedAt: 1_800_000_000_000,
 };
 

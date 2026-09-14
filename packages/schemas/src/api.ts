@@ -336,9 +336,15 @@ export const genesisClaimSchema = z
     entropyBlockHash: hash32Schema,
     secretAvailable: z.boolean(),
     rarityTableVersion: z.string().min(1),
+    /** The vault transaction that reserved a Secret's reward (§76.5). */
+    secretReservationTx: hash32Schema.nullable(),
     finalizedAt: utcTimestampSchema,
   })
-  .strict();
+  .strict()
+  .refine((claim) => (claim.rarity === 'SECRET') === (claim.secretReservationTx !== null), {
+    message: 'a Secret carries its reservation transaction, and no other card does',
+    path: ['secretReservationTx'],
+  });
 
 /**
  * Where the signed-in wallet's Genesis claim has got to (§69.6).

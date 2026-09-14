@@ -329,6 +329,7 @@ function claimBody(claim: GenesisClaim): GenesisClaimBody {
     entropyBlockHash: claim.entropyBlockHash,
     secretAvailable: claim.secretAvailable,
     rarityTableVersion: claim.rarityTableVersion,
+    secretReservationTx: claim.secretReservationTx,
     finalizedAt: claim.finalizedAt,
   };
 }
