@@ -138,6 +138,50 @@ const HEIGHT: Readonly<Record<UnitKind, number>> = { trooper: 14, mech: 25, walk
 const DRONE_HOVER = { lift: 40, sway: 1.8 } as const;
 
 /**
+ * The faction's colour on a unit, as a rim along its silhouette.
+ *
+ * It was a flat emissive, and a flat emissive of a saturated colour is a coat of
+ * paint: on dark matte armour in a dark scene it outweighed every other term,
+ * and an army read as a green or purple toy. On the edges only — where a
+ * surface turns away from the camera — the armour stays dark metal with its
+ * panel detail, and the side still reads from its outline (§36.5, §36.7).
+ *
+ * The pack's atlas is painted in a bright stylised palette — yellow hulls, teal
+ * visors — so it is mostly drained of colour first: its light and dark stay,
+ * which is the panel detail, and the hue that says "another game" does not.
+ */
+function withFactionRim(material: MeshStandardMaterial, tint: Color): MeshStandardMaterial {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms['pwRim'] = { value: tint };
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform vec3 pwRim;`,
+      )
+      .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+        diffuseColor.rgb = mix(
+          vec3(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))),
+          diffuseColor.rgb,
+          0.18
+        );`,
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        {
+          float facing = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+          totalEmissiveRadiance += pwRim * pow(1.0 - facing, 3.0) * 0.9;
+        }`,
+      );
+  };
+  material.customProgramCacheKey = () => `pw-faction-rim:${tint.getHexString()}`;
+  return material;
+}
+
+/**
  * How long one clip takes to become another.
  *
  * §114.2's timing classes put a state change in the quarter-second band. Long
@@ -421,8 +465,8 @@ function Unit({
   //
   // The atlas stays as the base map. It carries the panel lines and the
   // detail that makes the silhouette legible; what changes is the tone it is
-  // multiplied by, the response to light, and a faint emissive in the faction's
-  // colour so a side is identifiable at a glance (§36.5, §36.7).
+  // multiplied by, the response to light, and a rim of the faction's colour so
+  // a side is identifiable at a glance (§36.5, §36.7).
   useEffect(() => {
     const tint = new Color(accent);
     model.traverse((node: Object3D) => {
@@ -438,17 +482,15 @@ function Unit({
       // asserting one.
       const source: unknown = Array.isArray(node.material) ? node.material[0] : node.material;
       const atlas = source instanceof MeshStandardMaterial ? source.map : null;
-      node.material = new MeshStandardMaterial({
-        map: atlas,
-        color: new Color('#8ea2ae'),
-        metalness: 0.3,
-        roughness: 0.62,
-        emissive: tint,
-        // Barely there. Enough that a side reads at a distance, far short of
-        // the glow that would put a unit above the bloom threshold and turn an
-        // army into a row of lamps.
-        emissiveIntensity: 0.14,
-      });
+      node.material = withFactionRim(
+        new MeshStandardMaterial({
+          map: atlas,
+          color: new Color('#8ea2ae'),
+          metalness: 0.3,
+          roughness: 0.62,
+        }),
+        tint,
+      );
       node.castShadow = false;
       node.receiveShadow = false;
     });
