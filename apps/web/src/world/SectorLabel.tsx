@@ -4,7 +4,7 @@ import { FactionEmblem } from '../art/FactionEmblem.js';
 import type { JSX } from 'react';
 import { captionStyle, panelStyle } from '../hud/styles.js';
 import { useNarrowViewport } from '../hud/useNarrowViewport.js';
-import { useSession, type ClientBattle } from '../state/session.js';
+import { currentZoom, useSession, type ClientBattle } from '../state/session.js';
 import { SECTOR_SKYLINE_HEIGHT } from './layout.js';
 
 /**
@@ -50,6 +50,13 @@ export function SectorLabel({
   // copy wherever an island sat behind it; the landing's own round strip is
   // where the five matchups are read from there.
   const presenting = useSession((state) => state.camera.mode) === 'PROFILE_PRESENTATION';
+  // The sector being looked at is named by the HUD's matchup banner once the
+  // camera is there, and its label would hang in the middle of that view as a
+  // second copy of the same name.
+  const named = useSession(
+    (state) => state.camera.focusedBattleId === battle.battleId && currentZoom(state) >= 2,
+  );
+  const hidden = presenting || named;
 
   return (
     <Html
@@ -63,8 +70,8 @@ export function SectorLabel({
       style={{
         pointerEvents: 'none',
         userSelect: 'none',
-        opacity: presenting ? 0 : 1,
-        visibility: presenting ? 'hidden' : 'visible',
+        opacity: hidden ? 0 : 1,
+        visibility: hidden ? 'hidden' : 'visible',
         transition:
           'opacity var(--pw-dur-panel) var(--pw-ease-ui), visibility var(--pw-dur-panel) var(--pw-ease-ui)',
       }}
@@ -80,7 +87,7 @@ export function SectorLabel({
         onClick={onFocus}
         style={{
           ...panelStyle,
-          pointerEvents: presenting ? 'none' : 'auto',
+          pointerEvents: hidden ? 'none' : 'auto',
           cursor: 'pointer',
           display: 'grid',
           gridTemplateColumns: 'auto 1fr',

@@ -6,6 +6,7 @@ import { BattleIntel } from './BattleIntel.js';
 import { BattleSwitcher } from './BattleSwitcher.js';
 import { ConnectionBanner } from './ConnectionBanner.js';
 import { LiveBattle } from './LiveBattle.js';
+import { MatchupBanner } from './MatchupBanner.js';
 import { NavigationControls } from './NavigationControls.js';
 import { PickControls } from './PickControls.js';
 import { Countdown, RoundStatus } from './RoundStatus.js';
@@ -97,6 +98,23 @@ export function Hud({ onNavigate }: { readonly onNavigate: (next: Route) => void
           ) : null}
         </Live>
       </div>
+
+      {/* The matchup, centred over the view of it (§42.6). Wide viewports only:
+          on a phone the top row is already the width of the screen, and the
+          bottom sheet names the matchup. */}
+      {!narrow && zoom >= 2 && zoom <= 3 && focused !== undefined ? (
+        <div
+          style={{
+            position: 'absolute',
+            top: 'var(--pw-space-4)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            pointerEvents: 'none',
+          }}
+        >
+          <MatchupBanner battle={focused} />
+        </div>
+      ) : null}
 
       <ConnectionBanner />
 
