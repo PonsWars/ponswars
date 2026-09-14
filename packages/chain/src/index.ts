@@ -5,3 +5,4 @@ export * from './rpc-reader.js';
 export * from './rpc-vault.js';
 export * from './secret-vault.js';
 export * from './token.js';
+export * from './log-scan.js';
