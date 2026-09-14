@@ -67,7 +67,7 @@ export function CoreModel(): JSX.Element {
           emissive: '#0b2430',
           emissiveIntensity: 0.5,
         }),
-        { accent: '#ffd27a', density: 0.5, intensity: 3.2, floor: 3.4, bay: 2.4 },
+        { accent: '#ffd27a', density: 0.3, intensity: 4.5, floor: 3.4, bay: 2.4 },
       ),
     [],
   );

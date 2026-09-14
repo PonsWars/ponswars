@@ -115,8 +115,10 @@ export function withCityLights(
           vec2 cell = floor(facade);
           vec2 inCell = fract(facade);
           // A window is the middle of its cell, with frame around it.
-          float pane = step(0.22, inCell.x) * step(inCell.x, 0.78)
-                     * step(0.28, inCell.y) * step(inCell.y, 0.72);
+          // Small against the wall: a lit city at night is dark towers with
+          // points of light in them, and a large pane reads as a lit wall.
+          float pane = step(0.3, inCell.x) * step(inCell.x, 0.7)
+                     * step(0.34, inCell.y) * step(inCell.y, 0.64);
           // Which face this is matters too, or opposite walls light as one.
           vec3 key = vec3(cell, floor(dot(n, vec3(3.0, 5.0, 7.0)) + 0.5));
           float roll = pwWindowHash(key);
@@ -132,15 +134,29 @@ export function withCityLights(
           // pixels the facade blends to what those windows average to — the
           // glow of a lit wall, with each floor's share of warm and cold.
           float footprint = max(length(fwidth(facade)), 1e-4);
-          float resolved = 1.0 - smoothstep(0.18, 0.55, footprint);
-          // An average, not a fill: a pane covers about a third of its cell,
-          // and a lit city seen from far away is mostly dark — dark towers with
-          // light in them, not lit walls.
-          vec3 average = (pwWarm * 0.028 + pwCold * 0.02 + pwAccent * 0.018) * pwDensity;
+          float resolved = 1.0 - smoothstep(0.06, 0.2, footprint);
+          // What the panes average to — their share of the cell, the share lit,
+          // their mean strength, and the mix of tones above — dimmed further,
+          // because from far away the eye reads a dark wall with light in it,
+          // not a wall glowing evenly.
+          vec3 average = (pwWarm * 0.44 + pwCold * 0.38 + pwAccent * 0.18)
+                       * (0.4 * 0.3) * pwDensity * 0.78 * 0.15;
           // The average still varies floor by floor, so a far tower keeps
           // bands of light rather than a flat wash.
           float band = mix(0.6, 1.25, pwWindowHash(vec3(0.0, cell.y, key.z)));
           vec3 glow = mix(average * band, windows, resolved);
+
+          // Between the two, where a window is a pixel but a floor is still a
+          // few: runs of lit floor. A run is a whole floor across several bays
+          // — an office level with its lights on — which is big enough to
+          // stay a line of light when single windows no longer can.
+          vec2 run = vec2(floor(facade.x / 7.0), cell.y);
+          float runLit = step(0.9 - pwDensity * 0.25, pwWindowHash(vec3(run, key.z + 91.0)));
+          float runBand = smoothstep(0.3, 0.38, inCell.y) * (1.0 - smoothstep(0.58, 0.66, inCell.y));
+          float floorFootprint = max(fwidth(facade.y), 1e-4);
+          float runVisible = (1.0 - resolved) * (1.0 - smoothstep(0.25, 0.6, floorFootprint));
+          vec3 runTone = pwWindowHash(vec3(run, 7.0)) < 0.25 ? pwAccent : pwWarm;
+          glow += runTone * runLit * runBand * runVisible * 0.2;
           totalEmissiveRadiance += glow * wall * pwIntensity;
         }`,
       );

@@ -123,8 +123,8 @@ export function IslandMass({
           emissiveIntensity: 0.5,
         }),
         core
-          ? { accent: '#ffd27a', density: 0.44, intensity: 3.2, floor: 2.8, bay: 2.3 }
-          : { accent: '#7fd4ff', density: 0.34, intensity: 3, floor: 2.6, bay: 2.2 },
+          ? { accent: '#ffd27a', density: 0.26, intensity: 4.5, floor: 2.8, bay: 2.3 }
+          : { accent: '#7fd4ff', density: 0.22, intensity: 4, floor: 2.6, bay: 2.2 },
       ),
     [core],
   );

@@ -883,8 +883,8 @@ function District({
         }),
         {
           accent,
-          density: detail === 'FULL' ? 0.36 : 0.3,
-          intensity: 2.4,
+          density: detail === 'FULL' ? 0.24 : 0.2,
+          intensity: 3.6,
         },
       ),
     [accent, detail],
