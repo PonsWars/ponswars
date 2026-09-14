@@ -61,8 +61,7 @@ export interface MarketSource {
    * The latest instant the source has read everything up to.
    *
    * A source still backfilling does not know what traded, and silence from it
-   * is not a quiet market — it must read `UNAVAILABLE`, not `STALE` with a
-   * price of nothing.
+   * is not a quiet market. Before its first read this is zero.
    */
   coversUntil(): UtcTimestamp;
 }
@@ -70,6 +69,13 @@ export interface MarketSource {
 /** Everything `OPEN` about how the market is read (`docs/OPEN_PARAMETERS.md` §2). */
 export interface OnchainMarketPolicy {
   readonly price: PricePolicy;
+  /**
+   * How far behind the instant the source may be and still be believed.
+   *
+   * A source always trails the head by a poll or two; one further behind than
+   * this has stopped following the chain, and what it says about now is old.
+   */
+  readonly maxSourceLagMs: number;
   /** How far back the volatility baseline looks. */
   readonly volatilityLookbackMs: number;
   /** The smallest volatility a horizon may have, at `RATIO_SCALE`. */
@@ -120,8 +126,13 @@ export class OnchainMarket implements MarketDataPort {
     const { price, calendar } = this.policy;
     const neutral = this.neutralInputs();
 
-    if (this.source.coversUntil() < at) {
+    const covered = this.source.coversUntil();
+    if (covered <= 0) {
+      // Not started: nothing has been read, so nothing can be said.
       return { inputs: neutral, health: 'UNAVAILABLE' };
+    }
+    if (at - covered > this.policy.maxSourceLagMs) {
+      return { inputs: neutral, health: 'STALE' };
     }
     // §23.8: a closed market is not a flat one.
     if (!isMarketOpen(at, calendar)) {

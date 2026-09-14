@@ -26,6 +26,7 @@ const POLICY: OnchainMarketPolicy = {
     maxReferenceAgeMs: 26 * 3_600_000,
     minWindowTrades: 1,
   },
+  maxSourceLagMs: 30_000,
   volatilityLookbackMs: 60 * MINUTE,
   volatilityFloor: 1_000n,
   comparableSessions: 2,
@@ -151,13 +152,18 @@ describe('OnchainMarket.observe', () => {
     expect(observation.inputs.windowReturn).toBe(0n);
   });
 
-  it('is UNAVAILABLE while the source has not caught up, rather than reading silence as quiet', async () => {
-    const market = new OnchainMarket(
+  it('is UNAVAILABLE before the source has read anything, and STALE once it falls behind', async () => {
+    const unread = new OnchainMarket(
+      new ArraySource([trade(100, LOCK - 1_000)], [], undefined, utcTimestamp(0)),
+      POLICY,
+    );
+    expect((await unread.observe('NVDA', { opensAt: LOCK, at: LOCK })).health).toBe('UNAVAILABLE');
+
+    const behind = new OnchainMarket(
       new ArraySource([trade(100, LOCK - 1_000)], [], undefined, utcTimestamp(LOCK - MINUTE)),
       POLICY,
     );
-    const observation = await market.observe('NVDA', { opensAt: LOCK, at: LOCK });
-    expect(observation.health).toBe('UNAVAILABLE');
+    expect((await behind.observe('NVDA', { opensAt: LOCK, at: LOCK })).health).toBe('STALE');
   });
 });
 
