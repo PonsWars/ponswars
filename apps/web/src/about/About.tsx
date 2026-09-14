@@ -12,6 +12,7 @@ import {
 import { RARITY_COLOR } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
 import { FactionEmblem } from '../art/FactionEmblem.js';
+import { FACTION_ART } from '../art/manifest.js';
 import { GenesisCardFace } from '../art/GenesisCardFace.js';
 import { captionStyle, controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
 import type { Route } from '../routing/route.js';
@@ -82,46 +83,84 @@ export function About({ onNavigate }: { readonly onNavigate: (next: Route) => vo
 
   return (
     <div style={{ display: 'grid', gap: 'var(--pw-space-6)' }}>
-      <header style={{ display: 'grid', gap: 'var(--pw-space-3)' }}>
-        <div style={{ ...captionStyle, color: 'var(--pw-text-3)' }}>ABOUT PONSWARS</div>
-        <h1
+      <header
+        style={{
+          position: 'relative',
+          overflow: 'hidden',
+          display: 'grid',
+          gap: 'var(--pw-space-3)',
+          alignContent: 'center',
+          minHeight: 400,
+          padding: 'var(--pw-space-5)',
+          borderRadius: 'var(--pw-radius-panel)',
+          border: 'var(--pw-line-hair) solid var(--pw-border-1)',
+          background: 'var(--pw-surface-2)',
+        }}
+      >
+        {/* An army behind the pitch. The right of this header was the blurred
+            world and nothing else — a page about a war with no war on it. The
+            plate fades out under the copy so the type keeps its ground. */}
+        <img
+          src={FACTION_ART.MSFT}
+          alt=""
+          decoding="async"
           style={{
-            margin: 0,
-            fontFamily: 'var(--pw-font-display)',
-            fontSize: 'clamp(28px, 4.4vw, 46px)',
-            lineHeight: 1.06,
-            color: 'var(--pw-text-1)',
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            width: '72%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: 'center 45%',
+            // Faded by a mask rather than painted over: the panel is glass over
+            // the world, and a gradient in the panel's own colour laid on an
+            // opaque picture left a hard edge where the picture began.
+            maskImage: 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.35) 30%, #000 65%)',
+            WebkitMaskImage:
+              'linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.35) 30%, #000 65%)',
           }}
-        >
-          REAL MARKETS.
-          <br />
-          REAL PLAY.
-          <br />
-          <span style={{ color: 'var(--pw-accent)' }}>A BIGGER TOMORROW.</span>
-        </h1>
-        <p style={{ margin: 0, maxWidth: 560, color: 'var(--pw-text-2)', lineHeight: 1.6 }}>
-          PonsWars turns global markets into a living battlefield. Ten factions. Real market data.
-          Onchain activity. A spectator strategy game where every decision, every holder, and every
-          battle moves something bigger.
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            onNavigate({ kind: 'WORLD', battleId: null });
-          }}
-          style={{
-            ...controlStyle,
-            justifySelf: 'start',
-            background: 'var(--pw-accent)',
-            borderColor: 'var(--pw-accent)',
-            color: '#06120a',
-            fontFamily: 'var(--pw-font-display)',
-            letterSpacing: '0.08em',
-            padding: 'var(--pw-space-3) var(--pw-space-5)',
-          }}
-        >
-          ENTER WAR WORLD →
-        </button>
+        />
+        <div style={{ position: 'relative', display: 'grid', gap: 'var(--pw-space-3)' }}>
+          <div style={{ ...captionStyle, color: 'var(--pw-text-3)' }}>ABOUT PONSWARS</div>
+          <h1
+            style={{
+              margin: 0,
+              fontFamily: 'var(--pw-font-display)',
+              fontSize: 'clamp(28px, 4.4vw, 46px)',
+              lineHeight: 1.06,
+              color: 'var(--pw-text-1)',
+            }}
+          >
+            REAL MARKETS.
+            <br />
+            REAL PLAY.
+            <br />
+            <span style={{ color: 'var(--pw-accent)' }}>A BIGGER TOMORROW.</span>
+          </h1>
+          <p style={{ margin: 0, maxWidth: 560, color: 'var(--pw-text-2)', lineHeight: 1.6 }}>
+            PonsWars turns global markets into a living battlefield. Ten factions. Real market data.
+            Onchain activity. A spectator strategy game where every decision, every holder, and
+            every battle moves something bigger.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              onNavigate({ kind: 'WORLD', battleId: null });
+            }}
+            style={{
+              ...controlStyle,
+              justifySelf: 'start',
+              background: 'var(--pw-accent)',
+              borderColor: 'var(--pw-accent)',
+              color: '#06120a',
+              fontFamily: 'var(--pw-font-display)',
+              letterSpacing: '0.08em',
+              padding: 'var(--pw-space-3) var(--pw-space-5)',
+            }}
+          >
+            ENTER WAR WORLD →
+          </button>
+        </div>
       </header>
 
       <section style={{ display: 'grid', gap: 'var(--pw-space-3)' }}>
