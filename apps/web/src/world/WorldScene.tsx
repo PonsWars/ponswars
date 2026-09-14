@@ -50,6 +50,7 @@ import { InstancedField, preparedGeometry, type Placement } from './InstancedFie
 import { IslandMass } from './IslandMass.js';
 import { Planet } from './Planet.js';
 import { islet } from './rock.js';
+import { withGround } from './ground.js';
 import { SectorLabel } from './SectorLabel.js';
 import { WorldInput } from './WorldInput.js';
 import { WorldLighting } from './WorldLighting.js';
@@ -597,6 +598,24 @@ function Sector({
     };
   }, [hovered, gl]);
 
+  // The plateau's paving. One material per sector, retinted in place rather
+  // than rebuilt, so a hover does not recompile a shader.
+  const plateau = useMemo(
+    () => withGround(new MeshStandardMaterial({ metalness: 0.3, roughness: 0.78 })),
+    [],
+  );
+  useEffect(() => {
+    // Lifting under the pointer, a step below the focused tone: the world
+    // should answer a hover before it answers a click (§37.3).
+    plateau.color.set(isFocused ? '#26333d' : hovered ? '#212d36' : '#1a232a');
+  }, [plateau, isFocused, hovered]);
+  useEffect(
+    () => () => {
+      plateau.dispose();
+    },
+    [plateau],
+  );
+
   if (position === undefined || detail === 'CULLED') {
     return null;
   }
@@ -639,13 +658,7 @@ function Sector({
             SEGMENTS[detail],
           ]}
         />
-        <meshStandardMaterial
-          // Lifting under the pointer, a step below the focused tone: the world
-          // should answer a hover before it answers a click (§37.3).
-          color={isFocused ? '#1c2a33' : hovered ? '#18242c' : '#121a20'}
-          metalness={0.35}
-          roughness={0.72}
-        />
+        <primitive object={plateau} attach="material" />
       </mesh>
 
       {/* The rock it floats on and the city around its rim. Kept at
