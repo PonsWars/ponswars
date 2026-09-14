@@ -453,7 +453,8 @@ export function App(): JSX.Element {
   const readGenesis = liveProfile.kind === 'READY' ? liveProfile.profile.holdings.genesis : null;
   const readCard =
     readGenesis?.status === 'READ' && readGenesis.card !== null ? readGenesis.card : null;
-  const readCardName = readCard === null ? null : CARD_CATALOG[readCard.cardType].name;
+  const readCardType = readCard?.cardType ?? null;
+  const readCardName = readCardType === null ? null : CARD_CATALOG[readCardType].name;
   const readCardRarity = readCard?.rarity ?? null;
   const readCardUses = readCard?.remainingUses ?? null;
   useEffect(() => {
@@ -461,11 +462,27 @@ export function App(): JSX.Element {
       return;
     }
     setCard(
-      readCardName === null || readCardRarity === null || readCardUses === null
+      readCardType === null ||
+        readCardName === null ||
+        readCardRarity === null ||
+        readCardUses === null
         ? null
-        : { name: readCardName, rarity: readCardRarity, usesRemaining: readCardUses },
+        : {
+            cardType: readCardType,
+            name: readCardName,
+            rarity: readCardRarity,
+            usesRemaining: readCardUses,
+          },
     );
-  }, [status.live, liveProfile.kind, readCardName, readCardRarity, readCardUses, setCard]);
+  }, [
+    status.live,
+    liveProfile.kind,
+    readCardType,
+    readCardName,
+    readCardRarity,
+    readCardUses,
+    setCard,
+  ]);
   // The wallet's published rewards, read while the rewards page is open, and the
   // claim that sends one to the wallet (§35.6).
   const rewardClaims = useRewardClaims(
@@ -571,7 +588,12 @@ export function App(): JSX.Element {
     // The same card the Genesis preview reveals, with a charge spent. A demo
     // that opened Golden Army and then showed a different card in the profile
     // would teach the reader that the two are unrelated.
-    setCard({ name: 'Golden Army', rarity: 'LEGENDARY', usesRemaining: 2 });
+    setCard({
+      cardType: PLACEHOLDER_GENESIS.cardType,
+      name: PLACEHOLDER_GENESIS.cardName,
+      rarity: PLACEHOLDER_GENESIS.rarity,
+      usesRemaining: 2,
+    });
   }, [status.live, setBattles, setMyBattle, setWallet, setRound, setCard]);
 
   useEffect(() => {
@@ -627,7 +649,10 @@ export function App(): JSX.Element {
       <div
         style={{
           position: 'fixed',
-          top: 'var(--pw-space-3)',
+          // Along the foot of the screen, where nothing else is centred. At the
+          // top it sat on the navigation bar and, in a sector, on the matchup
+          // banner — the two things a visitor reads first.
+          bottom: 'calc(var(--pw-space-4) + 72px)',
           left: 0,
           right: 0,
           display: 'grid',

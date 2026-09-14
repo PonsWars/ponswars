@@ -1,6 +1,7 @@
 import type { ActiveTicker, CardDecision } from '@ponswars/shared-types';
 import { FACTION_ACCENT, RARITY_COLOR } from '@ponswars/ui-tokens';
 import type { JSX } from 'react';
+import { GenesisCardFace } from '../art/GenesisCardFace.js';
 import { useSession, type ClientBattle, type PickAttempt } from '../state/session.js';
 import { cardStateLabel, pickFlowView, type PickFlowView } from './pick-flow.js';
 import { roundView } from './round-phase.js';
@@ -212,26 +213,49 @@ function CardPanel({
       }}
     >
       <div style={captionStyle}>GENESIS CARD</div>
-      <div style={{ ...readoutStyle, fontSize: 14 }}>{card?.name.toUpperCase() ?? '—'}</div>
-
-      <div style={{ display: 'flex', gap: 'var(--pw-space-3)', alignItems: 'baseline' }}>
-        {flow.usesLabel === null ? null : (
-          <span className="pw-tabular" style={{ fontSize: 14, color: 'var(--pw-text-1)' }}>
-            {flow.usesLabel}
-          </span>
-        )}
-        {flow.finalUse ? (
-          <span style={{ ...captionStyle, color: 'var(--pw-warning)' }}>FINAL USE</span>
-        ) : null}
-      </div>
-
       <div
         style={{
-          ...captionStyle,
-          color: flow.cardState === 'ARMED' ? 'var(--pw-accent)' : 'var(--pw-text-2)',
+          display: 'grid',
+          gridTemplateColumns: card === null ? '1fr' : 'auto 1fr',
+          gap: 'var(--pw-space-3)',
+          alignItems: 'center',
         }}
       >
-        {cardStateLabel(flow.cardState)}
+        {/* The card itself, at hand size (§40.7 step 2): the object being
+            spent, not a line of text about it. §40.8 keeps it off the
+            battlefield, so it stays this size inside the panel. */}
+        {card === null ? null : (
+          <div style={{ filter: `drop-shadow(0 0 12px ${RARITY_COLOR[card.rarity]}44)` }}>
+            <GenesisCardFace
+              cardType={card.cardType}
+              rarity={card.rarity}
+              usesRemaining={card.usesRemaining}
+              width={96}
+            />
+          </div>
+        )}
+        <div style={{ display: 'grid', gap: 'var(--pw-space-1)' }}>
+          <div style={{ ...readoutStyle, fontSize: 16 }}>{card?.name.toUpperCase() ?? '—'}</div>
+          <div style={{ display: 'flex', gap: 'var(--pw-space-3)', alignItems: 'baseline' }}>
+            {flow.usesLabel === null ? null : (
+              <span className="pw-tabular" style={{ fontSize: 14, color: 'var(--pw-text-1)' }}>
+                {flow.usesLabel}
+              </span>
+            )}
+            {flow.finalUse ? (
+              <span style={{ ...captionStyle, color: 'var(--pw-warning)' }}>FINAL USE</span>
+            ) : null}
+          </div>
+
+          <div
+            style={{
+              ...captionStyle,
+              color: flow.cardState === 'ARMED' ? 'var(--pw-accent)' : 'var(--pw-text-2)',
+            }}
+          >
+            {cardStateLabel(flow.cardState)}
+          </div>
+        </div>
       </div>
 
       {flow.mayDecideCard ? (

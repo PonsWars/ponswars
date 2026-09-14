@@ -8,7 +8,12 @@ import {
   type PickFlowInput,
 } from './pick-flow.js';
 
-const CARD: CardHolding = { name: 'Bull Run', rarity: 'RARE', usesRemaining: 7 };
+const CARD: CardHolding = {
+  cardType: 'BULL_RUN',
+  name: 'Bull Run',
+  rarity: 'RARE',
+  usesRemaining: 7,
+};
 
 function input(overrides: Partial<PickFlowInput> = {}): PickFlowInput {
   return {

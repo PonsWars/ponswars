@@ -1,4 +1,4 @@
-import { RARITY_USES, type CardDecision, type Rarity } from '@ponswars/shared-types';
+import { RARITY_USES, type CardDecision, type CardType, type Rarity } from '@ponswars/shared-types';
 
 /**
  * The pick and card decision flow (§27.6, §40.7).
@@ -38,6 +38,12 @@ export const CARD_STATES = [
 export type CardState = (typeof CARD_STATES)[number];
 
 export interface CardHolding {
+  /**
+   * Which card, so the pick panel can show its face (§40.7 step 2). The type
+   * rather than the name: the name is display copy, the type is what the art
+   * and the catalog are keyed by.
+   */
+  readonly cardType: CardType;
   readonly name: string;
   readonly rarity: Rarity;
   readonly usesRemaining: number;
