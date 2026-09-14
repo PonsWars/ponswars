@@ -10,6 +10,16 @@ import type { CSSProperties } from 'react';
  * tokens §1 requires.
  */
 
+/** The corner ticks on tactical glass: colour, and where each of the eight strokes lies. */
+const CORNER_TICK = 'rgba(214, 236, 248, 0.34)';
+const CORNER_INSET = '4px';
+const CORNER_SIZES = Array.from({ length: 4 }, () => ['9px 1px', '1px 9px']).flat();
+const CORNER_POSITIONS = (['left', 'right'] as const)
+  .flatMap((x) =>
+    (['top', 'bottom'] as const).map((y) => `${x} ${CORNER_INSET} ${y} ${CORNER_INSET}`),
+  )
+  .flatMap((position) => [position, position]);
+
 /**
  * §42.11: mostly transparent charcoal-tinted tactical glass, thin borders,
  * restrained depth blur. Explicitly not heavy glassmorphism.
@@ -23,7 +33,19 @@ export const panelStyle: CSSProperties = {
   //
   // Deliberately faint. §42.1 keeps the world the hero, and a panel with a
   // visible gradient in it competes with the thing behind it.
-  backgroundImage: 'linear-gradient(180deg, rgba(214, 236, 248, 0.05), rgba(214, 236, 248, 0) 42%)',
+  //
+  // And a tick in each corner: the small registration marks every delivered
+  // HUD frame puts on its glass. They are what make a dark rectangle read as an
+  // instrument rather than as a card. Drawn as background layers, so a panel
+  // needs no extra elements and a component that overrides `background` gets a
+  // plain panel back rather than a broken one.
+  backgroundImage: [
+    'linear-gradient(180deg, rgba(214, 236, 248, 0.05), rgba(214, 236, 248, 0) 42%)',
+    ...Array.from({ length: 8 }, () => `linear-gradient(${CORNER_TICK}, ${CORNER_TICK})`),
+  ].join(', '),
+  backgroundSize: ['100% 100%', ...CORNER_SIZES].join(', '),
+  backgroundPosition: ['0 0', ...CORNER_POSITIONS].join(', '),
+  backgroundRepeat: 'no-repeat',
   border: 'var(--pw-line-hair) solid var(--pw-border-1)',
   borderRadius: 'var(--pw-radius-panel)',
   backdropFilter: 'blur(6px)',
