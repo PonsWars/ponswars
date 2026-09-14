@@ -3,7 +3,7 @@ import { useEffect, useMemo, type JSX } from 'react';
 import { MeshStandardMaterial } from 'three';
 import { withCityLights } from './city-lights.js';
 import { InstancedField, type Placement } from './InstancedField.js';
-import { capped, CLIFF_DEPTH, islandRock, rimCity } from './rock.js';
+import { capped, CLIFF_DEPTH, islandRock, islet, rimCity } from './rock.js';
 import { rockGeometry } from './rock-geometry.js';
 
 /**
@@ -34,6 +34,14 @@ const ROCK_RESOLUTION: Readonly<Record<DetailLevel, { around: number; rings: num
 const RIM_COUNT: Readonly<Record<DetailLevel, number>> = {
   FULL: 150,
   REDUCED: 70,
+  SILHOUETTE: 0,
+  CULLED: 0,
+};
+
+/** Crags round the edge at each detail level. None at silhouette: the outline carries it. */
+const CRAG_COUNT: Readonly<Record<DetailLevel, number>> = {
+  FULL: 44,
+  REDUCED: 24,
   SILHOUETTE: 0,
   CULLED: 0,
 };
@@ -113,25 +121,73 @@ export function IslandMass({
     [core, depth],
   );
 
-  const rim = useMemo<readonly Placement[]>(
-    () =>
-      rimCity(
-        seed,
-        core
-          ? { count: 130, inner: 44, outer: radius * 0.84, maxHeight: 64, clear: [] }
-          : {
-              count: RIM_COUNT[detail],
-              inner: radius * 0.76,
-              outer: radius * 0.95,
-              maxHeight: 22,
-              clear: RIM_CLEAR,
-            },
-      ).map((building) => ({
+  const rim = useMemo<readonly Placement[]>(() => {
+    const buildings = rimCity(
+      seed,
+      core
+        ? { count: 130, inner: 44, outer: radius * 0.84, maxHeight: 64, clear: [] }
+        : {
+            count: RIM_COUNT[detail],
+            inner: radius * 0.76,
+            outer: radius * 0.95,
+            maxHeight: 22,
+            clear: RIM_CLEAR,
+          },
+    );
+    const placements: Placement[] = [];
+    for (const [index, building] of buildings.entries()) {
+      placements.push({
         position: [building.x, top + building.height / 2, building.z],
         scale: [building.width, building.height, building.depth],
         rotation: [0, building.turn, 0],
-      })),
+      });
+      // A setback on every other tall one: a narrower tier on the roof. A rim of
+      // plain boxes read as crates; a stepped skyline reads as a city.
+      if (building.height > 9 && index % 2 === 0) {
+        const tier = building.height * 0.38;
+        placements.push({
+          position: [building.x, top + building.height + tier / 2, building.z],
+          scale: [building.width * 0.58, tier, building.depth * 0.58],
+          rotation: [0, building.turn, 0],
+        });
+      }
+    }
+    return placements;
+  }, [seed, detail, radius, top, core]);
+
+  // Broken rock breaking through the paving round the very edge, so the rim of
+  // an island is stone and not the clean edge of a disc. Turned root-up: the
+  // same islet shape the void is full of, standing as crags.
+  const crags = useMemo<readonly Placement[]>(
+    () =>
+      core || CRAG_COUNT[detail] === 0
+        ? []
+        : rimCity(seed ^ 0x2c1b, {
+            count: CRAG_COUNT[detail],
+            inner: radius * 0.93,
+            outer: radius * 1.02,
+            maxHeight: 12,
+            clear: RIM_CLEAR,
+          }).map((crag) => ({
+            position: [crag.x, top - 1, crag.z],
+            scale: [crag.width * 0.8, crag.height * 0.8, crag.depth * 0.8],
+            rotation: [Math.PI, crag.turn * 2, 0],
+          })),
     [seed, detail, radius, top, core],
+  );
+  const cragShape = useMemo(() => rockGeometry(islet(seed ^ 0x51)), [seed]);
+  const cragMaterial = useMemo(
+    () =>
+      new MeshStandardMaterial({
+        vertexColors: true,
+        // Toned down from the rock's own colours: up top these catch the full
+        // key light, and at the cliff's tones they read as pale grey chunks.
+        color: '#6b6e72',
+        roughness: 0.95,
+        metalness: 0.05,
+        flatShading: true,
+      }),
+    [],
   );
 
   const rimMaterial = useMemo(
@@ -155,15 +211,17 @@ export function IslandMass({
   useEffect(
     () => () => {
       rock.dispose();
+      cragShape.dispose();
     },
-    [rock],
+    [rock, cragShape],
   );
   useEffect(
     () => () => {
       rockMaterial.dispose();
       rimMaterial.dispose();
+      cragMaterial.dispose();
     },
-    [rockMaterial, rimMaterial],
+    [rockMaterial, rimMaterial, cragMaterial],
   );
 
   return (
@@ -175,6 +233,12 @@ export function IslandMass({
         <InstancedField placements={rim}>
           <boxGeometry key="rim-building" args={[1, 1, 1]} />
           <primitive key="rim-material" object={rimMaterial} attach="material" />
+        </InstancedField>
+      ) : null}
+      {crags.length > 0 ? (
+        <InstancedField placements={crags}>
+          <primitive key="crag" object={cragShape} attach="geometry" />
+          <primitive key="crag-material" object={cragMaterial} attach="material" />
         </InstancedField>
       ) : null}
     </group>
