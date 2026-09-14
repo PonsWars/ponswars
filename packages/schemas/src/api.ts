@@ -311,6 +311,44 @@ export const profileSchema = z
 
 export type Profile = z.infer<typeof profileSchema>;
 
+/**
+ * `GET /v1/rewards/claims` — the signed-in wallet's published rewards (§16.8, §17, §35.6).
+ *
+ * Each claim is exactly what `RewardsDistributor.claim` takes: the distribution
+ * id, the amount in base units and the proof, as calculated for the root on
+ * chain. `claimed` is read from the contract, or `null` when the chain did not
+ * answer — never assumed either way, since a `false` shown for a claimed reward
+ * invites a transaction that reverts.
+ *
+ * `UNPUBLISHED` is a server with no distributor to claim from (the local stack).
+ */
+export const rewardClaimsSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('UNPUBLISHED') }).strict(),
+  z
+    .object({
+      status: z.literal('READ'),
+      chainId: z.int().positive(),
+      distributor: walletAddressSchema,
+      /** The reward token's decimals, to write the amounts down. */
+      decimals: z.int().min(0).max(36),
+      claims: z
+        .array(
+          z
+            .object({
+              distributionId: z.string().regex(/^\d+$/),
+              amount: baseUnitsSchema,
+              proof: z.array(hash32Schema).max(64),
+              claimed: z.boolean().nullable(),
+            })
+            .strict(),
+        )
+        .max(1_000),
+    })
+    .strict(),
+]);
+
+export type RewardClaims = z.infer<typeof rewardClaimsSchema>;
+
 // ---------------------------------------------------------------------------
 // Genesis (§47.4, §69.6)
 // ---------------------------------------------------------------------------
