@@ -107,9 +107,14 @@ export const SECTOR_SKYLINE_HEIGHT = 100;
  *
  * High and pulled back, so all five sectors and the Market Core are readable at
  * once — §37.2 level one shows the complete world.
+ *
+ * Close enough that the ring fills the frame. The world is the hero (§42.1),
+ * and from further back the islands sat small in the middle of a black screen
+ * with the HUD around them; every delivered world frame lets the near island
+ * run off the bottom edge instead.
  */
 export const GLOBAL_ANCHOR: CameraPose = {
-  position: vec3(0, 540, 1060),
+  position: vec3(0, 470, 930),
   target: MARKET_CORE,
 };
 
