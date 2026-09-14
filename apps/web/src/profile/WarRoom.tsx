@@ -6,6 +6,7 @@ import { GenesisCardFace } from '../art/GenesisCardFace.js';
 import { GenesisTrophy } from '../art/GenesisTrophy.js';
 import { FACTION_ART } from '../art/manifest.js';
 import { captionStyle, humanize, panelStyle, readoutStyle } from '../hud/styles.js';
+import { useNarrowViewport } from '../hud/useNarrowViewport.js';
 
 /**
  * The personal war room (§34).
@@ -111,6 +112,7 @@ export interface ProfileData {
 }
 
 export function WarRoom({ profile }: { readonly profile: ProfileData }): JSX.Element {
+  const narrow = useNarrowViewport();
   return (
     <div style={{ display: 'grid', gap: 'var(--pw-space-4)' }}>
       <CommandBanner profile={profile} />
@@ -131,7 +133,11 @@ export function WarRoom({ profile }: { readonly profile: ProfileData }): JSX.Ele
           <Lifetime stats={profile.lifetime} />
           {profile.mostBacked === null ? null : <MostBackedPanel stat={profile.mostBacked} />}
         </div>
-        <GenesisCardPanel genesis={profile.holdings.genesis} />
+        {/* The centrepiece leads on a phone, where the three columns stack:
+            §34.2 makes the card the room's centre, not its third panel. */}
+        <div style={{ display: 'grid', order: narrow ? -1 : 0 }}>
+          <GenesisCardPanel genesis={profile.holdings.genesis} />
+        </div>
         <div
           style={{ display: 'grid', gap: 'var(--pw-space-4)', alignContent: 'start', minWidth: 0 }}
         >
