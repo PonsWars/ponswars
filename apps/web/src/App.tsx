@@ -15,6 +15,8 @@ import { PreviewBanner } from './live/PreviewBanner.js';
 import { fetchBattleResult } from './live/round-client.js';
 import { useLiveProfile, type LiveProfile } from './live/useLiveProfile.js';
 import { useLiveGenesis, type LiveGenesis } from './live/useLiveGenesis.js';
+import { useRewardClaims } from './live/useRewardClaims.js';
+import { claimEntries } from './rewards/claims-view.js';
 import { useLiveWorld } from './live/useLiveWorld.js';
 import { useWalletSession } from './live/useWalletSession.js';
 import { WalletSessionProvider } from './live/WalletSessionContext.js';
@@ -464,6 +466,21 @@ export function App(): JSX.Element {
         : { name: readCardName, rarity: readCardRarity, usesRemaining: readCardUses },
     );
   }, [status.live, liveProfile.kind, readCardName, readCardRarity, readCardUses, setCard]);
+  // The wallet's published rewards, read while the rewards page is open, and the
+  // claim that sends one to the wallet (§35.6).
+  const rewardClaims = useRewardClaims(
+    status.live ? walletSession.authorization : null,
+    walletSession.status.kind === 'CONNECTED' ? walletSession.status.wallet : null,
+    route.kind === 'REWARDS',
+  );
+  const claimsData =
+    rewardClaims.kind === 'READY' && rewardClaims.claims.status === 'READ'
+      ? {
+          entries: claimEntries(rewardClaims.claims, rewardClaims.progress),
+          onClaim: rewardClaims.claim,
+        }
+      : null;
+
   // The wallet's Genesis claim, read while its page is open and kept current
   // while its block is sealing.
   const liveGenesis = useLiveGenesis(
@@ -664,6 +681,7 @@ export function App(): JSX.Element {
                 }
           }
           pool={status.live ? null : PLACEHOLDER_POOL}
+          claims={status.live ? claimsData : null}
           genesis={
             status.live
               ? fromLiveGenesis(liveGenesis)

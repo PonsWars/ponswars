@@ -5,6 +5,7 @@ import { useState, type JSX } from 'react';
 import type { ActiveTicker, ConfidenceLabel, FinalizedBattleResult } from '@ponswars/shared-types';
 import { GenesisClaim, type GenesisPageData } from '../genesis/GenesisClaim.js';
 import { WarRoom, type ProfileData } from '../profile/WarRoom.js';
+import { RewardClaims, type RewardClaimsData } from '../rewards/RewardClaims.js';
 import { RewardsHub, type PoolStatus } from '../rewards/RewardsHub.js';
 import { canTransitionClaim, type ClaimState, type RewardView } from '../rewards/reward-view.js';
 import { ResultScreen } from '../result/ResultScreen.js';
@@ -32,6 +33,7 @@ export function Presentations({
   profile,
   reward,
   pool,
+  claims,
   genesis,
   result,
 }: {
@@ -40,6 +42,8 @@ export function Presentations({
   readonly profile: PersonalData<ProfileData>;
   readonly reward: PersonalData<RewardView>;
   readonly pool: PoolStatus | null;
+  /** The wallet's published rewards, once read; `null` where there are none to show. */
+  readonly claims: RewardClaimsData | null;
   readonly genesis: PersonalData<GenesisPageData>;
   readonly result: FinishedBattle | null;
 }): JSX.Element {
@@ -118,7 +122,10 @@ export function Presentations({
           onClose={close}
         >
           {personal('REWARDS', reward, (value) => (
-            <RewardsPresentation view={value} pool={pool} />
+            <>
+              <RewardsPresentation view={value} pool={pool} />
+              {claims === null ? null : <RewardClaims data={claims} />}
+            </>
           ))}
         </Overlay>
       );
