@@ -19,6 +19,12 @@ const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
 /** Contracts asked about in one multicall. */
 const CURVES_PER_CALL = 200;
 
+/**
+ * Transaction lookups in flight at once. Their starts are paced anyway; this
+ * only bounds how many a slow endpoint can leave waiting.
+ */
+const SENDERS_AT_ONCE = 50;
+
 const CURVE_ABI = parseAbi([
   'function factory() view returns (address)',
   'function pairToken() view returns (address)',
@@ -51,8 +57,22 @@ export function robinhoodMarketRpc(url: string, pacing: PacingOptions): MarketRp
     blockNumber: () => paced(() => client.getBlockNumber({ cacheTime: 0 })),
     blockTimestamp: async (block) =>
       Number((await paced(() => client.getBlock({ blockNumber: block }))).timestamp) * 1_000,
-    transactionSender: async (hash) =>
-      (await paced(() => client.getTransaction({ hash: hash as Address }))).from,
+    transactionSenders: async (hashes) => {
+      const senders = new Map<string, string>();
+      for (let index = 0; index < hashes.length; index += SENDERS_AT_ONCE) {
+        const chunk = hashes.slice(index, index + SENDERS_AT_ONCE);
+        const transactions = await Promise.all(
+          chunk.map((hash) => paced(() => client.getTransaction({ hash: hash as Address }))),
+        );
+        chunk.forEach((hash, position) => {
+          const transaction = transactions[position];
+          if (transaction !== undefined) {
+            senders.set(hash, transaction.from);
+          }
+        });
+      }
+      return senders;
+    },
     hasCode: async (address) => {
       const code = await paced(() => client.getCode({ address: address as Address }));
       return code !== undefined && code !== '0x';

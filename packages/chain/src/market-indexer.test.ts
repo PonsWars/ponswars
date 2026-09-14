@@ -154,8 +154,15 @@ function fakeChain(
     },
     blockNumber: () => Promise.resolve(BigInt(head.value)),
     blockTimestamp: (block) => Promise.resolve(blockTime(Number(block))),
-    transactionSender: (hash) =>
-      Promise.resolve(hash === ROUTED_TX ? '0x00000000000000000000000000000000000000Bb' : TRADER),
+    transactionSenders: (hashes) =>
+      Promise.resolve(
+        new Map(
+          hashes.map((hash) => [
+            hash,
+            hash === ROUTED_TX ? '0x00000000000000000000000000000000000000Bb' : TRADER,
+          ]),
+        ),
+      ),
     hasCode: () => Promise.resolve(true),
     tokenSymbol: (address) => {
       const ticker = ACTIVE_TICKERS.find(

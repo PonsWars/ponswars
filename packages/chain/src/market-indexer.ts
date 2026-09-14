@@ -51,8 +51,13 @@ export interface MarketRpc {
   blockNumber(): Promise<bigint>;
   /** Milliseconds. */
   blockTimestamp(block: bigint): Promise<number>;
-  /** The externally owned account that sent a transaction. */
-  transactionSender(hash: string): Promise<string>;
+  /**
+   * The externally owned account that sent each transaction, by hash.
+   *
+   * Many at once: a busy Pons pool produces a swap a second, and a request per
+   * transaction behind a paced endpoint was most of a backfill's time.
+   */
+  transactionSenders(hashes: readonly string[]): Promise<ReadonlyMap<string, string>>;
   hasCode(address: string): Promise<boolean>;
   tokenSymbol(address: string): Promise<string>;
   tokenDecimals(address: string): Promise<number>;
@@ -600,20 +605,32 @@ export class RobinhoodMarketIndexer implements MarketSource {
 
   /** Fills in the trader behind each Pons pool swap and each routed curve trade. */
   private async resolveSenders(): Promise<void> {
+    const unknown = new Set<string>();
+    for (const ticker of ACTIVE_TICKERS) {
+      for (const trade of this.ponsTrades.get(ticker) ?? []) {
+        if (trade.wallet === null && !this.senders.has(trade.transactionHash)) {
+          unknown.add(trade.transactionHash);
+        }
+      }
+    }
+    if (unknown.size > 0) {
+      const found = await this.options.rpc.transactionSenders([...unknown]);
+      for (const hash of unknown) {
+        const sender = found.get(hash);
+        if (sender === undefined) {
+          throw new Error(`market: no sender returned for transaction ${hash}`);
+        }
+        this.senders.set(hash, sender.toLowerCase());
+      }
+    }
     for (const ticker of ACTIVE_TICKERS) {
       const list = this.ponsTrades.get(ticker) ?? [];
-      for (let index = 0; index < list.length; index += 1) {
-        const trade = list[index];
-        if (trade?.wallet !== null) {
-          continue;
+      list.forEach((trade, index) => {
+        const sender = this.senders.get(trade.transactionHash);
+        if (trade.wallet === null && sender !== undefined) {
+          list[index] = { ...trade, wallet: sender };
         }
-        let sender = this.senders.get(trade.transactionHash);
-        if (sender === undefined) {
-          sender = (await this.options.rpc.transactionSender(trade.transactionHash)).toLowerCase();
-          this.senders.set(trade.transactionHash, sender);
-        }
-        list[index] = { ...trade, wallet: sender };
-      }
+      });
     }
   }
 
