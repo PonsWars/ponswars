@@ -100,11 +100,12 @@ describe('relativeVolume', () => {
       trade(100, 1, T0 - DAY + MINUTE),
       trade(100, 3, T0 - 2 * DAY + MINUTE),
     ];
-    expect(relativeVolume(trades, today, earlier, DOLLAR, DOLLAR)).toBe(RATIO_SCALE);
+    const actual = notionalIn(trades, today, DOLLAR);
+    const comparable = earlier.map((span) => notionalIn(trades, span, DOLLAR));
+    expect(relativeVolume(actual, comparable, DOLLAR)).toBe(RATIO_SCALE);
   });
 
   it('measures against the floor when the history is thinner than it', () => {
-    const trades = [trade(100, 1, T0 + MINUTE)];
-    expect(relativeVolume(trades, today, earlier, DOLLAR, 50n * DOLLAR)).toBe(2n * RATIO_SCALE);
+    expect(relativeVolume(100n * DOLLAR, [0n, 0n], 50n * DOLLAR)).toBe(2n * RATIO_SCALE);
   });
 });

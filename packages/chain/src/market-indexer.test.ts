@@ -190,6 +190,8 @@ function indexer(rpc: MarketRpc): RobinhoodMarketIndexer {
     rpc,
     addresses: MARKET,
     tradeRetentionMs: 3_600_000,
+    volumeRetentionMs: 3_600_000,
+    minTradeQuote: 1_000_000n,
     ponsRetentionMs: 3_600_000,
     maxBlocksPerPoll: 10_000n,
     referenceRefreshMs: 60_000,
@@ -213,6 +215,7 @@ describe('RobinhoodMarketIndexer', () => {
       expect.objectContaining({ quoteAmount: 210_000_000n, tokenAmount: 10n ** 18n }),
     ]);
     expect(market.trades('AAPL', all)).toEqual([]);
+    expect(market.notional('NVDA', all)).toBe(210_000_000n);
     expect(market.units('NVDA')).toEqual({ quoteDecimals: 6, tokenDecimals: 18 });
     expect(market.reference('NVDA')?.price).toBe(200n * 100_000_000n);
     expect(market.coversUntil()).toBe(blockTime(1_000));

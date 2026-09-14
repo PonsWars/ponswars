@@ -44,8 +44,23 @@ import { comparableSpans, isMarketOpen, type MarketCalendar } from './market-ses
 
 /** What the chain has seen, as far as one ticker is concerned. */
 export interface MarketSource {
-  /** DEX trades of the ticker's token against the dollar token inside `[from, to)`. */
+  /**
+   * DEX trades of the ticker's token against the dollar token inside `[from, to)`.
+   *
+   * Only as far back as a price and its volatility need; older trading is kept
+   * as totals, below.
+   */
   trades(ticker: ActiveTicker, span: Span): readonly DexTrade[];
+  /**
+   * The dollar value that traded inside `[from, to)`, counting only trades at
+   * or above the minimum, in the dollar token's base units.
+   *
+   * Kept by the minute for as long as relative volume looks back — days, where
+   * the trades themselves are kept for an hour or two — so a span's edges fall
+   * on whole minutes, the same way for today and for the days it is compared
+   * with.
+   */
+  notional(ticker: ActiveTicker, span: Span): bigint;
   /**
    * Pons trading quoted in the ticker's token inside `[from, to)`.
    *
@@ -216,11 +231,13 @@ export class OnchainMarket implements MarketDataPort {
   }
 
   private relativeVolume(ticker: ActiveTicker, span: Span): bigint {
-    const { price, comparableSessions, expectedNotionalFloor, calendar } = this.policy;
+    const { comparableSessions, expectedNotionalFloor, calendar } = this.policy;
     const earlier = comparableSpans(span, comparableSessions, calendar);
-    const oldest = earlier.reduce((min, entry) => (entry.from < min ? entry.from : min), span.from);
-    const trades = this.source.trades(ticker, { from: oldest, to: span.to });
-    return relativeVolume(trades, span, earlier, price.minTradeQuote, expectedNotionalFloor);
+    return relativeVolume(
+      this.source.notional(ticker, span),
+      earlier.map((entry) => this.source.notional(ticker, entry)),
+      expectedNotionalFloor,
+    );
   }
 
   private pons(

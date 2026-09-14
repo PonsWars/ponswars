@@ -8,7 +8,7 @@ import {
 } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
 import { PRICE_SCALE, type DexTrade, type ReferencePrice } from './dex-price.js';
-import type { Span } from './dex-window.js';
+import { notionalIn, type Span } from './dex-window.js';
 import { OnchainMarket, type MarketSource, type OnchainMarketPolicy } from './onchain-market.js';
 
 const DOLLAR = 1_000_000n;
@@ -78,6 +78,9 @@ class ArraySource implements MarketSource {
   ) {}
   trades(_ticker: ActiveTicker, span: Span): readonly DexTrade[] {
     return this.all.filter((entry) => entry.at >= span.from && entry.at < span.to);
+  }
+  notional(ticker: ActiveTicker, span: Span): bigint {
+    return notionalIn(this.trades(ticker, span), span, POLICY.price.minTradeQuote);
   }
   ponsActivity(_ticker: ActiveTicker, span: Span): readonly NormalizedActivity[] {
     return this.pons.filter((entry) => entry.at >= span.from && entry.at < span.to);

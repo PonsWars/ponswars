@@ -129,27 +129,23 @@ export function volatilityOver(
 /**
  * Notional against what is normal for the same stretch of a trading day (§12.2).
  *
- * `comparable` are the same span on earlier trading sessions — the calendar
- * decides which days those are. The expectation is their mean, and never below
- * `floor`, so a ticker that barely traded last week does not turn one ordinary
- * trade today into a many-times surge.
+ * `comparable` are the dollar totals of the same span on earlier trading
+ * sessions — the calendar decides which days those are. The expectation is
+ * their mean, and never below `floor`, so a ticker that barely traded last week
+ * does not turn one ordinary trade today into a many-times surge.
  */
 export function relativeVolume(
-  trades: readonly DexTrade[],
-  span: Span,
-  comparable: readonly Span[],
-  minTradeQuote: bigint,
+  actual: bigint,
+  comparable: readonly bigint[],
   floor: bigint,
 ): bigint {
   if (floor <= 0n) {
     throw new RangeError('The expected-volume floor must be positive');
   }
-  const actual = notionalIn(trades, span, minTradeQuote);
   const expected =
     comparable.length === 0
       ? 0n
-      : comparable.reduce((sum, earlier) => sum + notionalIn(trades, earlier, minTradeQuote), 0n) /
-        BigInt(comparable.length);
+      : comparable.reduce((sum, total) => sum + total, 0n) / BigInt(comparable.length);
   const baseline = expected > floor ? expected : floor;
   return (actual * RATIO_SCALE) / baseline;
 }

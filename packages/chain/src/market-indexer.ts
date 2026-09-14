@@ -72,8 +72,15 @@ export interface MarketRpc {
 export interface MarketIndexerOptions {
   readonly rpc: MarketRpc;
   readonly addresses: RobinhoodMarketAddresses;
-  /** How much DEX trading is kept: the volatility lookback and the comparable days. */
+  /** How long DEX trades themselves are kept: the price window and the volatility lookback. */
   readonly tradeRetentionMs: number;
+  /**
+   * How long per-minute dollar volume is kept: every comparable earlier trading
+   * day relative volume looks back to (§12.2). Days, where trades are hours.
+   */
+  readonly volumeRetentionMs: number;
+  /** Smallest trade counted towards volume, in the dollar token's base units. */
+  readonly minTradeQuote: bigint;
   /** How much Pons activity is kept: a battle and the confidence lookback before it. */
   readonly ponsRetentionMs: number;
   /** The widest block range one poll reads. */
@@ -88,6 +95,8 @@ export interface MarketIndexerOptions {
 const IDS_PER_QUERY = 200;
 
 const PRICE_DECIMALS = 8;
+
+const MINUTE = 60_000;
 
 interface PoolSide {
   readonly ticker: ActiveTicker;
@@ -121,6 +130,10 @@ export class RobinhoodMarketIndexer implements MarketSource {
     readonly atMs: number;
   }[] = [];
   private readonly dexTrades = new Map<ActiveTicker, DexTrade[]>();
+  /** Dollar volume per whole minute (epoch minutes), per ticker. */
+  private readonly minuteVolume = new Map<ActiveTicker, Map<number, bigint>>();
+  /** Trades older than this are counted into volume but not kept. */
+  private keepTradesFrom = 0;
   private readonly ponsTrades = new Map<ActiveTicker, PonsTrade[]>();
   private readonly seen = new Set<string>();
   private readonly senders = new Map<string, string>();
@@ -137,6 +150,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
     for (const ticker of ACTIVE_TICKERS) {
       this.tickerOf.set(options.addresses.tickers[ticker].token.toLowerCase(), ticker);
       this.dexTrades.set(ticker, []);
+      this.minuteVolume.set(ticker, new Map());
       this.ponsTrades.set(ticker, []);
     }
     this.routers = new Set(options.addresses.routers.map((router) => router.toLowerCase()));
@@ -146,6 +160,30 @@ export class RobinhoodMarketIndexer implements MarketSource {
 
   trades(ticker: ActiveTicker, span: Span): readonly DexTrade[] {
     return between(this.dexTrades.get(ticker) ?? [], span);
+  }
+
+  notional(ticker: ActiveTicker, span: Span): bigint {
+    const minutes = this.minuteVolume.get(ticker);
+    if (minutes === undefined) {
+      return 0n;
+    }
+    // Whole minutes starting inside the span. Walked over whichever is shorter —
+    // the span or what is kept — so a wide span costs no more than the history.
+    const first = Math.ceil(span.from / MINUTE);
+    const end = Math.ceil(span.to / MINUTE);
+    let total = 0n;
+    if (end - first <= minutes.size) {
+      for (let minute = first; minute < end; minute += 1) {
+        total += minutes.get(minute) ?? 0n;
+      }
+    } else {
+      for (const [minute, value] of minutes) {
+        if (minute >= first && minute < end) {
+          total += value;
+        }
+      }
+    }
+    return total;
   }
 
   ponsActivity(ticker: ActiveTicker, span: Span): readonly NormalizedActivity[] {
@@ -204,6 +242,12 @@ export class RobinhoodMarketIndexer implements MarketSource {
 
     const head = await rpc.blockNumber();
     const headAt = await rpc.blockTimestamp(head);
+    this.keepTradesFrom = headAt - this.options.tradeRetentionMs;
+    const volumeFrom = await this.blockAtOrBefore(
+      head,
+      headAt,
+      headAt - Math.max(this.options.volumeRetentionMs, this.options.tradeRetentionMs),
+    );
     const tradesFrom = await this.blockAtOrBefore(
       head,
       headAt,
@@ -244,7 +288,10 @@ export class RobinhoodMarketIndexer implements MarketSource {
       `market: ${String(this.usdgPools.size)} USDG pools, ${String(this.ponsPools.size)} Pons pools`,
     );
 
-    await this.readTrades(tradesFrom, head, ponsFrom);
+    this.say(
+      `market: volume from block ${volumeFrom.toString()}, trades kept from ${tradesFrom.toString()}`,
+    );
+    await this.readTrades(volumeFrom, head, ponsFrom);
     await this.refreshReferences(true);
     this.lastBlock = head;
     this.covered = utcTimestamp(headAt);
@@ -455,14 +502,21 @@ export class RobinhoodMarketIndexer implements MarketSource {
           const tokenAmount = abs(usdgPool.tickerIs0 ? event.amount0 : event.amount1);
           const quoteAmount = abs(usdgPool.tickerIs0 ? event.amount1 : event.amount0);
           if (tokenAmount > 0n) {
-            insertByTime(this.dexTrades.get(usdgPool.ticker), {
-              eventId,
-              poolId: event.poolId,
-              blockNumber,
-              at,
-              quoteAmount,
-              tokenAmount,
-            });
+            if (quoteAmount >= this.options.minTradeQuote) {
+              const minutes = this.minuteVolume.get(usdgPool.ticker);
+              const minute = Math.floor(atMs / MINUTE);
+              minutes?.set(minute, (minutes.get(minute) ?? 0n) + quoteAmount);
+            }
+            if (atMs >= this.keepTradesFrom) {
+              insertByTime(this.dexTrades.get(usdgPool.ticker), {
+                eventId,
+                poolId: event.poolId,
+                blockNumber,
+                at,
+                quoteAmount,
+                tokenAmount,
+              });
+            }
           }
           return;
         }
@@ -600,7 +654,15 @@ export class RobinhoodMarketIndexer implements MarketSource {
 
   private prune(): void {
     const now = this.covered;
+    this.keepTradesFrom = now - this.options.tradeRetentionMs;
+    const oldestMinute = Math.floor((now - this.options.volumeRetentionMs) / MINUTE);
     for (const ticker of ACTIVE_TICKERS) {
+      const minutes = this.minuteVolume.get(ticker);
+      for (const minute of minutes?.keys() ?? []) {
+        if (minute < oldestMinute) {
+          minutes?.delete(minute);
+        }
+      }
       dropBefore(this.dexTrades.get(ticker), now - this.options.tradeRetentionMs);
       dropBefore(this.ponsTrades.get(ticker), now - this.options.ponsRetentionMs);
     }
