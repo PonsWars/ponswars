@@ -103,7 +103,7 @@
 
   /* Typography roles (§5) */
   --pw-font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  --pw-font-ui: Inter, Geist, system-ui, sans-serif;
+  --pw-font-ui: 'Inter Variable', Inter, Geist, system-ui, sans-serif;
   --pw-font-data: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
 }
 
