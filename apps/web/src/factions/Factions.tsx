@@ -146,14 +146,46 @@ function RosterGrid({ onNavigate }: { readonly onNavigate: (next: Route) => void
                 // accent, and ten cards each washed in their own colour is a
                 // paint chart rather than a roster.
                 borderLeft: `2px solid ${accent}`,
+                padding: 0,
+                overflow: 'hidden',
               }}
             >
+              {/* The legion's plate across the top of its card. A roster of ten
+                  text blocks reads as a list of settings; the cast is what a
+                  visitor came to see, and every plate already exists. */}
+              <div style={{ position: 'relative', height: 132 }}>
+                <img
+                  src={FACTION_ART[ticker]}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    objectPosition: 'center 38%',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background:
+                      'linear-gradient(180deg, rgba(6,11,16,0) 35%, rgba(6,11,16,0.55) 75%, var(--pw-surface-2) 100%)',
+                  }}
+                />
+              </div>
               <div
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'auto 1fr',
                   gap: 'var(--pw-space-3)',
                   alignItems: 'start',
+                  padding: '0 var(--pw-space-4) var(--pw-space-3)',
+                  marginTop: -28,
+                  position: 'relative',
                 }}
               >
                 {/* The same standard the dossier and the battlefield fly, at
@@ -205,7 +237,7 @@ function FactionDetail({ ticker }: { readonly ticker: ActiveTicker }): JSX.Eleme
           overflow: 'hidden',
           padding: 0,
           borderLeft: `2px solid ${accent}`,
-          minHeight: 260,
+          minHeight: 360,
           display: 'flex',
           alignItems: 'flex-end',
         }}
@@ -224,19 +256,19 @@ function FactionDetail({ ticker }: { readonly ticker: ActiveTicker }): JSX.Eleme
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            // The plate is the ground the type sits on, not the subject.
-            opacity: 0.55,
+            objectPosition: 'center 40%',
           }}
         />
-        {/* Dark enough at the bottom to read a paragraph over, clear at the top
-            so the picture is still a picture. §36.7 keeps a faction readable
-            without relying on colour, and that includes readable at all. */}
+        {/* Dark where the type is — along the bottom and down the left, where
+            the standard and the name stand — and clear across the rest, so the
+            picture is still a picture. It was dimmed all over, and the plate
+            behind the name was a dark smudge. */}
         <div
           style={{
             position: 'absolute',
             inset: 0,
             background:
-              'linear-gradient(180deg, rgba(6,11,16,0.15) 0%, rgba(6,11,16,0.72) 52%, rgba(6,11,16,0.94) 100%)',
+              'linear-gradient(90deg, rgba(6,11,16,0.88) 0%, rgba(6,11,16,0.5) 38%, rgba(6,11,16,0) 70%), linear-gradient(180deg, rgba(6,11,16,0) 40%, rgba(6,11,16,0.9) 100%)',
           }}
         />
 
