@@ -122,6 +122,7 @@ describe('OnchainMarket.observe', () => {
     });
 
     expect(observation.health).toBe('HEALTHY');
+    expect(observation.reason).toBe('CLOSE_OK');
     expect(observation.inputs.windowReturn).toBe(10_000n); // +1%
     // $101 today against $50 on each comparable day.
     expect(observation.inputs.relativeVolume).toBe((101n * RATIO_SCALE) / 50n);
@@ -142,6 +143,7 @@ describe('OnchainMarket.observe', () => {
       at: saturday,
     });
     expect(observation.health).toBe('STALE');
+    expect(observation.reason).toBe('MARKET_CLOSED');
     expect(observation.inputs.windowReturn).toBe(0n);
   });
 
@@ -152,6 +154,7 @@ describe('OnchainMarket.observe', () => {
       at: utcTimestamp(LOCK + 2 * MINUTE),
     });
     expect(observation.health).toBe('STALE');
+    expect(observation.reason).toBe('OPEN_NO_TRADES');
     expect(observation.inputs.windowReturn).toBe(0n);
   });
 
@@ -160,13 +163,19 @@ describe('OnchainMarket.observe', () => {
       new ArraySource([trade(100, LOCK - 1_000)], [], undefined, utcTimestamp(0)),
       POLICY,
     );
-    expect((await unread.observe('NVDA', { opensAt: LOCK, at: LOCK })).health).toBe('UNAVAILABLE');
+    expect(await unread.observe('NVDA', { opensAt: LOCK, at: LOCK })).toMatchObject({
+      health: 'UNAVAILABLE',
+      reason: 'NOT_STARTED',
+    });
 
     const behind = new OnchainMarket(
       new ArraySource([trade(100, LOCK - 1_000)], [], undefined, utcTimestamp(LOCK - MINUTE)),
       POLICY,
     );
-    expect((await behind.observe('NVDA', { opensAt: LOCK, at: LOCK })).health).toBe('STALE');
+    expect(await behind.observe('NVDA', { opensAt: LOCK, at: LOCK })).toMatchObject({
+      health: 'STALE',
+      reason: 'SOURCE_LAG',
+    });
   });
 });
 

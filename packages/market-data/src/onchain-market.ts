@@ -144,14 +144,14 @@ export class OnchainMarket implements MarketDataPort {
     const covered = this.source.coversUntil();
     if (covered <= 0) {
       // Not started: nothing has been read, so nothing can be said.
-      return { inputs: neutral, health: 'UNAVAILABLE' };
+      return { inputs: neutral, health: 'UNAVAILABLE', reason: 'NOT_STARTED' };
     }
     if (at - covered > this.policy.maxSourceLagMs) {
-      return { inputs: neutral, health: 'STALE' };
+      return { inputs: neutral, health: 'STALE', reason: 'SOURCE_LAG' };
     }
     // §23.8: a closed market is not a flat one.
     if (!isMarketOpen(at, calendar)) {
-      return { inputs: neutral, health: 'STALE' };
+      return { inputs: neutral, health: 'STALE', reason: 'MARKET_CLOSED' };
     }
 
     const earliest = utcTimestamp(Math.min(opensAt, at) - price.maxQuietMs);
@@ -162,8 +162,14 @@ export class OnchainMarket implements MarketDataPort {
     const opening = priceAt(trades, opensAt, units, reference, price);
     const closing = priceAt(trades, at, units, reference, price);
     const health = worst(opening.health, closing.health);
+    // The reading that made the health what it is: the close, unless the open
+    // was worse. Prefixed so a calibration can tell a thin lock from a thin now.
+    const reason =
+      SEVERITY[opening.health] > SEVERITY[closing.health]
+        ? `OPEN_${opening.note}`
+        : `CLOSE_${closing.note}`;
     if (opening.price === null || closing.price === null) {
-      return { inputs: neutral, health: worst(health, 'STALE') };
+      return { inputs: neutral, health: worst(health, 'STALE'), reason };
     }
 
     const window: Span = { from: opensAt, to: at > opensAt ? at : utcTimestamp(opensAt + 1) };
@@ -178,6 +184,7 @@ export class OnchainMarket implements MarketDataPort {
         cardSupport: NO_CARD_SUPPORT,
       },
       health,
+      reason,
     };
   }
 

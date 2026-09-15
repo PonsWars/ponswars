@@ -26,6 +26,12 @@ import type { ActiveTicker, FeedHealth, RoundId, UtcTimestamp } from '@ponswars/
 export interface MarketObservation {
   readonly inputs: SideInputs;
   readonly health: FeedHealth;
+  /**
+   * Why the health is what it is, where a source can say: a short code for
+   * operators and calibration. Never scored, never published to a client
+   * (§48.3 tells players only that data is degraded, not which source).
+   */
+  readonly reason?: string;
 }
 
 /**
