@@ -161,7 +161,7 @@ const lines = [
       ? `, ${String(report.rounds.withoutVolumeHistory)} without enough earlier sessions for relative volume`
       : ''),
   '',
-  'Ticker   healthy  degraded  stale   battles voided  voids caused   return bps p50/p90   rel. volume p50',
+  'Ticker   healthy  degraded  stale   battles voided  voids caused   return bps p50/p90   rel. volume p50   most common reasons',
 ];
 for (const [ticker, t] of Object.entries(report.tickers)) {
   const ticks = t.ticks.HEALTHY + t.ticks.DEGRADED + t.ticks.STALE + t.ticks.UNAVAILABLE;
@@ -175,7 +175,12 @@ for (const [ticker, t] of Object.entries(report.tickers)) {
       ret.count === 0
         ? '-'.padStart(20)
         : `${ret.p50.toFixed(1)} / ${ret.p90.toFixed(1)}`.padStart(20)
-    }   ${t.inputs.relativeVolume.count === 0 ? '-' : t.inputs.relativeVolume.p50.toFixed(2)}`,
+    }   ${(t.inputs.relativeVolume.count === 0 ? '-' : t.inputs.relativeVolume.p50.toFixed(2)).padStart(15)}   ${Object.entries(
+      t.unhealthyReasons,
+    )
+      .slice(0, 2)
+      .map(([reason, count]) => `${reason} ${percent(count, ticks).trim()}`)
+      .join(', ')}`,
   );
 }
 const { battles } = report;

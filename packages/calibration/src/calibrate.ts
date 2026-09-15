@@ -76,6 +76,12 @@ export interface CalibrationOptions {
 export interface TickerReport {
   /** Every tick observed, by the health the adapter gave it. */
   readonly ticks: Readonly<Record<FeedHealth, number>>;
+  /**
+   * Every tick that was not `HEALTHY`, by the reason the adapter gave: which
+   * bound, or the source's lag, or the market being shut. The first thing to
+   * read when a ticker voids too often.
+   */
+  readonly unhealthyReasons: Readonly<Record<string, number>>;
   /** Battles this ticker fought that finalized or voided. */
   readonly battles: { readonly finalized: number; readonly voided: number };
   /** Battles voided at a tick where this ticker's own reading required it. */
@@ -149,6 +155,7 @@ const TIEBREAK_BLOCK = `0x${'ca'.repeat(32)}`;
 
 interface TickerSamples {
   readonly ticks: Record<FeedHealth, number>;
+  readonly reasons: Map<string, number>;
   finalized: number;
   voided: number;
   voidsCaused: number;
@@ -309,6 +316,10 @@ export async function calibrate(
         readings.set(ticker, observation);
         const into = sampleOf(ticker);
         into.ticks[observation.health] += 1;
+        if (observation.health !== 'HEALTHY') {
+          const reason = observation.reason ?? 'UNSPECIFIED';
+          into.reasons.set(reason, (into.reasons.get(reason) ?? 0) + 1);
+        }
         if (tick % options.sampleEveryTicks === 0 && !requiresVoid(observation.health)) {
           const { inputs } = observation;
           into.adjustedReturn.add(ratio(volatilityAdjustedReturn(inputs)));
@@ -432,6 +443,7 @@ function ratio(scaled: bigint): number {
 function emptyTickerSamples(): TickerSamples {
   return {
     ticks: tally(FEED_HEALTH),
+    reasons: new Map(),
     finalized: 0,
     voided: 0,
     voidsCaused: 0,
@@ -451,6 +463,8 @@ function emptyTickerSamples(): TickerSamples {
 function tickerReport(samples: TickerSamples): TickerReport {
   return {
     ticks: samples.ticks,
+    // Most frequent first, so the report reads top-down.
+    unhealthyReasons: Object.fromEntries([...samples.reasons].sort((a, b) => b[1] - a[1])),
     battles: { finalized: samples.finalized, voided: samples.voided },
     voidsCaused: samples.voidsCaused,
     inputs: {

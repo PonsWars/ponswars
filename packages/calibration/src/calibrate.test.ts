@@ -91,6 +91,8 @@ describe('calibrate', { timeout: 60_000 }, () => {
     expect(report.tickers.NVDA.battles).toEqual({ finalized: 24, voided: 3 });
     expect(report.tickers.NVDA.ticks.STALE).toBe(0);
     expect(report.tickers.AMZN.ticks.HEALTHY).toBe(0);
+    // AMZN never traded, so it never had a price to open a battle with.
+    expect(Object.keys(report.tickers.AMZN.unhealthyReasons)[0]).toBe('CLOSE_NO_TRADES');
 
     expect(report.battles.margin.count).toBe(3 * 36);
     expect(report.tickers.NVDA.inputs.returnBps.count).toBeGreaterThan(0);

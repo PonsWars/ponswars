@@ -222,9 +222,12 @@ async function reportHealth(
     const at = utcTimestamp(Date.now());
     const window = { opensAt: utcTimestamp(at - HEALTH_REPORT_MS), at };
     const readings = await Promise.all(
-      ACTIVE_TICKERS.map(
-        async (ticker) => `${ticker} ${(await port.observe(ticker, window)).health}`,
-      ),
+      ACTIVE_TICKERS.map(async (ticker) => {
+        const { health, reason } = await port.observe(ticker, window);
+        return health === 'HEALTHY' || reason === undefined
+          ? `${ticker} ${health}`
+          : `${ticker} ${health} (${reason})`;
+      }),
     );
     const behind = (at - indexer.coversUntil()) / 1_000;
     say(`market: ${behind.toFixed(1)} s behind the chain; ${readings.join(', ')}\n`);
