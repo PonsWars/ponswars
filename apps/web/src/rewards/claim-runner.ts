@@ -1,4 +1,5 @@
 import { claimCalldata } from '../live/claim-calldata.js';
+import { SECRET_CLAIM_CALLDATA } from '../live/secret-calldata.js';
 import {
   connectWallet,
   currentChain,
@@ -33,17 +34,12 @@ export type ClaimResult =
   | { readonly state: 'CONFIRMED'; readonly transaction: `0x${string}` }
   | { readonly state: 'FAILED'; readonly reason: ClaimFailure };
 
-export interface ClaimRequest {
+/** What any claim needs from the wallet, whatever it is claiming. */
+export interface WalletClaimRequest {
   readonly provider: Eip1193Provider;
   /** The wallet signed in to PonsWars. */
   readonly wallet: string;
   readonly chainId: number;
-  readonly distributor: string;
-  readonly claim: {
-    readonly distributionId: bigint;
-    readonly amount: bigint;
-    readonly proof: readonly string[];
-  };
   readonly onState: (state: ClaimState) => void;
   /** How long to wait between receipt reads. */
   readonly pollMs?: number;
@@ -52,7 +48,47 @@ export interface ClaimRequest {
   readonly sleep?: (ms: number) => Promise<void>;
 }
 
+export interface ClaimRequest extends WalletClaimRequest {
+  readonly distributor: string;
+  readonly claim: {
+    readonly distributionId: bigint;
+    readonly amount: bigint;
+    readonly proof: readonly string[];
+  };
+}
+
+export interface SecretClaimRequest extends WalletClaimRequest {
+  readonly vault: string;
+}
+
 export async function runClaim(request: ClaimRequest): Promise<ClaimResult> {
+  return sendClaim(request, {
+    to: request.distributor,
+    data: claimCalldata({
+      distributionId: request.claim.distributionId,
+      account: request.wallet,
+      amount: request.claim.amount,
+      proof: request.claim.proof,
+    }),
+  });
+}
+
+/**
+ * Claiming a Secret's reward from the vault (§8.5).
+ *
+ * The same walk through the wallet, and a call with no arguments: the vault
+ * pays `msg.sender` what it reserved for them, so there is nothing for a
+ * client to get wrong about the amount or the recipient.
+ */
+export function runSecretClaim(request: SecretClaimRequest): Promise<ClaimResult> {
+  return sendClaim(request, { to: request.vault, data: SECRET_CLAIM_CALLDATA });
+}
+
+/** Everything both claims need from the wallet, with the call they differ by. */
+async function sendClaim(
+  request: WalletClaimRequest,
+  call: { readonly to: string; readonly data: `0x${string}` },
+): Promise<ClaimResult> {
   const { provider, onState } = request;
   const sleep =
     request.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
@@ -78,13 +114,8 @@ export async function runClaim(request: ClaimRequest): Promise<ClaimResult> {
 
   const sent = await sendTransaction(provider, {
     from: connected.value.address,
-    to: request.distributor,
-    data: claimCalldata({
-      distributionId: request.claim.distributionId,
-      account: request.wallet,
-      amount: request.claim.amount,
-      proof: request.claim.proof,
-    }),
+    to: call.to,
+    data: call.data,
   });
   if (!sent.ok) {
     return fail(sent.failure.kind === 'DECLINED' ? 'DECLINED' : 'REVERTED');

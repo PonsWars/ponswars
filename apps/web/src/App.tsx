@@ -16,6 +16,8 @@ import { fetchBattleResult } from './live/round-client.js';
 import { useLiveProfile, type LiveProfile } from './live/useLiveProfile.js';
 import { useLiveGenesis, type LiveGenesis } from './live/useLiveGenesis.js';
 import { useRewardClaims } from './live/useRewardClaims.js';
+import { useSecretClaim } from './live/useSecretClaim.js';
+import { secretClaimView, type SecretClaimView } from './rewards/secret-view.js';
 import { claimEntries } from './rewards/claims-view.js';
 import { useLiveWorld } from './live/useLiveWorld.js';
 import { useWalletSession } from './live/useWalletSession.js';
@@ -311,6 +313,22 @@ const PLACEHOLDER_PROFILE: ProfileData = {
 const PLACEHOLDER_POOL: PoolStatus = { balance: '12.40' };
 
 /**
+ * A Secret waiting to be claimed, for the preview build only (§8.5).
+ *
+ * The panel exists for the rare wallet that holds one, so a preview that never
+ * showed it would leave it undesigned and unreviewed. The live build shows
+ * this panel only when the vault says there is a Secret.
+ */
+const PLACEHOLDER_SECRET: SecretClaimView = {
+  amount: '0.2 SPY',
+  vault: `0x${'5e'.repeat(20)}`,
+  status: 'READY_TO_CLAIM',
+  headline: 'READY TO CLAIM',
+  detail: null,
+  actionable: true,
+};
+
+/**
  * A personal page's data from the live profile, for as long as it is loading,
  * failed or arrived — and asking for a wallet when there is no session.
  */
@@ -498,6 +516,22 @@ export function App(): JSX.Element {
           entries: claimEntries(rewardClaims.claims, rewardClaims.progress),
           onClaim: rewardClaims.claim,
         }
+      : null;
+
+  // The Secret Stock Drop this wallet holds, if it holds one (§8.5). Read
+  // beside the published rewards, and shown only where the vault says there is
+  // one — which is almost no wallet.
+  const secretClaim = useSecretClaim(
+    status.live ? walletSession.authorization : null,
+    walletSession.status.kind === 'CONNECTED' ? walletSession.status.wallet : null,
+    route.kind === 'REWARDS',
+  );
+  const secretData =
+    secretClaim.kind === 'READY'
+      ? (() => {
+          const view = secretClaimView(secretClaim.secret, secretClaim.progress);
+          return view === null ? null : { view, onClaim: secretClaim.claim };
+        })()
       : null;
 
   // The wallet's Genesis claim, read while its page is open and kept current
@@ -709,6 +743,7 @@ export function App(): JSX.Element {
           }
           pool={status.live ? null : PLACEHOLDER_POOL}
           claims={status.live ? claimsData : null}
+          secret={status.live ? secretData : { view: PLACEHOLDER_SECRET, onClaim: () => undefined }}
           genesis={
             status.live
               ? fromLiveGenesis(liveGenesis)

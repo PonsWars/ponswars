@@ -15,6 +15,8 @@ import { GenesisClaim, type GenesisPageData } from '../genesis/GenesisClaim.js';
 import { WarRoom, type ProfileData } from '../profile/WarRoom.js';
 import { RewardClaims, type RewardClaimsData } from '../rewards/RewardClaims.js';
 import { RewardsHub, type PoolStatus } from '../rewards/RewardsHub.js';
+import { SecretClaim } from '../rewards/SecretClaim.js';
+import type { SecretClaimView } from '../rewards/secret-view.js';
 import { canTransitionClaim, type ClaimState, type RewardView } from '../rewards/reward-view.js';
 import { ResultScreen } from '../result/ResultScreen.js';
 import { playerResultView } from '../result/result-view.js';
@@ -42,6 +44,7 @@ export function Presentations({
   reward,
   pool,
   claims,
+  secret,
   genesis,
   result,
 }: {
@@ -52,6 +55,8 @@ export function Presentations({
   readonly pool: PoolStatus | null;
   /** The wallet's published rewards, once read; `null` where there are none to show. */
   readonly claims: RewardClaimsData | null;
+  /** The Secret this wallet holds; `null` for every wallet that holds none. */
+  readonly secret: { readonly view: SecretClaimView; readonly onClaim: () => void } | null;
   readonly genesis: PersonalData<GenesisPageData>;
   readonly result: FinishedBattle | null;
 }): JSX.Element {
@@ -135,6 +140,7 @@ export function Presentations({
           {personal('REWARDS', reward, (value) => (
             <>
               <RewardsPresentation view={value} pool={pool} />
+              {secret === null ? null : <SecretClaim view={secret.view} onClaim={secret.onClaim} />}
               {claims === null ? null : <RewardClaims data={claims} />}
             </>
           ))}
