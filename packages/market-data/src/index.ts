@@ -5,3 +5,4 @@ export * from './dex-price.js';
 export * from './dex-window.js';
 export * from './market-session.js';
 export * from './onchain-market.js';
+export * from './market-tape.js';
