@@ -7,3 +7,4 @@ export * from './market-session.js';
 export * from './onchain-market.js';
 export * from './market-tape.js';
 export * from './tape-recorder.js';
+export * from './onchain-policy.js';

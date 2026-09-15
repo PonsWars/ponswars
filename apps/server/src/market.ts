@@ -8,18 +8,11 @@ import type { Config } from '@ponswars/config';
 import {
   nextOpenWindow,
   OnchainMarket,
-  parseHolidays,
+  onchainMarketPolicy,
   SyntheticMarket,
-  type MarketCalendar,
 } from '@ponswars/market-data';
 import type { MarketDataPort } from '@ponswars/round-service';
-import {
-  CONFIDENCE_LOOKBACK,
-  parseDecimalToBaseUnits,
-  ROUND_DURATION,
-  tokenDecimals,
-  type UtcTimestamp,
-} from '@ponswars/shared-types';
+import { CONFIDENCE_LOOKBACK, ROUND_DURATION, type UtcTimestamp } from '@ponswars/shared-types';
 
 /**
  * The market this deployment scores battles from (§23).
@@ -64,21 +57,6 @@ const MAX_BLOCKS_PER_POLL = 5_000n;
  */
 const REFERENCE_REFRESH_MS = 30_000;
 
-/** How far behind the chain the indexer may be before its market is STALE. */
-const MAX_SOURCE_LAG_MS = 30_000;
-
-/**
- * How many equal parts the confidence lookback's path is cut into (§10.1).
- *
- * Sixty fifteen-second parts: the shape the momentum-stability bands in
- * `CONFIDENCE_CALIBRATION` were measured against. A different count counts
- * direction changes on a different scale.
- */
-const CONFIDENCE_SUB_WINDOWS = 60;
-
-/** The Pons qualification rules' version, stamped on every result (§75.5). */
-const PONS_POLICY_VERSION = 'pons-onchain-v1';
-
 export async function startMarket(
   config: Config,
   signal: AbortSignal,
@@ -113,12 +91,11 @@ async function startOnchainMarket(
     // A stop during the backfill ends it at the next call instead of after it.
     signal,
   });
-  // Dollar amounts are configured in USD and compared in USDG base units, at
-  // the decimals the token itself reports.
-  const usdgDecimals = tokenDecimals(await rpc.tokenDecimals(addresses.usdg));
-  const usd = (decimal: string): bigint => parseDecimalToBaseUnits(decimal, usdgDecimals);
-  const minTradeQuote = usd(config.MARKET_MIN_TRADE_USD);
-  const calendar: MarketCalendar = { holidays: parseHolidays(config.MARKET_HOLIDAYS.join(',')) };
+  const quoteDecimals = await rpc.tokenDecimals(addresses.usdg);
+  const policy = onchainMarketPolicy(config, {
+    quoteDecimals,
+    excludedAddresses: addresses.routers,
+  });
 
   const indexer = new RobinhoodMarketIndexer({
     rpc,
@@ -128,7 +105,8 @@ async function startOnchainMarket(
       config.MARKET_VOLATILITY_LOOKBACK_MS + config.PRICE_FEED_STALE_AFTER_MS + ROUND_DURATION,
     // Every comparable trading day, with a long weekend and a holiday between.
     volumeRetentionMs: (config.MARKET_COMPARABLE_SESSIONS + 4) * DAY + ROUND_DURATION,
-    minTradeQuote,
+    // Volume counts from the same dust bound the price does.
+    minTradeQuote: policy.price.minTradeQuote,
     // A battle, and the confidence lookback before its round.
     ponsRetentionMs: ROUND_DURATION + CONFIDENCE_LOOKBACK + MINUTE,
     maxBlocksPerPoll: MAX_BLOCKS_PER_POLL,
@@ -145,40 +123,12 @@ async function startOnchainMarket(
 
   const stopped = follow(indexer, signal, say);
 
-  const port = new OnchainMarket(indexer, {
-    price: {
-      priceWindowMs: config.MARKET_PRICE_WINDOW_MS,
-      maxQuietMs: config.PRICE_FEED_STALE_AFTER_MS,
-      minTradeQuote,
-      maxTradeDeviationBps: BigInt(config.MARKET_OUTLIER_BPS),
-      maxPriceDeviationBps: BigInt(config.MARKET_DIVERGENCE_BPS),
-      maxReferenceAgeMs: config.MARKET_REFERENCE_MAX_AGE_MS,
-      minWindowTrades: config.MARKET_MIN_WINDOW_TRADES,
-    },
-    maxSourceLagMs: Math.min(
-      MAX_SOURCE_LAG_MS,
-      config.VOLUME_FEED_STALE_AFTER_MS,
-      config.PONS_FEED_STALE_AFTER_MS,
-    ),
-    volatilityLookbackMs: config.MARKET_VOLATILITY_LOOKBACK_MS,
-    // Basis points to RATIO_SCALE, where 1_000_000 is 100%.
-    volatilityFloor: BigInt(config.MARKET_VOLATILITY_FLOOR_BPS) * 100n,
-    comparableSessions: config.MARKET_COMPARABLE_SESSIONS,
-    expectedNotionalFloor: usd(config.MARKET_EXPECTED_VOLUME_FLOOR_USD),
-    confidenceSubWindows: CONFIDENCE_SUB_WINDOWS,
-    pons: {
-      minimumAmount: usd(config.PONS_MIN_ACTIVITY_USD),
-      maxIdenticalPerWallet: config.PONS_MAX_IDENTICAL_PER_WALLET,
-      excludedAddresses: new Set(addresses.routers.map((router) => router.toLowerCase())),
-      version: PONS_POLICY_VERSION,
-    },
-    calendar,
-  });
+  const port = new OnchainMarket(indexer, policy);
 
   return {
     port,
     real: true,
-    roundsOpenAt: (at) => nextOpenWindow(at, ROUND_DURATION, calendar),
+    roundsOpenAt: (at) => nextOpenWindow(at, ROUND_DURATION, policy.calendar),
     stopped,
   };
 }
