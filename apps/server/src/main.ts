@@ -261,9 +261,15 @@ async function main(): Promise<void> {
 
   let round: RoundEngineState | null = null;
 
+  // Started once the API is listening; `null` through the backfill.
+  let market: RunningMarket | null = null;
+
   const api = buildServer({
     allowedOrigins: config.ALLOWED_ORIGINS,
     currentRound: () => round,
+    // The driver's own rule for when a round may open, so a client is told the
+    // next round opens when the driver will actually open it.
+    roundsOpenAt: (at) => market?.roundsOpenAt?.(at) ?? at,
     // Straight off the table the driver's finalization wrote to (§25), rather
     // than from anything this process is holding. A result is immutable once it
     // exists, so there is nothing to cache — and a shared `/result/:battleId`
@@ -374,7 +380,6 @@ async function main(): Promise<void> {
     shutdown('SIGINT');
   });
 
-  let market: RunningMarket | null = null;
   try {
     try {
       market = await startMarket(config, stopping.signal, say);
