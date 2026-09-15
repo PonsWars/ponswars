@@ -12,7 +12,13 @@ import {
   SyntheticMarket,
 } from '@ponswars/market-data';
 import type { MarketDataPort } from '@ponswars/round-service';
-import { CONFIDENCE_LOOKBACK, ROUND_DURATION, type UtcTimestamp } from '@ponswars/shared-types';
+import {
+  ACTIVE_TICKERS,
+  CONFIDENCE_LOOKBACK,
+  ROUND_DURATION,
+  utcTimestamp,
+  type UtcTimestamp,
+} from '@ponswars/shared-types';
 
 /**
  * The market this deployment scores battles from (§23).
@@ -45,6 +51,9 @@ const DAY = 24 * 60 * MINUTE;
  * when that is too stale.
  */
 const POLL_MS = 1_000;
+
+/** How often the market's health is written to the log. */
+const HEALTH_REPORT_MS = 60_000;
 
 /** How often a run of throttled calls is reported. */
 const THROTTLE_REPORT_MS = 10_000;
@@ -138,9 +147,11 @@ async function startOnchainMarket(
   await indexer.start();
   say('market: caught up\n');
 
-  const stopped = follow(indexer, signal, say);
-
   const port = new OnchainMarket(indexer, policy);
+  const stopped = Promise.all([
+    follow(indexer, signal, say),
+    reportHealth(port, indexer, signal, say),
+  ]).then(() => undefined);
 
   return {
     port,
@@ -184,6 +195,39 @@ async function follow(
     if (caughtUp || failing) {
       await wait(POLL_MS, signal);
     }
+  }
+}
+
+/**
+ * Says, once a minute, how far behind the chain the market is and how each
+ * ticker reads.
+ *
+ * For whoever operates the service, in the log. A battle voids on a single
+ * `STALE` second (§4.4), and an operator who first learns a ticker has been
+ * stale all afternoon from a column of voided results has learned it late.
+ * Not published to players: §48.3 tells a client only that data is degraded,
+ * never which source.
+ */
+async function reportHealth(
+  port: OnchainMarket,
+  indexer: RobinhoodMarketIndexer,
+  signal: AbortSignal,
+  say: (line: string) => void,
+): Promise<void> {
+  for (;;) {
+    await wait(HEALTH_REPORT_MS, signal);
+    if (signal.aborted) {
+      return;
+    }
+    const at = utcTimestamp(Date.now());
+    const window = { opensAt: utcTimestamp(at - HEALTH_REPORT_MS), at };
+    const readings = await Promise.all(
+      ACTIVE_TICKERS.map(
+        async (ticker) => `${ticker} ${(await port.observe(ticker, window)).health}`,
+      ),
+    );
+    const behind = (at - indexer.coversUntil()) / 1_000;
+    say(`market: ${behind.toFixed(1)} s behind the chain; ${readings.join(', ')}\n`);
   }
 }
 
