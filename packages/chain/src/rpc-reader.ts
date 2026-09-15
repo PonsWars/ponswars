@@ -1,11 +1,14 @@
 import { createPublicClient, erc20Abi, http, webSocket, type PublicClient } from 'viem';
 import type { BlockRef, ChainReader } from './finalized-block.js';
+import type { RpcRequest } from './log-scan.js';
 import type { TokenReader } from './token.js';
 
-/** Robinhood Chain over one JSON-RPC endpoint: its blocks, and the tokens on it. */
+/** Robinhood Chain over one JSON-RPC endpoint: its blocks, the tokens on it, and its logs. */
 export interface RobinhoodChainRpc {
   readonly chain: ChainReader;
   token(address: `0x${string}`): TokenReader;
+  /** One JSON-RPC call, for the readers that take logs rather than a contract. */
+  readonly request: RpcRequest;
 }
 
 /**
@@ -33,6 +36,8 @@ export function robinhoodChainRpc(url: string): RobinhoodChainRpc {
       finalizedBlock: async () => refOf(await client.getBlock({ blockTag: 'finalized' }), null),
       block: async (number) => refOf(await client.getBlock({ blockNumber: number }), number),
     },
+    request: (method, params) =>
+      client.request({ method, params } as unknown as Parameters<PublicClient['request']>[0]),
     token: (address) => ({
       address,
       decimals: () => client.readContract({ address, abi: erc20Abi, functionName: 'decimals' }),

@@ -36,6 +36,7 @@ import {
 import {
   PostgresAuthStore,
   PostgresCardHoldings,
+  PostgresClaimStore,
   PostgresDistributionStore,
   PostgresGenesisStore,
   PostgresPickStore,
@@ -43,6 +44,7 @@ import {
   PostgresRoundStore,
   readFinalizedResult,
 } from '@ponswars/store-postgres';
+import { followClaims } from './claims.js';
 import { startMarket, type RunningMarket } from './market.js';
 import { connectPostgres } from './postgres.js';
 
@@ -247,6 +249,7 @@ async function main(): Promise<void> {
   await sockets.ready;
 
   const distributions = new PostgresDistributionStore(database);
+  const claims = new PostgresClaimStore(database);
   const distributor = rpcDistributorContract({
     url: config.RPC_URL,
     chainId: config.CHAIN_ID,
@@ -319,7 +322,13 @@ async function main(): Promise<void> {
       distributor: config.REWARDS_DISTRIBUTOR_ADDRESS,
       decimals: config.SPY_TOKEN_DECIMALS,
       claimsOf: (wallet) => distributions.publishedClaims(wallet),
-      hasClaimed: (distributionId, wallet) => distributor.hasClaimed(distributionId, wallet),
+      // The record first, the contract second. A claim this service has read
+      // back is a claim; anything it has not read yet is asked of the chain,
+      // so a reward claimed a second ago does not read as unclaimed while the
+      // reader catches up.
+      hasClaimed: async (distributionId, wallet) =>
+        (await claims.claimedBy(wallet)).has(distributionId.toString()) ||
+        (await distributor.hasClaimed(distributionId, wallet)),
     },
     // §6, §9: a Genesis card, dealt from the finalized hash of a Robinhood Chain
     // block chosen before it existed, and recorded with its card in PostgreSQL.
@@ -411,6 +420,17 @@ async function main(): Promise<void> {
     shutdown('SIGINT');
   });
 
+  // Reading claims back from the chain runs beside the rounds: nothing waits
+  // on it, and a claims page reads the contract itself when it has to (§17).
+  const readingClaims = followClaims({
+    store: claims,
+    request: rpc.request,
+    headBlock: () => chain.latestBlockNumber(),
+    distributor: config.REWARDS_DISTRIBUTOR_ADDRESS,
+    signal: stopping.signal,
+    say,
+  });
+
   try {
     try {
       market = await startMarket(config, stopping.signal, say);
@@ -453,6 +473,7 @@ async function main(): Promise<void> {
     // The market stops following the chain whether the driver stopped or failed.
     stopping.abort();
     await market?.stopped;
+    await readingClaims;
     await api.close();
     await sockets.close();
     await database.close();
