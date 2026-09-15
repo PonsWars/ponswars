@@ -1,0 +1,29 @@
+{
+  "name": "@ponswars/calibration",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Measures the market's bounds and the engine's tuning against recorded market tapes.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/battle-engine": "workspace:*",
+    "@ponswars/battle-math": "workspace:*",
+    "@ponswars/config": "workspace:*",
+    "@ponswars/market-data": "workspace:*",
+    "@ponswars/shared-types": "workspace:*"
+  }
+}

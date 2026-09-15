@@ -283,6 +283,24 @@ importers:
         specifier: workspace:*
         version: link:../shared-types
 
+  packages/calibration:
+    dependencies:
+      '@ponswars/battle-engine':
+        specifier: workspace:*
+        version: link:../battle-engine
+      '@ponswars/battle-math':
+        specifier: workspace:*
+        version: link:../battle-math
+      '@ponswars/config':
+        specifier: workspace:*
+        version: link:../config
+      '@ponswars/market-data':
+        specifier: workspace:*
+        version: link:../market-data
+      '@ponswars/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+
   packages/chain:
     dependencies:
       '@ponswars/genesis-service':

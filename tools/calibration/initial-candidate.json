@@ -1,0 +1,43 @@
+{
+  "about": "A starting point to measure against recorded tapes, not policy (§102). The engine and confidence values are the ones the server and every test run today; the market bounds are the ones the first mainnet smoke run used.",
+  "market": {
+    "PRICE_FEED_STALE_AFTER_MS": "900000",
+    "VOLUME_FEED_STALE_AFTER_MS": "60000",
+    "PONS_FEED_STALE_AFTER_MS": "60000",
+    "MARKET_PRICE_WINDOW_MS": "120000",
+    "MARKET_MIN_TRADE_USD": "5",
+    "MARKET_OUTLIER_BPS": "300",
+    "MARKET_DIVERGENCE_BPS": "200",
+    "MARKET_REFERENCE_MAX_AGE_MS": "93600000",
+    "MARKET_MIN_WINDOW_TRADES": "2",
+    "MARKET_VOLATILITY_LOOKBACK_MS": "1500000",
+    "MARKET_VOLATILITY_FLOOR_BPS": "5",
+    "MARKET_COMPARABLE_SESSIONS": "5",
+    "MARKET_EXPECTED_VOLUME_FLOOR_USD": "1000",
+    "MARKET_HOLIDAYS": "2026-11-26,2026-12-25",
+    "PONS_MIN_ACTIVITY_USD": "1",
+    "PONS_MAX_IDENTICAL_PER_WALLET": "5"
+  },
+  "engine": {
+    "scoring": {
+      "priceEdgeDivisor": "2000000",
+      "volumeEdgeDivisor": "1000000",
+      "ponsEdgeDivisor": "20000000",
+      "cardEdgeDivisor": "10000000"
+    },
+    "momentum": {
+      "push": "100000",
+      "surge": "200000",
+      "dominance": "400000",
+      "comeback": "300000"
+    },
+    "victory": { "narrowMargin": "4000000", "decisiveMargin": "30000000" }
+  },
+  "confidence": {
+    "priceTrend": { "strong": "500000", "weak": "-500000" },
+    "volumePulse": { "rising": "1167000", "weak": "1033000" },
+    "ponsActivity": { "high": "40", "medium": "20" },
+    "momentumStability": { "stable": 26, "mixed": 32 },
+    "matchup": { "favored": 20, "strongFavorite": 60, "dominant": 120 }
+  }
+}
