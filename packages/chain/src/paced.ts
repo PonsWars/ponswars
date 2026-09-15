@@ -14,6 +14,14 @@
  * rate it allowed. And a throttle pauses the whole queue, not only the call
  * that hit it, since the endpoint is saying so about all of them.
  *
+ * The spacing adapts. `minIntervalMs` is the fastest the queue will go, not a
+ * rate the endpoint has promised: a public endpoint's real limit moves with
+ * how busy it is and who else shares the address. Each throttle doubles the
+ * spacing, and each answered call wins back a sliver of it. Backing off one
+ * call at a time without slowing the rest was measured to collapse — every
+ * pause ended in the same burst that caused it, and the pauses grew to half a
+ * minute while almost nothing was read.
+ *
  * Not a JSON-RPC batch: an endpoint counts every request inside a batch
  * against its rate, so a batch saves nothing there, and a throttled batch
  * comes back as one error where a list of answers was expected.
@@ -24,7 +32,7 @@
  */
 
 export interface PacingOptions {
-  /** The least time between the start of one call and the next. */
+  /** The least time between the start of one call and the next: the fastest the queue goes. */
   readonly minIntervalMs: number;
   /** How many times a throttled call is tried again. */
   readonly retries: number;
@@ -39,13 +47,32 @@ export interface PacingOptions {
    */
   readonly signal?: AbortSignal;
   /**
-   * Told each time the endpoint throttles a call, with the pause that follows.
-   * A queue that is only ever waiting looks exactly like one that is stuck.
+   * Told each time the endpoint throttles a call: the pause that follows, and
+   * the spacing the queue slowed to. A queue that is only ever waiting looks
+   * exactly like one that is stuck.
    */
-  readonly onThrottle?: (pauseMs: number, attempt: number, error: unknown) => void;
+  readonly onThrottle?: (throttle: Throttle) => void;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly now?: () => number;
 }
+
+export interface Throttle {
+  readonly pauseMs: number;
+  /** Which attempt at the call was throttled, from one. */
+  readonly attempt: number;
+  /** The spacing between calls from now on. */
+  readonly intervalMs: number;
+  readonly error: unknown;
+}
+
+/** The widest a throttle spreads calls: one every five seconds still reads the chain. */
+const MAX_INTERVAL_MS = 5_000;
+
+/** The spacing a throttle starts from when the configured one is zero. */
+const THROTTLED_FLOOR_MS = 50;
+
+/** How much of the extra spacing each answered call gives back: a sixteenth. */
+const RECOVERY_DIVISOR = 16;
 
 /** A paced call refused because the queue was stopped. */
 export class PacingStopped extends Error {
@@ -100,12 +127,16 @@ export function pacer(options: PacingOptions): <T>(call: () => Promise<T>) => Pr
   let lastStart = -Infinity;
   /** No call starts before this: set by a throttle, for the whole queue. */
   let resumeAt = -Infinity;
+  /** The current spacing: the configured minimum, or wider after throttles. */
+  let interval = options.minIntervalMs;
+  /** When the spacing last widened. */
+  let widenedAt = -Infinity;
 
   /** Waits for this call's turn to start. Turns are handed out in the order asked. */
   const slot = (): Promise<void> => {
     const turn = tail.then(async () => {
       assertRunning();
-      const wait = Math.max(lastStart + options.minIntervalMs, resumeAt) - now();
+      const wait = Math.max(lastStart + interval, resumeAt) - now();
       if (wait > 0) {
         await sleep(wait);
         assertRunning();
@@ -119,16 +150,36 @@ export function pacer(options: PacingOptions): <T>(call: () => Promise<T>) => Pr
   return async <T>(call: () => Promise<T>): Promise<T> => {
     for (let attempt = 0; ; attempt += 1) {
       await slot();
+      let result: T;
       try {
-        return await call();
+        result = await call();
       } catch (error) {
-        if (attempt >= options.retries || !isThrottled(error)) {
+        if (!isThrottled(error)) {
+          throw error;
+        }
+        // Once per burst: calls already in flight when the endpoint started
+        // refusing are refused together, and doubling for each of them would
+        // answer one throttle with a minute of silence.
+        if (now() >= widenedAt + interval) {
+          interval = Math.min(
+            MAX_INTERVAL_MS,
+            Math.max(interval * 2, options.minIntervalMs, THROTTLED_FLOOR_MS),
+          );
+          widenedAt = now();
+        }
+        if (attempt >= options.retries) {
           throw error;
         }
         const pause = Math.min(options.maxBackoffMs, options.backoffMs * 2 ** attempt);
         resumeAt = Math.max(resumeAt, now() + pause);
-        options.onThrottle?.(pause, attempt + 1, error);
+        options.onThrottle?.({ pauseMs: pause, attempt: attempt + 1, intervalMs: interval, error });
+        continue;
       }
+      // A sixteenth back per answer, snapping home within a millisecond so the
+      // spacing returns to exactly the minimum rather than approaching it.
+      const narrowed = interval - (interval - options.minIntervalMs) / RECOVERY_DIVISOR;
+      interval = narrowed - options.minIntervalMs < 1 ? options.minIntervalMs : narrowed;
+      return result;
     }
   };
 }

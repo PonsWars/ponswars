@@ -96,12 +96,12 @@ async function startOnchainMarket(
     maxBackoffMs: 60_000,
     // A stop during the backfill ends it at the next call instead of after it.
     signal,
-    onThrottle: (pauseMs) => {
+    onThrottle: ({ pauseMs, intervalMs }) => {
       throttled += 1;
       if (Date.now() - throttleSaidAt >= THROTTLE_REPORT_MS) {
         say(
-          `market: RPC_URL throttled ${String(throttled)} call(s); pausing ${String(pauseMs / 1_000)} s
-`,
+          `market: RPC_URL throttled ${String(throttled)} call(s); pausing ${String(pauseMs / 1_000)} s, ` +
+            `then one call every ${String(Math.round(intervalMs))} ms\n`,
         );
         throttled = 0;
         throttleSaidAt = Date.now();

@@ -136,10 +136,12 @@ say(
 /** Throttles since the last line about them: said at most every ten seconds. */
 let throttled = 0;
 let throttleSaidAt = 0;
-function noteThrottle(pauseMs) {
+function noteThrottle({ pauseMs, intervalMs }) {
   throttled += 1;
   if (Date.now() - throttleSaidAt >= 10_000) {
-    say(`endpoint throttled ${String(throttled)} call(s); pausing ${String(pauseMs / 1_000)} s`);
+    say(
+      `endpoint throttled ${String(throttled)} call(s); pausing ${String(pauseMs / 1_000)} s, then one call every ${String(Math.round(intervalMs))} ms`,
+    );
     throttled = 0;
     throttleSaidAt = Date.now();
   }

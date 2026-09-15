@@ -35,8 +35,8 @@ describe('pacer', () => {
       backoffMs: 500,
       maxBackoffMs: 800,
       ...fake,
-      onThrottle: (pause, attempt) => {
-        throttles.push([pause, attempt]);
+      onThrottle: ({ pauseMs, attempt }) => {
+        throttles.push([pauseMs, attempt]);
       },
     });
     let calls = 0;
@@ -138,6 +138,87 @@ async function settled(): Promise<void> {
     await Promise.resolve();
   }
 }
+
+describe('a pacer the endpoint keeps throttling', () => {
+  it('spaces calls further apart, then wins the spacing back as calls are answered', async () => {
+    const fake = clock();
+    const intervals: number[] = [];
+    const paced = pacer({
+      minIntervalMs: 100,
+      retries: 5,
+      backoffMs: 1,
+      maxBackoffMs: 1,
+      ...fake,
+      onThrottle: ({ intervalMs }) => {
+        intervals.push(intervalMs);
+      },
+    });
+    let throttleNext = 2;
+    const call = (): Promise<number> =>
+      paced(() => {
+        if (throttleNext > 0) {
+          throttleNext -= 1;
+          return Promise.reject(new Error('HTTP request failed. Status: 429'));
+        }
+        return Promise.resolve(fake.now());
+      });
+
+    await call();
+    expect(intervals).toEqual([200, 400]);
+
+    // The next call waits out the widened spacing, not the configured one.
+    const before = fake.now();
+    const startedAt = await call();
+    expect(startedAt - before).toBeGreaterThanOrEqual(375);
+
+    // Answered calls narrow it again, and it never goes below the minimum.
+    for (let index = 0; index < 200; index += 1) {
+      await call();
+    }
+    const last = fake.now();
+    expect((await call()) - last).toBe(100);
+  });
+
+  it('slows once for a burst of calls refused together', async () => {
+    const fake = clock();
+    const intervals: number[] = [];
+    const paced = pacer({
+      minIntervalMs: 0,
+      retries: 1,
+      backoffMs: 1,
+      maxBackoffMs: 1,
+      ...fake,
+      onThrottle: ({ intervalMs }) => {
+        intervals.push(intervalMs);
+      },
+    });
+    let answer: ((error: Error) => void)[] = [];
+    let refuse = true;
+    const calls = [1, 2, 3].map(() =>
+      paced(() =>
+        refuse
+          ? new Promise<void>((_resolve, reject) => {
+              answer.push(reject);
+            })
+          : Promise.resolve(),
+      ),
+    );
+    // Until all three are in flight together.
+    for (let turn = 0; turn < 100 && answer.length < 3; turn += 1) {
+      await Promise.resolve();
+    }
+    expect(answer).toHaveLength(3);
+    refuse = false;
+    const refusals = answer;
+    answer = [];
+    for (const reject of refusals) {
+      reject(new Error('HTTP request failed. Status: 429'));
+    }
+    await Promise.all(calls);
+
+    expect(intervals).toEqual([50, 50, 50]);
+  });
+});
 
 describe('a stopped pacer', () => {
   it('refuses queued calls and gives up a throttled retry', async () => {
