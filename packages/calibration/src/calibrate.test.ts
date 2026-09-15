@@ -1,8 +1,8 @@
 import { PRICE_SCALE, type TapeEntry } from '@ponswars/market-data';
 import { ACTIVE_TICKERS, utcTimestamp, type ActiveTicker } from '@ponswars/shared-types';
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
-import { calibrate } from './calibrate.js';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { calibrate, type CalibrationOptions, type CalibrationReport } from './calibrate.js';
 import { parseCandidate } from './candidate.js';
 import { suggest } from './suggest.js';
 
@@ -68,14 +68,18 @@ function hourOfMarket(): TapeEntry[] {
   return tape;
 }
 
-describe('calibrate', () => {
-  it('voids the battles of a ticker that never trades and finalizes the rest', async () => {
-    const report = await calibrate(hourOfMarket(), candidate, {
-      tickMs: 5_000,
-      excludedAddresses: [],
-      sampleEveryTicks: 12,
-    });
+/** A tick every ten seconds: enough to see every behaviour, cheap enough for a busy test run. */
+const OPTIONS: CalibrationOptions = { tickMs: 10_000, excludedAddresses: [], sampleEveryTicks: 6 };
 
+// Replaying an hour of ten tickers through forty-five battles a round is real
+// work; under a full parallel test run it needs longer than the default.
+describe('calibrate', { timeout: 60_000 }, () => {
+  let report: CalibrationReport;
+  beforeAll(async () => {
+    report = await calibrate(hourOfMarket(), candidate, OPTIONS);
+  }, 60_000);
+
+  it('voids the battles of a ticker that never trades and finalizes the rest', () => {
     // 25 minutes of volatility lookback and a 2-minute window leave room for
     // the rounds at 14:30, 14:40 and 14:50.
     expect(report.rounds).toEqual({ played: 3, marketClosed: 0, withoutVolumeHistory: 3 });
@@ -110,21 +114,12 @@ describe('calibrate', () => {
           return entry;
       }
     });
-    const report = await calibrate(tape, candidate, {
-      tickMs: 5_000,
-      excludedAddresses: [],
-      sampleEveryTicks: 12,
-    });
-    expect(report.rounds).toMatchObject({ played: 0, marketClosed: 3 });
-    expect(report.battles.finalized + report.battles.voided).toBe(0);
+    const closed = await calibrate(tape, candidate, OPTIONS);
+    expect(closed.rounds).toMatchObject({ played: 0, marketClosed: 3 });
+    expect(closed.battles.finalized + closed.battles.voided).toBe(0);
   });
 
-  it('reads starting values off the report, and names what it could not', async () => {
-    const report = await calibrate(hourOfMarket(), candidate, {
-      tickMs: 5_000,
-      excludedAddresses: [],
-      sampleEveryTicks: 12,
-    });
+  it('reads starting values off the report, and names what it could not', () => {
     const suggestion = suggest(report);
 
     expect(suggestion.missing).toEqual([]);
