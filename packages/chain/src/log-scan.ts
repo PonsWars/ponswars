@@ -47,6 +47,9 @@ export function isTooManyLogs(error: unknown): boolean {
     text.includes('response size exceeded') ||
     // viem's own limit on how large a response it will read.
     text.includes('exceeded the size limit') ||
+    // The node gave up before the query finished: too much to scan at once.
+    // The public endpoint reports it as invalid parameters, with this detail.
+    text.includes('context deadline exceeded') ||
     text.includes('block range')
   );
 }

@@ -89,6 +89,13 @@ describe('isTooManyLogs', () => {
     });
     expect(isTooManyLogs(wrapped)).toBe(true);
     expect(isTooManyLogs(new Error('HTTP response body exceeded the size limit.'))).toBe(true);
+    expect(
+      isTooManyLogs(
+        Object.assign(new Error('Missing or invalid parameters.'), {
+          details: 'Post "http://10.31.50.136:8547/rpc": context deadline exceeded',
+        }),
+      ),
+    ).toBe(true);
     expect(isTooManyLogs(new Error('execution reverted'))).toBe(false);
   });
 });
