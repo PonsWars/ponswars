@@ -46,6 +46,9 @@ const DAY = 24 * 60 * MINUTE;
  */
 const POLL_MS = 1_000;
 
+/** How often a run of throttled calls is reported. */
+const THROTTLE_REPORT_MS = 10_000;
+
 /** The widest block range one poll reads: about eight minutes of Robinhood Chain. */
 const MAX_BLOCKS_PER_POLL = 5_000n;
 
@@ -83,6 +86,9 @@ async function startOnchainMarket(
     );
   }
 
+  // Said at most every ten seconds: a throttled endpoint throttles in bursts.
+  let throttled = 0;
+  let throttleSaidAt = 0;
   const rpc = robinhoodMarketRpc(config.RPC_URL, {
     minIntervalMs: config.RPC_MIN_INTERVAL_MS,
     retries: 8,
@@ -90,6 +96,17 @@ async function startOnchainMarket(
     maxBackoffMs: 60_000,
     // A stop during the backfill ends it at the next call instead of after it.
     signal,
+    onThrottle: (pauseMs) => {
+      throttled += 1;
+      if (Date.now() - throttleSaidAt >= THROTTLE_REPORT_MS) {
+        say(
+          `market: RPC_URL throttled ${String(throttled)} call(s); pausing ${String(pauseMs / 1_000)} s
+`,
+        );
+        throttled = 0;
+        throttleSaidAt = Date.now();
+      }
+    },
   });
   const quoteDecimals = await rpc.tokenDecimals(addresses.usdg);
   const policy = onchainMarketPolicy(config, {

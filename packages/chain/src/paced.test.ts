@@ -28,12 +28,16 @@ describe('pacer', () => {
 
   it('retries a throttled call after a doubling pause, and then succeeds', async () => {
     const fake = clock();
+    const throttles: [number, number][] = [];
     const paced = pacer({
       minIntervalMs: 0,
       retries: 3,
       backoffMs: 500,
       maxBackoffMs: 800,
       ...fake,
+      onThrottle: (pause, attempt) => {
+        throttles.push([pause, attempt]);
+      },
     });
     let calls = 0;
     const result = await paced(() => {
@@ -44,6 +48,10 @@ describe('pacer', () => {
     });
     expect(result).toBe('ok');
     expect(fake.slept).toEqual([500, 800]);
+    expect(throttles).toEqual([
+      [500, 1],
+      [800, 2],
+    ]);
   });
 
   it('passes on an error that is not throttling without retrying', async () => {

@@ -38,6 +38,11 @@ export interface PacingOptions {
    * is not interrupted.
    */
   readonly signal?: AbortSignal;
+  /**
+   * Told each time the endpoint throttles a call, with the pause that follows.
+   * A queue that is only ever waiting looks exactly like one that is stuck.
+   */
+  readonly onThrottle?: (pauseMs: number, attempt: number, error: unknown) => void;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly now?: () => number;
 }
@@ -122,6 +127,7 @@ export function pacer(options: PacingOptions): <T>(call: () => Promise<T>) => Pr
         }
         const pause = Math.min(options.maxBackoffMs, options.backoffMs * 2 ** attempt);
         resumeAt = Math.max(resumeAt, now() + pause);
+        options.onThrottle?.(pause, attempt + 1, error);
       }
     }
   };

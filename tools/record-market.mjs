@@ -133,6 +133,18 @@ say(
   `recording ${options.rpc} to ${options.out}, ${String(options.minIntervalMs)} ms between calls`,
 );
 
+/** Throttles since the last line about them: said at most every ten seconds. */
+let throttled = 0;
+let throttleSaidAt = 0;
+function noteThrottle(pauseMs) {
+  throttled += 1;
+  if (Date.now() - throttleSaidAt >= 10_000) {
+    say(`endpoint throttled ${String(throttled)} call(s); pausing ${String(pauseMs / 1_000)} s`);
+    throttled = 0;
+    throttleSaidAt = Date.now();
+  }
+}
+
 let written = 0;
 while (!stopping.signal.aborted) {
   const indexer = new RobinhoodMarketIndexer({
@@ -142,6 +154,7 @@ while (!stopping.signal.aborted) {
       backoffMs: 2_000,
       maxBackoffMs: 60_000,
       signal: stopping.signal,
+      onThrottle: noteThrottle,
     }),
     addresses,
     tradeRetentionMs: RETENTION_MS,
