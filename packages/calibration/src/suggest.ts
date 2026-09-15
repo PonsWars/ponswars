@@ -27,35 +27,38 @@ import type { Distribution } from './distribution.js';
 export interface Suggestion {
   readonly engine: {
     readonly scoring: {
-      readonly priceEdgeDivisor: string;
-      readonly volumeEdgeDivisor: string;
-      readonly ponsEdgeDivisor: string;
+      readonly priceEdgeDivisor: string | null;
+      readonly volumeEdgeDivisor: string | null;
+      readonly ponsEdgeDivisor: string | null;
     };
     readonly momentum: {
-      readonly push: string;
-      readonly surge: string;
-      readonly dominance: string;
-      readonly comeback: string;
+      readonly push: string | null;
+      readonly surge: string | null;
+      readonly dominance: string | null;
+      readonly comeback: string | null;
     };
-    readonly victory: { readonly narrowMargin: string; readonly decisiveMargin: string };
+    readonly victory: {
+      readonly narrowMargin: string | null;
+      readonly decisiveMargin: string | null;
+    };
   };
   readonly confidence: {
-    readonly priceTrend: { readonly strong: string; readonly weak: string };
-    readonly volumePulse: { readonly rising: string; readonly weak: string };
-    readonly ponsActivity: { readonly high: string; readonly medium: string };
-    readonly momentumStability: { readonly stable: number; readonly mixed: number };
+    readonly priceTrend: { readonly strong: string | null; readonly weak: string | null };
+    readonly volumePulse: { readonly rising: string | null; readonly weak: string | null };
+    readonly ponsActivity: { readonly high: string | null; readonly medium: string | null };
+    readonly momentumStability: { readonly stable: number | null; readonly mixed: number | null };
   };
-  /** What the suggestion could not be read from, and so left out. */
+  /** What the suggestion could not be read from; those values are `null`, never a guess. */
   readonly missing: readonly string[];
 }
 
 export function suggest(report: CalibrationReport): Suggestion {
   const missing: string[] = [];
-  const at = (distribution: Distribution, key: keyof Distribution, name: string): number => {
+  const at = (distribution: Distribution, key: keyof Distribution, name: string): number | null => {
     const value = distribution[key];
     if (value === null || distribution.count === 0) {
       missing.push(name);
-      return 0;
+      return null;
     }
     return value;
   };
@@ -64,7 +67,7 @@ export function suggest(report: CalibrationReport): Suggestion {
     pick: (ticker: (typeof tickers)[number]) => Distribution,
     key: keyof Distribution,
     name: string,
-  ): number => {
+  ): number | null => {
     // The median of the tickers' own quantiles: a band that means the same for
     // a quiet ticker and a busy one, rather than one set by the busiest.
     const values = tickers
@@ -76,7 +79,7 @@ export function suggest(report: CalibrationReport): Suggestion {
     const middle = values[Math.floor(values.length / 2)];
     if (middle === undefined) {
       missing.push(name);
-      return 0;
+      return null;
     }
     return middle;
   };
@@ -110,16 +113,18 @@ export function suggest(report: CalibrationReport): Suggestion {
         weak: scaled(pooled((t) => t.lookback.relativeVolume, 'p25', 'lookback volume')),
       },
       ponsActivity: {
-        high: Math.round(
-          pooled((t) => t.lookback.qualifiedPonsActivity, 'p75', 'lookback Pons'),
-        ).toString(),
-        medium: Math.round(
-          pooled((t) => t.lookback.qualifiedPonsActivity, 'p25', 'lookback Pons'),
-        ).toString(),
+        high:
+          whole(
+            pooled((t) => t.lookback.qualifiedPonsActivity, 'p75', 'lookback Pons'),
+          )?.toString() ?? null,
+        medium:
+          whole(
+            pooled((t) => t.lookback.qualifiedPonsActivity, 'p25', 'lookback Pons'),
+          )?.toString() ?? null,
       },
       momentumStability: {
-        stable: Math.round(pooled((t) => t.lookback.directionChanges, 'p25', 'direction changes')),
-        mixed: Math.round(pooled((t) => t.lookback.directionChanges, 'p75', 'direction changes')),
+        stable: whole(pooled((t) => t.lookback.directionChanges, 'p25', 'direction changes')),
+        mixed: whole(pooled((t) => t.lookback.directionChanges, 'p75', 'direction changes')),
       },
     },
     missing: [...new Set(missing)],
@@ -127,6 +132,10 @@ export function suggest(report: CalibrationReport): Suggestion {
 }
 
 /** A plain number back to `RATIO_SCALE`, as the decimal string a candidate carries. */
-function scaled(value: number): string {
-  return BigInt(Math.round(value * Number(RATIO_SCALE))).toString();
+function scaled(value: number | null): string | null {
+  return value === null ? null : BigInt(Math.round(value * Number(RATIO_SCALE))).toString();
+}
+
+function whole(value: number | null): number | null {
+  return value === null ? null : Math.round(value);
 }

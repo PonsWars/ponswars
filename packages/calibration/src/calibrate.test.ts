@@ -123,11 +123,26 @@ describe('calibrate', { timeout: 60_000 }, () => {
     const suggestion = suggest(report);
 
     expect(suggestion.missing).toEqual([]);
-    expect(BigInt(suggestion.engine.victory.decisiveMargin)).toBeGreaterThanOrEqual(
-      BigInt(suggestion.engine.victory.narrowMargin),
+    const { narrowMargin, decisiveMargin } = suggestion.engine.victory;
+    const { strong, weak } = suggestion.confidence.priceTrend;
+    expect(BigInt(decisiveMargin ?? -1)).toBeGreaterThanOrEqual(BigInt(narrowMargin ?? 0));
+    expect(BigInt(strong ?? -1)).toBeGreaterThanOrEqual(BigInt(weak ?? 0));
+  });
+});
+
+describe('suggest, with nothing to read', () => {
+  it('leaves every value empty and names why, rather than suggesting zero', async () => {
+    const empty = await calibrate(
+      [
+        { kind: 'UNITS', ticker: 'NVDA', quoteDecimals: 6, tokenDecimals: 18 },
+        { kind: 'COVERED', at: utcTimestamp(START), wallAt: START },
+      ],
+      candidate,
+      OPTIONS,
     );
-    expect(BigInt(suggestion.confidence.priceTrend.strong)).toBeGreaterThanOrEqual(
-      BigInt(suggestion.confidence.priceTrend.weak),
-    );
+    const suggestion = suggest(empty);
+    expect(suggestion.engine.victory.narrowMargin).toBeNull();
+    expect(suggestion.confidence.momentumStability.stable).toBeNull();
+    expect(suggestion.missing).toContain('margin');
   });
 });
