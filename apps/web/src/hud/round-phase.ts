@@ -114,6 +114,25 @@ export function formatCountdown(remainingMs: number): string {
 }
 
 /**
+ * When a round opens, for a wait too long for a countdown — a market closed
+ * overnight or for the weekend (ADR 0007).
+ *
+ * A weekday and a time in the viewer's own zone, since that is the clock they
+ * will be looking at. `locale` and `timeZone` exist for tests.
+ */
+export function formatOpensAt(at: number, locale?: string, timeZone?: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    ...(timeZone === undefined ? {} : { timeZone }),
+  })
+    .format(at)
+    .toUpperCase();
+}
+
+/**
  * How the client is currently connected (§49, §42.14).
  *
  * `RECONNECTING` is its own state rather than being hidden behind the last known

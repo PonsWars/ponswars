@@ -5,7 +5,13 @@ import {
   type RoundState,
 } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
-import { CONNECTION_STATES, connectionBanner, formatCountdown, roundView } from './round-phase.js';
+import {
+  CONNECTION_STATES,
+  connectionBanner,
+  formatCountdown,
+  formatOpensAt,
+  roundView,
+} from './round-phase.js';
 
 const CLOCK: CanonicalClock = {
   serverTime: utcTimestamp(1_800_000_000_000),
@@ -63,6 +69,15 @@ describe('roundView', () => {
   it('marks only VOID as voided', () => {
     const voided = ROUND_STATES.filter((state) => roundView(state, CLOCK).voided);
     expect(voided).toEqual(['VOID']);
+  });
+});
+
+describe('formatOpensAt', () => {
+  it('names the weekday and a 24-hour time in the zone asked for', () => {
+    // Sunday 2026-09-20 20:00 in New York, when the market reopens.
+    const reopens = Date.parse('2026-09-21T00:00:00Z');
+    expect(formatOpensAt(reopens, 'en-US', 'America/New_York')).toBe('SUN 20:00');
+    expect(formatOpensAt(reopens, 'en-US', 'UTC')).toBe('MON 00:00');
   });
 });
 
