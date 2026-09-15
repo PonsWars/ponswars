@@ -67,7 +67,9 @@ Only the constants inside them are open.
 checks it against Chainlink
 ([ADR 0007](adr/0007-robinhood-chain-market-with-session-pause.md)). Each bound
 below decides when a reading is trusted, degraded or voids a battle, so each is
-a required parameter with no default.
+a required parameter with no default. They are measured, not chosen by feel:
+[Calibrating the market](operations/market-calibration.md) records the real
+market and replays it under candidate values.
 
 | Parameter                          | Status      | Notes                                                                                                      |
 | ---------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------- |

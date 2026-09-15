@@ -26,6 +26,10 @@ deployment consists of, and what is still open — and
 [Deploying the contracts](contract-deployment.md) — putting the distributor and
 the Secret vault on Robinhood Chain, and granting their roles.
 
+Measuring before launching: [Calibrating the market](market-calibration.md) —
+recording the mainnet market and replaying it to choose the market's bounds,
+the score's divisors and the confidence bands.
+
 Building rather than repairing: [Generated art](generated-art.md) — how the card
 and faction images are made — and [Third-party models](third-party-models.md) —
 every 3D asset in the world, where it came from, and under what licence.
