@@ -93,6 +93,20 @@ export interface MarketIndexerOptions {
 /** Pool ids a single `eth_getLogs` topic OR-list carries. */
 const IDS_PER_QUERY = 200;
 
+/** Every event a poll reads, in one query. */
+const POLL_TOPICS = [
+  MARKET_TOPICS.initialize,
+  MARKET_TOPICS.poolRegistered,
+  MARKET_TOPICS.swap,
+  MARKET_TOPICS.curveBuy,
+  MARKET_TOPICS.curveSell,
+];
+
+/** The events that create somewhere to trade, applied before the trades beside them. */
+const POOL_TOPICS: ReadonlySet<string> = new Set(
+  [MARKET_TOPICS.initialize, MARKET_TOPICS.poolRegistered].map((topic) => topic.toLowerCase()),
+);
+
 /** Curve addresses looked up in one `TokenLaunched` query. */
 const CURVES_PER_QUERY = 100;
 
@@ -320,7 +334,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
 
   /** Reads everything since the last poll. Returns whether it reached the head. */
   async poll(): Promise<boolean> {
-    const { rpc, addresses, maxBlocksPerPoll } = this.options;
+    const { rpc, maxBlocksPerPoll } = this.options;
     const head = await rpc.blockNumber();
     if (head <= this.lastBlock) {
       await this.refreshReferences(false);
@@ -329,31 +343,19 @@ export class RobinhoodMarketIndexer implements MarketSource {
     const from = this.lastBlock + 1n;
     const to = head - from + 1n > maxBlocksPerPoll ? from + maxBlocksPerPoll - 1n : head;
 
-    const tokens = ACTIVE_TICKERS.map((ticker) =>
-      pad(addresses.tickers[ticker].token.toLowerCase()),
-    );
-    const quotes = [...tokens, pad(addresses.usdg.toLowerCase())];
-    // New pools first, so a swap in a pool created in this same range is kept.
-    this.apply(
-      await this.scan(
-        {
-          address: addresses.poolManager,
-          topics: [MARKET_TOPICS.initialize, null, quotes, quotes],
-        },
-        from,
-        to,
-      ),
-    );
-    this.apply(
-      await this.scan(
-        { address: addresses.ponsMemeHook, topics: [MARKET_TOPICS.poolRegistered] },
-        from,
-        to,
-      ),
-    );
-    // Before the trades, so every block in the range lies between two anchors.
+    // Before the logs, so every block in the range lies between two anchors.
     const toAt = await this.clock.read(to);
-    await this.readTrades(from, to, from);
+    // One read for everything a market is made of, sorted out here. A query
+    // per batch of pool ids was most of a poll's calls, and a poll that takes
+    // longer than the chain takes to make its blocks never catches up. What
+    // came from the wrong contract is dropped by `apply`.
+    const logs = await this.scanTrades({ topics: [POLL_TOPICS] }, from, to);
+    // New pools first, so a trade in a pool created in this same range is kept.
+    const creates = (log: RawLog): boolean => POOL_TOPICS.has(log.topics[0]?.toLowerCase() ?? '');
+    this.apply(logs.filter(creates));
+    this.apply(logs.filter((log) => !creates(log)));
+    await this.resolveCurves(to);
+    await this.resolveSenders();
 
     this.lastBlock = to;
     this.covered = utcTimestamp(toAt);

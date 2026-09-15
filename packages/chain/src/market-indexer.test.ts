@@ -332,6 +332,23 @@ describe('RobinhoodMarketIndexer', () => {
     expect(timestampReads).toBeLessThanOrEqual(10);
   });
 
+  it('drops a trade from a contract that is not the pool manager while following', async () => {
+    const logs: RawLog[] = [initialize(10)];
+    const chain = fakeChain(logs);
+    const market = indexer(chain.rpc);
+    await market.start();
+
+    // A real pool id and the real Swap signature, from somewhere else.
+    logs.push({
+      ...swap(USDG_POOL, 900_000_000n, -(10n ** 18n), 1_010),
+      address: '0x00000000000000000000000000000000000000e1',
+    });
+    chain.head.value = 1_020;
+    await market.poll();
+
+    expect(market.trades('NVDA', all)).toEqual([]);
+  });
+
   it('refuses to start on a token that is not the ticker it is registered as', async () => {
     const chain = fakeChain([], { [TOKEN]: 'NVDAX' });
     await expect(indexer(chain.rpc).start()).rejects.toThrow('reports symbol "NVDAX"');
