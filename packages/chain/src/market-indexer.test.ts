@@ -108,6 +108,23 @@ const curveBuy = (quoteIn: bigint, recipient: Hex, block: number): RawLog =>
     block,
   );
 
+/** The Pons factory launching CURVE, quoted in the NVDA token. */
+const launched = (
+  block: number,
+  curve: Hex = CURVE,
+  emitter: string = MARKET.ponsFactory,
+): RawLog =>
+  raw(
+    emitter,
+    encodeEventTopics({
+      abi: MARKET_EVENTS_ABI,
+      eventName: 'TokenLaunched',
+      args: { token: MEMECOIN, curve, deployer: TRADER },
+    }) as Hex[],
+    encodeAbiParameters(parseAbiParameters('address, uint256, uint256'), [TOKEN, 1n, 1n]),
+    block,
+  );
+
 /** A chain made of the logs given, answering the reads the indexer makes. */
 function fakeChain(
   logs: RawLog[],
@@ -178,15 +195,6 @@ function fakeChain(
       return Promise.resolve(`RH${String(ticker)} / USD`);
     },
     feedDecimals: () => Promise.resolve(8),
-    curveOrigins: (addresses) =>
-      Promise.resolve(
-        new Map(
-          addresses.map((address) => [
-            address,
-            address === CURVE ? { factory: MARKET.ponsFactory, pairToken: TOKEN } : null,
-          ]),
-        ),
-      ),
     feedLatest: () => Promise.resolve({ answer: 200n * 100_000_000n, updatedAt: blockTime(900) }),
   };
   return { rpc, head };
@@ -244,6 +252,7 @@ describe('RobinhoodMarketIndexer', () => {
   it('counts Pons trading quoted in the ticker — its curve asked about when first seen — sized in dollars and credited to the trader', async () => {
     const chain = fakeChain([
       registered(30),
+      launched(20),
       // 0.5 NVDA into the curve, at the $200 reference: $100.
       curveBuy(5n * 10n ** 17n, TRADER, 600),
       // A graduated-pool swap sent through a router: the trader is the transaction's
@@ -258,6 +267,19 @@ describe('RobinhoodMarketIndexer', () => {
       [TRADER, 100_000_000n],
       ['0x00000000000000000000000000000000000000bb', 200_000_000n],
     ]);
+  });
+
+  it('ignores a curve the Pons factory never launched, whatever its events say', async () => {
+    const IMPOSTOR: Hex = '0x00000000000000000000000000000000000000c2';
+    const chain = fakeChain([
+      // The same launch event, from a contract that is not the factory.
+      launched(20, IMPOSTOR, IMPOSTOR),
+      { ...curveBuy(5n * 10n ** 18n, TRADER, 600), address: IMPOSTOR },
+    ]);
+    const market = indexer(chain.rpc);
+    await market.start();
+
+    expect(market.ponsActivity('NVDA', all)).toEqual([]);
   });
 
   it('follows the chain after the backfill, including a pool created since', async () => {

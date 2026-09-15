@@ -36,9 +36,9 @@ import type { RobinhoodMarketAddresses } from './robinhood-market.js';
  * It starts by discovering the pools from the whole of history, then backfills
  * the trading it is asked to retain, then follows the chain block by block.
  * Bonding curves are not discovered up front — Pons has launched tens of
- * thousands, nearly all quoted in ETH — but asked about the first time one
- * trades: its own `factory()` and `pairToken()` say whether it is a Pons curve
- * quoted in a Stock Token. Until the backfill is done `coversUntil` stays behind, and the market
+ * thousands, nearly all quoted in ETH — but looked up the first time one
+ * trades: the Pons factory's own `TokenLaunched` for it says whether it is a
+ * Pons curve and what it is quoted in. Until the backfill is done `coversUntil` stays behind, and the market
  * reads `UNAVAILABLE` rather than mistaking a history it has not read for a
  * quiet one.
  *
@@ -66,13 +66,6 @@ export interface MarketRpc {
   feedDecimals(address: string): Promise<number>;
   /** The feed's latest answer at its own decimals, and when it updated (ms). */
   feedLatest(address: string): Promise<{ readonly answer: bigint; readonly updatedAt: number }>;
-  /**
-   * Which factory made each contract and what it is quoted in, where the
-   * contract answers as a Pons bonding curve; `null` where it does not.
-   */
-  curveOrigins(
-    addresses: readonly string[],
-  ): Promise<ReadonlyMap<string, { readonly factory: string; readonly pairToken: string } | null>>;
 }
 
 export interface MarketIndexerOptions {
@@ -99,6 +92,9 @@ export interface MarketIndexerOptions {
 
 /** Pool ids a single `eth_getLogs` topic OR-list carries. */
 const IDS_PER_QUERY = 200;
+
+/** Curve addresses looked up in one `TokenLaunched` query. */
+const CURVES_PER_QUERY = 100;
 
 const PRICE_DECIMALS = 8;
 
@@ -433,7 +429,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
         to,
       ),
     );
-    await this.resolveCurves();
+    await this.resolveCurves(to);
     await this.resolveSenders();
   }
 
@@ -485,6 +481,11 @@ export class RobinhoodMarketIndexer implements MarketSource {
         // A different event sharing a topic filter; not ours.
         continue;
       }
+      if (!this.emittedBy(event, log.address)) {
+        // The right signature from the wrong contract: a forgery, or a
+        // lookalike. Either way it says nothing about this market.
+        continue;
+      }
       this.seen.add(position.eventId);
       this.record(
         event,
@@ -493,6 +494,24 @@ export class RobinhoodMarketIndexer implements MarketSource {
         position.blockNumber,
         position.at ?? 0,
       );
+    }
+  }
+
+  /** Whether a log came from the contract that event is trusted from. */
+  private emittedBy(event: MarketEvent, address: string): boolean {
+    const { addresses } = this.options;
+    const emitter = address.toLowerCase();
+    switch (event.kind) {
+      case 'POOL_INITIALIZED':
+      case 'SWAP':
+        return emitter === addresses.poolManager.toLowerCase();
+      case 'TOKEN_LAUNCHED':
+        return emitter === addresses.ponsFactory.toLowerCase();
+      case 'POOL_REGISTERED':
+        return emitter === addresses.ponsMemeHook.toLowerCase();
+      case 'CURVE_TRADE':
+        // Any contract; `resolveCurves` accepts only those the factory launched.
+        return true;
     }
   }
 
@@ -596,17 +615,19 @@ export class RobinhoodMarketIndexer implements MarketSource {
   }
 
   /**
-   * Asks every contract seen trading as a curve what it is, then records the
-   * trades that were waiting on the answer.
+   * Looks up every contract seen trading as a curve, then records the trades
+   * that were waiting on the answer.
    *
-   * Only a curve made by the Pons V2 factory counts: anything can emit an event
-   * with the same signature, and one that did would otherwise buy Pons Power.
+   * Only a curve the Pons V2 factory launched counts, and the factory's own
+   * `TokenLaunched` is the proof: anything can emit a `CurveBuy`, and a
+   * contract asked what it is can answer whatever it likes — including the
+   * factory's address and a Stock Token — to buy Pons Power it never paid for.
+   * A log from the factory's address cannot be forged.
    */
-  private async resolveCurves(): Promise<void> {
+  private async resolveCurves(to: bigint): Promise<void> {
     if (this.pendingCurveTrades.length === 0) {
       return;
     }
-    const factory = this.options.addresses.ponsFactory.toLowerCase();
     const unknown = [
       ...new Set(
         this.pendingCurveTrades
@@ -614,17 +635,23 @@ export class RobinhoodMarketIndexer implements MarketSource {
           .filter((curve) => !this.curves.has(curve) && !this.notCurves.has(curve)),
       ),
     ];
-    const origins = await this.options.rpc.curveOrigins(unknown);
+    for (let index = 0; index < unknown.length; index += CURVES_PER_QUERY) {
+      const chunk = unknown.slice(index, index + CURVES_PER_QUERY);
+      // A curve trades after it launches, so its launch is at or before `to`.
+      this.apply(
+        await this.scan(
+          {
+            address: this.options.addresses.ponsFactory,
+            topics: [MARKET_TOPICS.tokenLaunched, null, chunk.map(pad)],
+          },
+          0n,
+          to,
+        ),
+      );
+    }
     for (const curve of unknown) {
-      const origin = origins.get(curve) ?? null;
-      const ticker =
-        origin !== null && origin.factory.toLowerCase() === factory
-          ? this.tickerOf.get(origin.pairToken.toLowerCase())
-          : undefined;
-      if (ticker === undefined) {
+      if (!this.curves.has(curve)) {
         this.notCurves.add(curve);
-      } else {
-        this.curves.set(curve, ticker);
       }
     }
     const pending = this.pendingCurveTrades;

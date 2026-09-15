@@ -13,22 +13,11 @@ import { pacer, type PacingOptions } from './paced.js';
  * challenge page, and a production vendor still has a rate it bills or cuts at.
  */
 
-/** Multicall3, at its canonical address — deployed on Robinhood Chain. */
-const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
-
-/** Contracts asked about in one multicall. */
-const CURVES_PER_CALL = 200;
-
 /**
  * Transaction lookups in flight at once. Their starts are paced anyway; this
  * only bounds how many a slow endpoint can leave waiting.
  */
 const SENDERS_AT_ONCE = 50;
-
-const CURVE_ABI = parseAbi([
-  'function factory() view returns (address)',
-  'function pairToken() view returns (address)',
-]);
 
 const AGGREGATOR_ABI = parseAbi([
   'function description() view returns (string)',
@@ -105,33 +94,6 @@ export function robinhoodMarketRpc(url: string, pacing: PacingOptions): MarketRp
           functionName: 'decimals',
         }),
       ),
-    curveOrigins: async (addresses) => {
-      const origins = new Map<string, { factory: string; pairToken: string } | null>();
-      for (let index = 0; index < addresses.length; index += CURVES_PER_CALL) {
-        const batch = addresses.slice(index, index + CURVES_PER_CALL);
-        const results = await paced(() =>
-          client.multicall({
-            multicallAddress: MULTICALL3,
-            allowFailure: true,
-            contracts: batch.flatMap((address) => [
-              { address: address as Address, abi: CURVE_ABI, functionName: 'factory' } as const,
-              { address: address as Address, abi: CURVE_ABI, functionName: 'pairToken' } as const,
-            ]),
-          }),
-        );
-        batch.forEach((address, position) => {
-          const factory = results[position * 2];
-          const pairToken = results[position * 2 + 1];
-          origins.set(
-            address,
-            factory?.status === 'success' && pairToken?.status === 'success'
-              ? { factory: factory.result, pairToken: pairToken.result }
-              : null,
-          );
-        });
-      }
-      return origins;
-    },
     feedLatest: async (address) => {
       const [, answer, , updatedAt] = await paced(() =>
         client.readContract({
