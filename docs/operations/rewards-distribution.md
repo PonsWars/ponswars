@@ -177,6 +177,25 @@ still available. Try again."_
 Claims are exactly-once against the root (§45.10). A double-claim attempt is
 rejected on chain, not by the client.
 
+**The server reads claims back.** It follows the distributor's `Claimed` events
+every thirty seconds from where it last read — the position is in
+`indexer_cursors` — and records them in `reward_claims`. Nothing waits on that
+read: the claims page asks the record first and the contract only about a claim
+the reader has not seen yet, so a reward claimed a second ago never reads as
+unclaimed. A claim with no allocation behind it is dropped; another
+deployment's distribution on the same contract says nothing about this one's
+players.
+
+To see where the reader is:
+
+```sql
+SELECT * FROM indexer_cursors WHERE name = 'reward-claims';
+```
+
+A reader that has fallen behind costs nothing but freshness. Deleting its
+cursor row makes it read the distributor's whole history again, which is safe:
+a claim already recorded is recorded once.
+
 ## Below the minimum claim threshold
 
 The allocation carries forward into the next window (§16.7, §35.5). **It is not

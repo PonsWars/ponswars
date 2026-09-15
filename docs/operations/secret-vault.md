@@ -112,6 +112,19 @@ reactivating it against a balance that is not yet settled.
 
 ## When a winner claims
 
+The winner claims from the Rewards page, from their own wallet, whenever they
+like (§8.5). The page reads `entitlements(wallet)` from the vault and shows the
+`REWARD_AMOUNT` the vault itself holds; the claim is the vault's `claim()`,
+sent by the player. The server holds no key that could send it.
+
+A wallet with no entitlement sees nothing there, and a vault that will not
+answer shows nothing rather than "you have none" — a reservation has no expiry,
+and a slow endpoint must not read as one that has gone.
+
+Startup refuses a vault whose `REWARD_AMOUNT` is not the locked 0.2 SPY (§8.1),
+so a wrong `SECRET_STOCK_VAULT_ADDRESS` or `SPY_TOKEN_DECIMALS` stops the
+service rather than showing a winner the wrong number.
+
 The trophy is permanent and stays on the profile after the claim (§34.8). It is
 non-transferable and tied to the original Genesis wallet record.
 

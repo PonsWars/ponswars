@@ -65,6 +65,7 @@ beforeEach(async () => {
   }
   db = database(pg);
   store = new PostgresClaimStore(db);
+  const windowStart = Date.now() - 25 * 3_600_000;
   // A published allocation for WALLET in distribution 8: what a claim claims.
   await db.query(
     `INSERT INTO distribution_windows
@@ -72,8 +73,10 @@ beforeEach(async () => {
         merkle_root, publication_tx, published_at)
      VALUES ('8', $1, $2, 'PUBLISHED', 1, $3, $4, now())`,
     [
-      new Date(Date.now() - 25 * 3_600_000).toISOString(),
-      new Date(Date.now() - 3_600_000).toISOString(),
+      // One instant, two ends: read twice, the window is not exactly the
+      // twenty-four hours §16.2 fixes, and the database says so.
+      new Date(windowStart).toISOString(),
+      new Date(windowStart + 24 * 3_600_000).toISOString(),
       `0x${'11'.repeat(32)}`,
       `0x${'22'.repeat(32)}`,
     ],
