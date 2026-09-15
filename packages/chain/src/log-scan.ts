@@ -45,6 +45,8 @@ export function isTooManyLogs(error: unknown): boolean {
     text.includes('query returned more than') ||
     text.includes('too many') ||
     text.includes('response size exceeded') ||
+    // viem's own limit on how large a response it will read.
+    text.includes('exceeded the size limit') ||
     text.includes('block range')
   );
 }

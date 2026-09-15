@@ -88,6 +88,7 @@ describe('isTooManyLogs', () => {
       cause: new Error('logs matched by query exceeds limit of 10000'),
     });
     expect(isTooManyLogs(wrapped)).toBe(true);
+    expect(isTooManyLogs(new Error('HTTP response body exceeded the size limit.'))).toBe(true);
     expect(isTooManyLogs(new Error('execution reverted'))).toBe(false);
   });
 });
