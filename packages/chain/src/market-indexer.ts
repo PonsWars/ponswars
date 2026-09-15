@@ -13,6 +13,7 @@ import {
   type ActiveTicker,
   type UtcTimestamp,
 } from '@ponswars/shared-types';
+import { BlockClock } from './block-clock.js';
 import { scanLogs, type LogFilter, type RawLog, type RpcRequest } from './log-scan.js';
 import {
   decodeMarketEvent,
@@ -103,6 +104,15 @@ const PRICE_DECIMALS = 8;
 
 const MINUTE = 60_000;
 
+/**
+ * Block-time anchor spacing where a second matters: about five minutes of
+ * Robinhood Chain, measured to interpolate within a second.
+ */
+const FINE_ANCHOR_BLOCKS = 3_000n;
+
+/** Anchor spacing for volume history, which is bucketed by the minute: about fifty minutes. */
+const COARSE_ANCHOR_BLOCKS = 30_000n;
+
 /** How far before its target a block search may stop: a minute of extra blocks to read. */
 const BLOCK_SEARCH_TOLERANCE_MS = MINUTE;
 
@@ -153,8 +163,13 @@ export class RobinhoodMarketIndexer implements MarketSource {
   private lastBlock = -1n;
   private covered = utcTimestamp(0);
   private referencesReadAt = 0;
+  /** Block timestamps, read at anchors and interpolated between them. */
+  private readonly clock: BlockClock;
+  /** From here on, trades are dated from close anchors; before it, volume only needs the minute. */
+  private fineFromBlock = 0n;
 
   constructor(private readonly options: MarketIndexerOptions) {
+    this.clock = new BlockClock((block) => options.rpc.blockTimestamp(block));
     for (const ticker of ACTIVE_TICKERS) {
       this.tickerOf.set(options.addresses.tickers[ticker].token.toLowerCase(), ticker);
       this.dexTrades.set(ticker, []);
@@ -249,7 +264,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
     await this.verify();
 
     const head = await rpc.blockNumber();
-    const headAt = await rpc.blockTimestamp(head);
+    const headAt = await this.clock.read(head);
     this.keepTradesFrom = headAt - this.options.tradeRetentionMs;
     const volumeFrom = await this.blockAtOrBefore(
       head,
@@ -266,6 +281,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
       headAt,
       headAt - this.options.ponsRetentionMs,
     );
+    this.fineFromBlock = tradesFrom < ponsFrom ? tradesFrom : ponsFrom;
     this.say(
       `market: head ${head.toString()}, trades from ${tradesFrom.toString()}, Pons from ${ponsFrom.toString()}`,
     );
@@ -339,9 +355,10 @@ export class RobinhoodMarketIndexer implements MarketSource {
         to,
       ),
     );
+    // Before the trades, so every block in the range lies between two anchors.
+    const toAt = await this.clock.read(to);
     await this.readTrades(from, to, from);
 
-    const toAt = await rpc.blockTimestamp(to);
     this.lastBlock = to;
     this.covered = utcTimestamp(toAt);
     await this.refreshReferences(false);
@@ -386,7 +403,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
     for (let index = 0; index < usdgIds.length; index += IDS_PER_QUERY) {
       const ids = usdgIds.slice(index, index + IDS_PER_QUERY);
       this.apply(
-        await this.scan(
+        await this.scanTrades(
           { address: addresses.poolManager, topics: [MARKET_TOPICS.swap, ids] },
           from,
           to,
@@ -401,7 +418,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
     for (let index = 0; index < ponsIds.length; index += IDS_PER_QUERY) {
       const ids = ponsIds.slice(index, index + IDS_PER_QUERY);
       this.apply(
-        await this.scan(
+        await this.scanTrades(
           { address: addresses.poolManager, topics: [MARKET_TOPICS.swap, ids] },
           ponsStart,
           to,
@@ -410,7 +427,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
     }
     // Curve trades chain-wide, kept for the curves quoted in a ticker.
     this.apply(
-      await this.scan(
+      await this.scanTrades(
         { topics: [[MARKET_TOPICS.curveBuy, MARKET_TOPICS.curveSell]] },
         ponsStart,
         to,
@@ -420,25 +437,39 @@ export class RobinhoodMarketIndexer implements MarketSource {
     await this.resolveSenders();
   }
 
-  private async scan(filter: LogFilter, from: bigint, to: bigint): Promise<RawLog[]> {
-    const logs = await scanLogs(this.options.rpc.request, filter, from, to);
-    // Endpoints that do not date their logs get dated here, one lookup per block.
-    const dated: RawLog[] = [];
-    const stamps = new Map<string, string>();
-    for (const log of logs) {
-      if (log.blockTimestamp !== undefined) {
-        dated.push(log);
-        continue;
-      }
-      let stamp = stamps.get(log.blockNumber);
-      if (stamp === undefined) {
-        const ms = await this.options.rpc.blockTimestamp(BigInt(log.blockNumber));
-        stamp = `0x${Math.floor(ms / 1_000).toString(16)}`;
-        stamps.set(log.blockNumber, stamp);
-      }
-      dated.push({ ...log, blockTimestamp: stamp });
+  /** Logs whose time does not matter: pools and registrations. */
+  private scan(filter: LogFilter, from: bigint, to: bigint): Promise<RawLog[]> {
+    return scanLogs(this.options.rpc.request, filter, from, to);
+  }
+
+  /**
+   * Trade logs, each with its block's time.
+   *
+   * An endpoint that dates its logs is believed. One that does not — the public
+   * Robinhood Chain endpoint sends `0x0` — has its blocks placed by the clock:
+   * anchors a few minutes apart where a price or a Pons window will be read,
+   * and further apart before that, where only a minute of volume is.
+   */
+  private async scanTrades(filter: LogFilter, from: bigint, to: bigint): Promise<RawLog[]> {
+    const logs = await this.scan(filter, from, to);
+    const undated = logs.filter((log) => logPosition(log).at === null);
+    if (undated.length === 0) {
+      return logs;
     }
-    return dated;
+    const times = await this.clock.timesOf(
+      undated.map((log) => BigInt(log.blockNumber)),
+      (block) => (block >= this.fineFromBlock ? FINE_ANCHOR_BLOCKS : COARSE_ANCHOR_BLOCKS),
+    );
+    return logs.map((log) => {
+      if (logPosition(log).at !== null) {
+        return log;
+      }
+      const at = times.get(BigInt(log.blockNumber));
+      if (at === undefined) {
+        throw new Error(`market: no time for block ${log.blockNumber}`);
+      }
+      return { ...log, blockTimestamp: `0x${Math.floor(at / 1_000).toString(16)}` };
+    });
   }
 
   private apply(logs: readonly RawLog[]): void {
@@ -671,7 +702,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
       return head;
     }
     let low = 0n;
-    let lowAt = await this.options.rpc.blockTimestamp(low);
+    let lowAt = await this.clock.read(low);
     if (lowAt > targetMs) {
       return low;
     }
@@ -689,7 +720,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
             low,
             high,
           );
-      const at = await this.options.rpc.blockTimestamp(middle);
+      const at = await this.clock.read(middle);
       if (at <= targetMs) {
         low = middle;
         lowAt = at;
@@ -716,6 +747,14 @@ export class RobinhoodMarketIndexer implements MarketSource {
       dropBefore(this.dexTrades.get(ticker), now - this.options.tradeRetentionMs);
       dropBefore(this.ponsTrades.get(ticker), now - this.options.ponsRetentionMs);
     }
+    this.clock.forgetBefore(
+      now -
+        Math.max(
+          this.options.volumeRetentionMs,
+          this.options.tradeRetentionMs,
+          this.options.ponsRetentionMs,
+        ),
+    );
     // Event ids only need remembering as long as a re-read could return them.
     if (this.seen.size > 2_000_000) {
       this.seen.clear();

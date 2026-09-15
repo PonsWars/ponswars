@@ -228,6 +228,19 @@ describe('RobinhoodMarketIndexer', () => {
     expect(market.coversUntil()).toBe(blockTime(1_000));
   });
 
+  it('dates trades itself when the endpoint sends a zero block timestamp, as the public one does', async () => {
+    const undated = (log: RawLog): RawLog => ({ ...log, blockTimestamp: '0x0' });
+    const chain = fakeChain([
+      undated(initialize(10)),
+      undated(swap(USDG_POOL, 210_000_000n, -(10n ** 18n), 500)),
+    ]);
+    const market = indexer(chain.rpc);
+    await market.start();
+
+    expect(market.trades('NVDA', all).map((trade) => trade.at)).toEqual([blockTime(500)]);
+    expect(market.notional('NVDA', all)).toBe(210_000_000n);
+  });
+
   it('counts Pons trading quoted in the ticker — its curve asked about when first seen — sized in dollars and credited to the trader', async () => {
     const chain = fakeChain([
       registered(30),

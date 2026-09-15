@@ -42,7 +42,10 @@ export interface LogPosition {
   readonly eventId: string;
   readonly transactionHash: string;
   readonly blockNumber: number;
-  /** Milliseconds; `null` if the endpoint did not send a block timestamp. */
+  /**
+   * Milliseconds; `null` if the endpoint did not date the log. The public
+   * Robinhood Chain endpoint sends `blockTimestamp: 0x0`, which is no date.
+   */
   readonly at: number | null;
 }
 
@@ -87,7 +90,10 @@ export function logPosition(log: RawLog): LogPosition {
     eventId: `${log.transactionHash.toLowerCase()}:${String(Number(BigInt(log.logIndex)))}`,
     transactionHash: log.transactionHash.toLowerCase(),
     blockNumber: Number(BigInt(log.blockNumber)),
-    at: log.blockTimestamp === undefined ? null : Number(BigInt(log.blockTimestamp)) * 1_000,
+    at:
+      log.blockTimestamp === undefined || BigInt(log.blockTimestamp) === 0n
+        ? null
+        : Number(BigInt(log.blockTimestamp)) * 1_000,
   };
 }
 

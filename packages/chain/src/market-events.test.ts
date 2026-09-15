@@ -111,4 +111,9 @@ describe('logPosition', () => {
       at: 0x6700000a * 1_000,
     });
   });
+
+  it('treats a zero block timestamp as no date, as the public endpoint sends it', () => {
+    expect(logPosition({ ...log([], '0x'), blockTimestamp: '0x0' }).at).toBeNull();
+    expect(logPosition({ ...log([], '0x'), blockTimestamp: undefined }).at).toBeNull();
+  });
 });
