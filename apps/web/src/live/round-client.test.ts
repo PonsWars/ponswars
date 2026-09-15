@@ -162,6 +162,28 @@ describe('fetching a round', () => {
     expect(result.ok ? null : result.failure).toEqual({ kind: 'REJECTED', status: 503 });
   });
 
+  it('names a closed market and when it reopens, rather than a refusal', async () => {
+    const reopensAt = 1_788_998_400_000;
+    const result = await fetchCurrentRound(
+      ENDPOINTS,
+      undefined,
+      stubFetch({
+        ok: false,
+        status: 404,
+        json: () =>
+          Promise.resolve({
+            code: 'MARKET_CLOSED',
+            message: 'No round is in play while the stock market is closed.',
+            stateIsSafe: true,
+            nextStep: 'Come back when the market reopens.',
+            correlationId: 'c-1',
+            retryAt: reopensAt,
+          }),
+      }),
+    );
+    expect(result.ok ? null : result.failure).toEqual({ kind: 'MARKET_CLOSED', reopensAt });
+  });
+
   it('refuses a body that is not the published shape, whole', async () => {
     // Not partially applied. §4.3 fixes the count at five, so four is not a
     // smaller round — it is a round with a battle missing, and rendering it

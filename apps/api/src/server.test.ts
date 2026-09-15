@@ -265,7 +265,11 @@ describe('GET /v1/rounds/current', () => {
 
     const response = await closed.inject({ method: 'GET', url: '/v1/rounds/current' });
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toMatchObject({ code: 'MARKET_CLOSED', stateIsSafe: true });
+    expect(response.json()).toMatchObject({
+      code: 'MARKET_CLOSED',
+      stateIsSafe: true,
+      retryAt: reopensAt,
+    });
     expect(response.json<{ message: string }>().message).toContain(
       new Date(reopensAt).toISOString(),
     );

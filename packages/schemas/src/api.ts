@@ -616,6 +616,12 @@ export const apiErrorSchema = z
     /** What the user can do next. */
     nextStep: z.string().min(1),
     correlationId: z.string().min(1),
+    /**
+     * When asking again can succeed, where the server knows: a closed market
+     * names when it reopens. Absent for errors that no amount of waiting
+     * fixes, so a client never schedules a retry that cannot work.
+     */
+    retryAt: utcTimestampSchema.optional(),
   })
   .strict();
 

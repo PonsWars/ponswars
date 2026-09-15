@@ -27,12 +27,20 @@ function error(
   stateIsSafe: boolean,
   nextStep: string,
   correlationId: string,
+  retryAt?: number,
 ): ErrorResponse {
   // Parsed, not cast. An error response that failed its own schema would be the
   // least useful possible thing to discover in production.
   return {
     status,
-    body: apiErrorSchema.parse({ code, message, stateIsSafe, nextStep, correlationId }),
+    body: apiErrorSchema.parse({
+      code,
+      message,
+      stateIsSafe,
+      nextStep,
+      correlationId,
+      ...(retryAt === undefined ? {} : { retryAt }),
+    }),
   };
 }
 
@@ -75,6 +83,7 @@ export function marketClosed(reopensAt: number, correlationId: string): ErrorRes
     true,
     'Come back when the market reopens. Nothing is waiting on you.',
     correlationId,
+    reopensAt,
   );
 }
 

@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+import { formatOpensAt } from '../hud/round-phase.js';
 import { captionStyle, panelStyle } from '../hud/styles.js';
 import type { LiveStatus } from './useLiveWorld.js';
 
@@ -58,6 +59,8 @@ export function previewMessage(status: LiveStatus): string | null {
       return 'CANNOT REACH THE SERVER — DISPLAY MAY BE OUT OF DATE';
     case 'REJECTED':
       return `SERVER REFUSED THE ROUND (${String(status.lastFailure.status)})`;
+    case 'MARKET_CLOSED':
+      return `MARKET CLOSED — NEXT ROUND ${formatOpensAt(status.lastFailure.reopensAt)}`;
     case 'MALFORMED':
       // Named separately from a refusal because it is a different problem with
       // a different owner: the server answered, and what it said does not match

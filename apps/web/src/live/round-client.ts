@@ -1,4 +1,4 @@
-import { battleResultSchema, currentRoundSchema } from '@ponswars/schemas';
+import { apiErrorSchema, battleResultSchema, currentRoundSchema } from '@ponswars/schemas';
 import {
   battleId as toBattleId,
   roundId as toRoundId,
@@ -28,6 +28,11 @@ export type RoundFetchFailure =
   | { readonly kind: 'UNREACHABLE'; readonly detail: string }
   /** The server answered, but not with a round. */
   | { readonly kind: 'REJECTED'; readonly status: number }
+  /**
+   * No round, because the stock market is shut until `reopensAt` (ADR 0007).
+   * Not a failure of anything, and said as what it is.
+   */
+  | { readonly kind: 'MARKET_CLOSED'; readonly reopensAt: number }
   /** The body is not the shape §47.1 publishes. Never partially applied. */
   | { readonly kind: 'MALFORMED'; readonly detail: string };
 
@@ -85,6 +90,20 @@ export async function fetchCurrentRound(
   }
 
   if (!response.ok) {
+    let refusalBody: unknown = null;
+    try {
+      refusalBody = await response.json();
+    } catch {
+      // A refusal without a JSON body is still a refusal; its status says enough.
+    }
+    const refusal = apiErrorSchema.safeParse(refusalBody);
+    if (
+      refusal.success &&
+      refusal.data.code === 'MARKET_CLOSED' &&
+      refusal.data.retryAt !== undefined
+    ) {
+      return { ok: false, failure: { kind: 'MARKET_CLOSED', reopensAt: refusal.data.retryAt } };
+    }
     return { ok: false, failure: { kind: 'REJECTED', status: response.status } };
   }
 
