@@ -86,7 +86,7 @@ describe('TapeRecorder', () => {
     expect(tape.filter((entry) => entry.kind === 'UNITS')).toHaveLength(10);
 
     // What was written replays as what was read.
-    const replay = new TapeSource(tape, DOLLAR);
+    const replay = new TapeSource(tape, DOLLAR, 'wall');
     replay.seeUntil(wall);
     expect(replay.trades('NVDA', all).map((entry) => entry.eventId)).toEqual(['0xa:1', '0xb:1']);
     expect(replay.ponsActivity('NVDA', all)).toEqual(source.pons);

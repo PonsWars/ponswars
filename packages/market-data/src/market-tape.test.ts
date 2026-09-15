@@ -66,6 +66,30 @@ describe('tape entries', () => {
 });
 
 describe('TapeSource', () => {
+  it('on the chain clock, shows each trade from when it happened, however late it was read', () => {
+    const tape: TapeEntry[] = [
+      { kind: 'UNITS', ticker: 'NVDA', quoteDecimals: 6, tokenDecimals: 18 },
+      trade('0xa:1', T0, 10n),
+      trade('0xb:1', T0 + 30_000, 20n),
+      // Read two minutes after the fact, by a recorder that fell behind.
+      covered(T0 + 60_000, T0 + 180_000),
+    ];
+
+    const wall = new TapeSource(tape, DOLLAR, 'wall');
+    wall.seeUntil(T0 + 45_000);
+    expect(wall.trades('NVDA', all)).toEqual([]);
+
+    const chain = new TapeSource(tape, DOLLAR, 'chain');
+    chain.seeUntil(T0 + 45_000);
+    expect(chain.trades('NVDA', all).map((entry) => entry.eventId)).toEqual(['0xa:1', '0xb:1']);
+    expect(chain.coversUntil()).toBe(T0 + 45_000);
+    expect(chain.span).toEqual({ from: T0 + 60_000, to: T0 + 60_000 });
+
+    // Not past where the tape reaches.
+    chain.seeUntil(T0 + 600_000);
+    expect(chain.coversUntil()).toBe(T0 + 60_000);
+  });
+
   it('shows only what had been read by the instant, and how far it reached', () => {
     const source = new TapeSource(
       [
@@ -78,6 +102,7 @@ describe('TapeSource', () => {
         trade('0xc:1', T0 + 3_000, 30n),
       ],
       DOLLAR,
+      'wall',
     );
 
     source.seeUntil(T0 + 2_999);
@@ -104,6 +129,7 @@ describe('TapeSource', () => {
         covered(T0 + 1_000, T0 + 6_000),
       ],
       DOLLAR,
+      'wall',
     );
     source.seeUntil(T0 + 6_000);
 
@@ -120,6 +146,7 @@ describe('TapeSource', () => {
         covered(T0 + 120_000, T0 + 120_000),
       ],
       5n * DOLLAR,
+      'wall',
     );
     source.seeUntil(T0 + 120_000);
 
@@ -144,6 +171,7 @@ describe('TapeSource', () => {
         covered(T0, T0),
       ],
       DOLLAR,
+      'wall',
     );
     expect(source.reference('NVDA')).toBeNull();
     source.seeUntil(T0);

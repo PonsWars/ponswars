@@ -164,7 +164,21 @@ function ticker(fields: Record<string, unknown>): ActiveTicker {
 const MINUTE = 60_000;
 
 /**
- * The market on a tape, as it could be seen at one wall-clock instant.
+ * Which instant a replay moves by.
+ *
+ * - `wall` shows the market as the recorder had read it by each instant, lag
+ *   and all. It measures the whole pipeline, endpoint included — what a
+ *   service reading through that endpoint would have scored.
+ * - `chain` shows each trade from the moment it happened and treats the source
+ *   as current throughout the tape. It measures the market alone, which is
+ *   what the market's bounds are for; a recorder that fell behind on a
+ *   throttled endpoint still yields a usable tape. A stretch the recorder
+ *   never read shows as no trades, not as lag.
+ */
+export type TapeClock = 'wall' | 'chain';
+
+/**
+ * The market on a tape, as it could be seen at one instant.
  *
  * Built once from a whole tape, then moved forward with `seeUntil`. Only
  * forward: a replay walks time the way the service did, and a source that
@@ -175,8 +189,11 @@ const MINUTE = 60_000;
  * once, as it does on chain.
  */
 export class TapeSource implements MarketSource {
-  private readonly batches: { readonly wallAt: number; readonly entries: TapeEntry[] }[] = [];
+  /** Entries in the order they become visible, each with the instant it does. */
+  private readonly timeline: { readonly at: number; readonly entry: TapeEntry }[] = [];
   private next = 0;
+  private readonly firstCovered: number | null = null;
+  private readonly lastCovered: number | null = null;
   private covered = utcTimestamp(0);
   private readonly seen = new Set<string>();
   private readonly dexTrades = new Map<ActiveTicker, DexTrade[]>();
@@ -189,12 +206,16 @@ export class TapeSource implements MarketSource {
    * @param entries A tape, in the order it was written.
    * @param minTradeQuote Smallest trade counted into volume — a bound under
    *   calibration, so the replay's and not the recorder's.
+   * @param clock Which instant the replay moves by; see {@link TapeClock}.
    */
   constructor(
     entries: Iterable<TapeEntry>,
     private readonly minTradeQuote: bigint,
+    private readonly clock: TapeClock,
   ) {
     let pending: TapeEntry[] = [];
+    let firstCovered: number | null = null;
+    let lastCovered: number | null = null;
     for (const entry of entries) {
       if (entry.kind === 'UNITS') {
         this.unitsOf.set(entry.ticker, {
@@ -205,34 +226,50 @@ export class TapeSource implements MarketSource {
         // Whatever was read but never marked covered is not known to be complete.
         pending = [];
       } else if (entry.kind === 'COVERED') {
-        pending.push(entry);
-        this.batches.push({ wallAt: entry.wallAt, entries: pending });
+        const markAt = clock === 'wall' ? entry.wallAt : entry.at;
+        firstCovered ??= markAt;
+        lastCovered = Math.max(lastCovered ?? markAt, markAt);
+        for (const read of [...pending, entry]) {
+          this.timeline.push({
+            at: clock === 'wall' ? entry.wallAt : chainInstant(read),
+            entry: read,
+          });
+        }
         pending = [];
       } else {
         pending.push(entry);
       }
     }
+    if (clock === 'chain') {
+      // Stable: entries at one instant keep the order they were read in.
+      this.timeline.sort((a, b) => a.at - b.at);
+    }
+    this.firstCovered = firstCovered;
+    this.lastCovered = lastCovered;
   }
 
-  /** The wall-clock instant of the first and last coverage marks, or `null` for an empty tape. */
+  /** The first and last instant the tape covers, on its clock, or `null` for an empty tape. */
   get span(): { readonly from: number; readonly to: number } | null {
-    const first = this.batches[0];
-    const last = this.batches.at(-1);
-    return first === undefined || last === undefined
+    return this.firstCovered === null || this.lastCovered === null
       ? null
-      : { from: first.wallAt, to: last.wallAt };
+      : { from: this.firstCovered, to: this.lastCovered };
   }
 
-  /** Reveals everything that had been read by wall-clock instant `wallAt`. */
-  seeUntil(wallAt: number): void {
+  /** Reveals everything visible by `instant`, on the replay's clock. */
+  seeUntil(instant: number): void {
     for (
-      let batch = this.batches[this.next];
-      batch !== undefined && batch.wallAt <= wallAt;
-      batch = this.batches[this.next]
+      let item = this.timeline[this.next];
+      item !== undefined && item.at <= instant;
+      item = this.timeline[this.next]
     ) {
       this.next += 1;
-      for (const entry of batch.entries) {
-        this.reveal(entry);
+      this.reveal(item.entry);
+    }
+    if (this.clock === 'chain' && this.lastCovered !== null) {
+      // The source is taken as current wherever the tape reaches.
+      const current = Math.min(instant, this.lastCovered);
+      if (current > this.covered) {
+        this.covered = utcTimestamp(current);
       }
     }
   }
@@ -318,6 +355,21 @@ export class TapeSource implements MarketSource {
       case 'UNITS':
         return;
     }
+  }
+}
+
+/** When an entry happened on chain, as far as a lag-free source would have seen it. */
+function chainInstant(entry: TapeEntry): number {
+  switch (entry.kind) {
+    case 'TRADE':
+    case 'PONS':
+    case 'COVERED':
+      return entry.at;
+    case 'REFERENCE':
+      return entry.updatedAt;
+    case 'START':
+    case 'UNITS':
+      return 0;
   }
 }
 
