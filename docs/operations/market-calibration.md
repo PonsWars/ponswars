@@ -55,6 +55,14 @@ node tools/record-market.mjs --rpc https://your-vendor-endpoint --min-interval-m
 node tools/calibrate-market.mjs --candidate tools/calibration/initial-candidate.json --out report.json
 ```
 
+`--clock chain`, the default, replays the market alone: each trade is visible
+from the moment it happened, as though the source were never behind. That is
+what the market's bounds are measured against, and it keeps a tape recorded
+through a throttled endpoint usable. `--clock wall` replays what the recorder
+had actually read at each instant, lag included — how a service reading through
+that endpoint would have fared. If `SOURCE_LAG` tops the reasons on the wall
+clock, the endpoint is the problem, not the bounds.
+
 A candidate is one set of values: the `MARKET_*` variables exactly as they
 would be set in the environment, the engine's scoring, momentum and victory
 tuning, and the confidence bands. `tools/calibration/initial-candidate.json` is a

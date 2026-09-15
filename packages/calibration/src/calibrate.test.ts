@@ -69,7 +69,12 @@ function hourOfMarket(): TapeEntry[] {
 }
 
 /** A tick every ten seconds: enough to see every behaviour, cheap enough for a busy test run. */
-const OPTIONS: CalibrationOptions = { tickMs: 10_000, excludedAddresses: [], sampleEveryTicks: 6 };
+const OPTIONS: CalibrationOptions = {
+  clock: 'wall',
+  tickMs: 10_000,
+  excludedAddresses: [],
+  sampleEveryTicks: 6,
+};
 
 // Replaying an hour of ten tickers through forty-five battles a round is real
 // work; under a full parallel test run it needs longer than the default.

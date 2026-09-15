@@ -4,10 +4,12 @@
  * reports what a candidate set of bounds and tuning would have done.
  *
  *   node tools/calibrate-market.mjs [--tapes <dir or file>]... [--candidate <json>]
- *                                   [--tick-ms <n>] [--out <report.json>]
+ *                                   [--clock chain|wall] [--tick-ms <n>] [--out <report.json>]
  *
  * Defaults: every `tape-*.jsonl` under `recordings/market`, the candidate in
- * `tools/calibration/initial-candidate.json`, one tick a second. The summary
+ * `tools/calibration/initial-candidate.json`, the chain clock (the market alone,
+ * without the recorder's lag; `wall` replays it as the endpoint delivered it),
+ * one tick a second. The summary
  * is printed; `--out` also writes the whole report and the suggested starting
  * values as JSON, to compare candidates side by side.
  *
@@ -24,7 +26,7 @@ import { join } from 'node:path';
 import { argv, exit, stderr, stdout } from 'node:process';
 
 const USAGE =
-  'Usage: node tools/calibrate-market.mjs [--tapes <dir or file>]... [--candidate <json>] [--tick-ms <n>] [--out <report.json>]';
+  'Usage: node tools/calibrate-market.mjs [--tapes <dir or file>]... [--candidate <json>] [--clock chain|wall] [--tick-ms <n>] [--out <report.json>]';
 
 function fail(message) {
   stderr.write(`${message}\n`);
@@ -34,6 +36,7 @@ function fail(message) {
 const options = {
   tapes: [],
   candidate: join('tools', 'calibration', 'initial-candidate.json'),
+  clock: 'chain',
   tickMs: 1_000,
   out: null,
 };
@@ -52,6 +55,11 @@ for (let index = 0; index < args.length; index += 1) {
     options.tapes.push(value);
   } else if (name === '--candidate') {
     options.candidate = value;
+  } else if (name === '--clock') {
+    if (value !== 'chain' && value !== 'wall') {
+      fail(`--clock is chain or wall.\n${USAGE}`);
+    }
+    options.clock = value;
   } else if (name === '--tick-ms') {
     options.tickMs = Number(value);
     if (!Number.isInteger(options.tickMs) || options.tickMs <= 0) {
@@ -135,6 +143,7 @@ try {
 
 const started = Date.now();
 const report = await calibrate(entries, candidate, {
+  clock: options.clock,
   tickMs: options.tickMs,
   excludedAddresses: ROBINHOOD_CHAIN_MAINNET_MARKET.routers,
   sampleEveryTicks: Math.max(1, Math.round(60_000 / options.tickMs)),
@@ -156,6 +165,7 @@ const quantiles = (d, digits = 2) =>
 
 const lines = [
   '',
+  `Clock: ${report.clock === 'chain' ? 'chain (the market alone, without the recorder’s lag)' : 'wall (as the recorder’s endpoint delivered it)'}`,
   `Rounds: ${String(report.rounds.played)} played, ${String(report.rounds.marketClosed)} skipped with the market shut` +
     (report.rounds.withoutVolumeHistory > 0
       ? `, ${String(report.rounds.withoutVolumeHistory)} without enough earlier sessions for relative volume`

@@ -22,6 +22,7 @@ import {
   OnchainMarket,
   onchainMarketPolicy,
   TapeSource,
+  type TapeClock,
   type TapeEntry,
 } from '@ponswars/market-data';
 import {
@@ -63,6 +64,11 @@ import { Sample, tally, type Distribution } from './distribution.js';
  */
 
 export interface CalibrationOptions {
+  /**
+   * `chain` to measure the market alone, `wall` to measure it as the recorder's
+   * endpoint delivered it (see `TapeClock`).
+   */
+  readonly clock: TapeClock;
   /** The engine's tick interval (§12.5). */
   readonly tickMs: number;
   /** Pons trading never counted as a player's, as the server excludes it. */
@@ -109,6 +115,8 @@ export interface TickerReport {
 }
 
 export interface CalibrationReport {
+  /** The clock the tape was replayed on. */
+  readonly clock: TapeClock;
   readonly rounds: {
     /** Slots played as rounds. */
     readonly played: number;
@@ -187,7 +195,7 @@ export async function calibrate(
     quoteDecimals: units.quoteDecimals,
     excludedAddresses: options.excludedAddresses,
   });
-  const source = new TapeSource(entries, policy.price.minTradeQuote);
+  const source = new TapeSource(entries, policy.price.minTradeQuote, options.clock);
   const market = new OnchainMarket(source, policy);
   const span = source.span;
   if (span === null) {
@@ -414,6 +422,7 @@ export async function calibrate(
   }
 
   return {
+    clock: options.clock,
     rounds: { played, marketClosed, withoutVolumeHistory },
     tickers: Object.fromEntries(
       ACTIVE_TICKERS.map((ticker) => [ticker, tickerReport(sampleOf(ticker))]),
