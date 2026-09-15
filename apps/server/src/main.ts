@@ -10,6 +10,7 @@ import {
   reserverVault,
   RpcChainPort,
   robinhoodChainRpc,
+  secretVaultReader,
 } from '@ponswars/chain';
 import { GenesisFlow } from '@ponswars/genesis-service';
 import {
@@ -25,6 +26,8 @@ import {
   baseUnits,
   chainLabel,
   milliseconds,
+  parseDecimalToBaseUnits,
+  SECRET_REWARD_SPY_DECIMAL,
   tokenDecimals,
   utcTimestamp,
   type UtcTimestamp,
@@ -159,6 +162,29 @@ async function main(): Promise<void> {
     });
     await assertReserver(contract, reserver, config.CHAIN_ID);
     secretVault = new ChainSecretVault(contract);
+  }
+
+  // §8.5: a winner claims their own reward, from their own wallet. The service
+  // only reads what the vault owes them — no key involved, so this is here
+  // whether or not a reserver is configured. The amount is the vault's own,
+  // checked against the locked 0.2 SPY: a vault paying anything else is not
+  // the vault this game promises (§8.1).
+  const vaultReader = secretVaultReader({
+    url: config.RPC_URL,
+    chainId: config.CHAIN_ID,
+    vault: config.SECRET_STOCK_VAULT_ADDRESS,
+  });
+  const secretReward = await vaultReader.rewardAmount();
+  const lockedReward = parseDecimalToBaseUnits(
+    SECRET_REWARD_SPY_DECIMAL,
+    tokenDecimals(config.SPY_TOKEN_DECIMALS),
+  );
+  if (secretReward !== lockedReward) {
+    throw new Error(
+      `The Secret Stock Vault at ${config.SECRET_STOCK_VAULT_ADDRESS} pays ${secretReward.toString()} ` +
+        `base units, and §8.1 locks the Secret reward at ${SECRET_REWARD_SPY_DECIMAL} SPY ` +
+        `(${lockedReward.toString()}). Check SPY_TOKEN_DECIMALS and SECRET_STOCK_VAULT_ADDRESS.`,
+    );
   }
 
   /**
@@ -314,6 +340,13 @@ async function main(): Promise<void> {
       secretVault,
       now,
     }),
+    secretClaim: {
+      chainId: config.CHAIN_ID,
+      vault: config.SECRET_STOCK_VAULT_ADDRESS,
+      decimals: config.SPY_TOKEN_DECIMALS,
+      amount: secretReward,
+      entitlementOf: (wallet) => vaultReader.entitlementOf(wallet),
+    },
     picks,
     config: CONFIG,
     now,

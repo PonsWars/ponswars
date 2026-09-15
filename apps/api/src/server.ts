@@ -15,6 +15,7 @@ import {
   battleResultSchema,
   genesisStatusSchema,
   rewardClaimsSchema,
+  secretClaimSchema,
   type GenesisClaimBody,
   type GenesisStatusBody,
   currentRoundSchema,
@@ -200,6 +201,20 @@ export interface ServerDeps {
       }[]
     >;
     hasClaimed(distributionId: bigint, wallet: WalletAddress): Promise<boolean>;
+  };
+  /**
+   * The Secret Stock Vault a winner claims their 0.2 SPY from (§8.5).
+   *
+   * Absent where no vault is configured. Reads only: the winner's own wallet
+   * sends the claim, to itself, and this service holds no key that could.
+   */
+  readonly secretClaim?: {
+    readonly chainId: number;
+    readonly vault: `0x${string}`;
+    readonly decimals: number;
+    /** What one Secret pays, read from the vault at startup. */
+    readonly amount: bigint;
+    entitlementOf(wallet: WalletAddress): Promise<'NONE' | 'RESERVED' | 'CLAIMED'>;
   };
   readonly genesis?: {
     status(wallet: WalletAddress): Promise<GenesisStatus>;
@@ -978,6 +993,40 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           claimed: claimed[index] ?? null,
         })),
       }),
+    );
+  });
+
+  /**
+   * `GET /v1/rewards/secret` (§8.5, §35.7).
+   *
+   * What the vault says this wallet holds. A chain that did not answer in time
+   * is `UNAVAILABLE` — a winner is never told they hold nothing because an
+   * endpoint was slow, and §8.5 gives a reservation no expiry to be missed.
+   */
+  app.get('/v1/rewards/secret', async (request, reply) => {
+    const wallet = await deps.walletOf(request.headers.authorization);
+    if (wallet === null) {
+      return send(reply, unauthenticated(correlationId()));
+    }
+    void reply.header('cache-control', 'private, no-store');
+    const secret = deps.secretClaim;
+    if (secret === undefined) {
+      return reply.send(secretClaimSchema.parse({ status: 'UNAVAILABLE' }));
+    }
+    const entitlement = await withinChainTimeout(secret.entitlementOf(wallet));
+    return reply.send(
+      secretClaimSchema.parse(
+        entitlement === null
+          ? { status: 'UNAVAILABLE' }
+          : {
+              status: 'READ',
+              chainId: secret.chainId,
+              vault: secret.vault,
+              decimals: secret.decimals,
+              amount: secret.amount.toString(),
+              entitlement,
+            },
+      ),
     );
   });
 

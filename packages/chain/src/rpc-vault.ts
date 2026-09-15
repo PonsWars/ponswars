@@ -10,9 +10,17 @@ import {
   toBytes,
   webSocket,
   type Account,
+  type Chain,
+  type PublicClient,
+  type Transport,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import type { ReserveSimulation, VaultContract } from './secret-vault.js';
+import type {
+  ReserveSimulation,
+  SecretEntitlement,
+  SecretVaultReader,
+  VaultContract,
+} from './secret-vault.js';
 
 /** The parts of `SecretStockVault`'s ABI this reads, sends and decodes. */
 const VAULT_ABI = [
@@ -36,6 +44,13 @@ const VAULT_ABI = [
     stateMutability: 'nonpayable',
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'entitlements',
+    stateMutability: 'view',
+    inputs: [{ name: 'wallet', type: 'address' }],
+    outputs: [{ type: 'uint8' }],
   },
   {
     type: 'function',
@@ -109,18 +124,50 @@ export function reserverVault(options: {
 }
 
 /**
- * `SecretStockVault` over a JSON-RPC endpoint, with the reserver key (§8.4).
+ * The vault's entitlement state, read with no key at all (§8.5).
  *
- * Only the reserver's key signs, and only `reserve`. The network is Robinhood
- * Chain's own description, never a chain an endpoint happens to report — the
- * server has already refused an endpoint on another network at startup.
+ * The service shows a winner what the vault says they hold, and the winner's
+ * own wallet sends the claim. Nothing here signs anything, so a deployment
+ * with `SECRET_RESERVER_KEY=disabled` can still answer a claim page honestly.
  */
-export function rpcVaultContract(options: {
+export function secretVaultReader(options: {
   readonly url: string;
   readonly chainId: number;
   readonly vault: `0x${string}`;
-  readonly reserver: Account;
-}): VaultContract {
+}): SecretVaultReader {
+  const { client } = vaultTransport(options);
+  const address = options.vault;
+  return {
+    rewardAmount: () =>
+      client.readContract({ address, abi: VAULT_ABI, functionName: 'REWARD_AMOUNT' }),
+    entitlementOf: async (wallet): Promise<SecretEntitlement> => {
+      const state = await client.readContract({
+        address,
+        abi: VAULT_ABI,
+        functionName: 'entitlements',
+        args: [wallet as `0x${string}`],
+      });
+      // The contract's own enum: NONE, RESERVED, CLAIMED.
+      switch (state) {
+        case 0:
+          return 'NONE';
+        case 1:
+          return 'RESERVED';
+        case 2:
+          return 'CLAIMED';
+        default:
+          throw new Error(`The vault reports entitlement state ${String(state)}, which is not one`);
+      }
+    },
+  };
+}
+
+/** The Robinhood Chain client every vault read and write goes through. */
+function vaultTransport(options: { readonly url: string; readonly chainId: number }): {
+  readonly chain: Chain;
+  readonly transport: Transport;
+  readonly client: PublicClient;
+} {
   const network = robinhoodChainNetwork(options.chainId);
   if (network === null) {
     throw new Error(`Chain ${String(options.chainId)} is not a Robinhood Chain network`);
@@ -134,7 +181,23 @@ export function rpcVaultContract(options: {
   const protocol = new URL(options.url).protocol;
   const transport =
     protocol === 'ws:' || protocol === 'wss:' ? webSocket(options.url) : http(options.url);
-  const client = createPublicClient({ chain, transport });
+  return { chain, transport, client: createPublicClient({ chain, transport }) };
+}
+
+/**
+ * `SecretStockVault` over a JSON-RPC endpoint, with the reserver key (§8.4).
+ *
+ * Only the reserver's key signs, and only `reserve`. The network is Robinhood
+ * Chain's own description, never a chain an endpoint happens to report — the
+ * server has already refused an endpoint on another network at startup.
+ */
+export function rpcVaultContract(options: {
+  readonly url: string;
+  readonly chainId: number;
+  readonly vault: `0x${string}`;
+  readonly reserver: Account;
+}): VaultContract {
+  const { chain, transport, client } = vaultTransport(options);
   const wallet = createWalletClient({ chain, transport, account: options.reserver });
   const address = options.vault;
 

@@ -1,5 +1,10 @@
 import type { SecretVault } from '@ponswars/genesis-service';
-import { baseUnits, chainLabel, type WalletAddress } from '@ponswars/shared-types';
+import {
+  baseUnits,
+  chainLabel,
+  type SecretEntitlementState,
+  type WalletAddress,
+} from '@ponswars/shared-types';
 
 /**
  * The Secret Stock Vault on Robinhood Chain, as the Genesis flow needs it (§8.4, §76.5).
@@ -22,6 +27,22 @@ import { baseUnits, chainLabel, type WalletAddress } from '@ponswars/shared-type
  */
 
 export type ReserveSimulation = 'WOULD_RESERVE' | 'UNCOVERED' | 'ALREADY_ENTITLED';
+
+/**
+ * What the vault says a wallet holds (§8.5).
+ *
+ * `NONE` is the ordinary answer: one Secret exists per wallet at most, and
+ * almost no wallet has one. A claimed entitlement stays `CLAIMED` forever —
+ * the trophy is permanent, and the state is what stops a second reservation.
+ */
+export type SecretEntitlement = 'NONE' | SecretEntitlementState;
+
+/** Reading a wallet's entitlement, without the key that reserves one. */
+export interface SecretVaultReader {
+  /** The reward one Secret pays, in the reward token's base units. */
+  rewardAmount(): Promise<bigint>;
+  entitlementOf(wallet: WalletAddress): Promise<SecretEntitlement>;
+}
 
 /** The slice of `SecretStockVault` the decisions read and write. */
 export interface VaultContract {

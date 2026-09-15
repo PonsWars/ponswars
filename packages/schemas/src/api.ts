@@ -349,6 +349,33 @@ export const rewardClaimsSchema = z.discriminatedUnion('status', [
 
 export type RewardClaims = z.infer<typeof rewardClaimsSchema>;
 
+/**
+ * `GET /v1/rewards/secret` (§8.5, §35.7).
+ *
+ * What the Secret Stock Vault says this wallet holds, and what it takes to
+ * claim it. `UNAVAILABLE` is a deployment with no vault configured or a chain
+ * that would not answer — never a wallet with nothing, which is `NONE`.
+ *
+ * The amount is the vault's own `REWARD_AMOUNT` rather than the locked 0.2 SPY
+ * written down again: what a claim pays is what the contract holds.
+ */
+export const secretClaimSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('UNAVAILABLE') }).strict(),
+  z
+    .object({
+      status: z.literal('READ'),
+      chainId: z.int().positive(),
+      vault: walletAddressSchema,
+      /** The reward token's decimals, to write the amount down. */
+      decimals: z.int().min(0).max(36),
+      amount: baseUnitsSchema,
+      entitlement: z.enum(['NONE', 'RESERVED', 'CLAIMED']),
+    })
+    .strict(),
+]);
+
+export type SecretClaim = z.infer<typeof secretClaimSchema>;
+
 // ---------------------------------------------------------------------------
 // Genesis (§47.4, §69.6)
 // ---------------------------------------------------------------------------

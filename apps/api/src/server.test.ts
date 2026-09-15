@@ -22,6 +22,7 @@ import {
   genesisStatusSchema,
   profileSchema,
   rewardClaimsSchema,
+  secretClaimSchema,
   rosterSchema,
   serviceStatusSchema,
 } from '@ponswars/schemas';
@@ -1365,6 +1366,65 @@ describe('GET /v1/rewards/claims (§17, §35.6)', () => {
       null,
       null,
     ]);
+  });
+});
+
+describe('GET /v1/rewards/secret (§8.5)', () => {
+  const VAULT = `0x${'5e'.repeat(20)}` as const;
+  const withVault = (entitlementOf: () => Promise<'NONE' | 'RESERVED' | 'CLAIMED'>) =>
+    buildServer({
+      ...serverDeps,
+      secretClaim: {
+        chainId: 46630,
+        vault: VAULT,
+        decimals: 6,
+        amount: 200_000n,
+        entitlementOf,
+      },
+    });
+
+  it('needs a signed-in wallet', async () => {
+    expect((await app.inject({ method: 'GET', url: '/v1/rewards/secret' })).statusCode).toBe(401);
+  });
+
+  it('is unavailable where no vault is configured', async () => {
+    const response = await app.inject({ method: 'GET', url: '/v1/rewards/secret', headers: AUTH });
+
+    expect(secretClaimSchema.parse(response.json())).toEqual({ status: 'UNAVAILABLE' });
+  });
+
+  it('says what the vault holds for the wallet, and what a claim pays', async () => {
+    const server = withVault(() => Promise.resolve('RESERVED'));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/v1/rewards/secret',
+      headers: AUTH,
+    });
+
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(secretClaimSchema.parse(response.json())).toEqual({
+      status: 'READ',
+      chainId: 46630,
+      vault: VAULT,
+      decimals: 6,
+      amount: '200000',
+      entitlement: 'RESERVED',
+    });
+    await server.close();
+  });
+
+  it('is unavailable when the chain does not answer, never a wallet holding nothing', async () => {
+    // §8.5 gives a reservation no expiry; telling a winner they have none
+    // because an endpoint was slow is the one wrong answer here.
+    const server = withVault(() => Promise.reject(new Error('503')));
+
+    const body = secretClaimSchema.parse(
+      (await server.inject({ method: 'GET', url: '/v1/rewards/secret', headers: AUTH })).json(),
+    );
+
+    expect(body.status).toBe('UNAVAILABLE');
+    await server.close();
   });
 });
 
