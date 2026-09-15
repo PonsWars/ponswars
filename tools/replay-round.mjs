@@ -134,14 +134,11 @@ if (problems.length > 0) {
   // whatever complaint prompted it. Either the recording is incomplete or the
   // engine is not deterministic, and both need answering before another round
   // finalizes.
-  stderr.write(`MISMATCH — ${problems.length} of ${expectations.size} did not reproduce
-`);
+  stderr.write(`MISMATCH — ${problems.length} of ${expectations.size} did not reproduce\n`);
   for (const problem of problems) {
-    stderr.write(`  ${problem}
-`);
+    stderr.write(`  ${problem}\n`);
   }
   exit(1);
 }
 
-stdout.write(`OK — ${expectations.size} battle(s) reproduced exactly
-`);
+stdout.write(`OK — ${expectations.size} battle(s) reproduced exactly\n`);

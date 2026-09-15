@@ -245,14 +245,12 @@ async function main(): Promise<void> {
           waitingFor = cutoff;
           say(
             `a battle is tied through every market component; waiting for the first ` +
-              `Robinhood Chain block after ${new Date(cutoff).toISOString()} to be finalized
-`,
+              `Robinhood Chain block after ${new Date(cutoff).toISOString()} to be finalized\n`,
           );
         }
       },
       onRetry: (_cutoff, error) => {
-        say(`tiebreak block read failed, retrying: ${String(error)}
-`);
+        say(`tiebreak block read failed, retrying: ${String(error)}\n`);
       },
     }),
     publisher: sockets.gateway,
