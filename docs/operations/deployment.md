@@ -104,6 +104,14 @@ Once caught up it reads new blocks every second. A failed poll is logged once
 and retried; while the indexer is more than thirty seconds behind, its market
 is `STALE` and live battles void rather than score old data.
 
+What that costs, measured on mainnet during a US session with the public
+endpoint and `RPC_MIN_INTERVAL_MS=250`: a poll is one log query, one block
+read and a sender lookup for each routed Pons trade — about one and a half a
+second, and the largest share of the calls. The indexer stayed one to two
+seconds behind the chain, with spikes past twenty when the endpoint throttled.
+That is enough to develop against and not enough to run battles on; a vendor
+endpoint with a lower `RPC_MIN_INTERVAL_MS` is.
+
 **No round opens while the market is shut.** Stock Tokens trade 24/5, from
 Sunday 20:00 to Friday 20:00 New York time, except on `MARKET_HOLIDAYS`. A
 round only opens where all ten minutes fit inside that; otherwise the server
