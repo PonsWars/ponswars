@@ -33,6 +33,7 @@
     "replay": "node tools/replay-round.mjs",
     "audit:distribution": "node tools/verify-distribution.mjs",
     "audit:genesis": "node tools/audit-genesis.mjs",
+    "calibrate:market": "node tools/calibrate-market.mjs",
     "record:market": "node tools/record-market.mjs",
     "local": "pnpm run build && node apps/local-stack/dist/main.js"
   },
