@@ -79,7 +79,9 @@ export default tseslint.config(
       globals: {
         // Listed one at a time rather than pulled in as a preset, so a script
         // reaching for a runtime global is a line someone had to add.
+        AbortController: 'readonly',
         Buffer: 'readonly',
+        clearTimeout: 'readonly',
         console: 'readonly',
         fetch: 'readonly',
         process: 'readonly',

@@ -27,6 +27,9 @@ contracts/out/
 contracts/cache/
 contracts/broadcast/
 
+# Market tapes from tools/record-market.mjs: data, not source, and gigabytes of it
+recordings/
+
 # Logs
 *.log
 npm-debug.log*
