@@ -5,6 +5,7 @@ import {
   parseDurationMs,
   parseEnum,
   parseInteger,
+  parseString,
   parseUrl,
   type ParseResult,
 } from './parsers.js';
@@ -388,6 +389,13 @@ export const PARAMETERS = {
       'Least time between two market-indexer calls to RPC_URL. The public endpoint answers bursts with a challenge page; a vendor has a rate it bills or cuts at.',
     parse: parseDurationMs,
   } satisfies ParameterSpec<number>,
+
+  ENGINE_CALIBRATION_FILE: {
+    group: 'feeds',
+    description:
+      'Path to the JSON holding the engine tuning and confidence bands this deployment scores by (§59.4): the scoring divisors, momentum and victory thresholds, and the four confidence bands with their matchup gaps. §59.4 treats the block as one decision, so it is one file rather than a dozen variables, and it is the file `tools/calibrate-market.mjs` measures a candidate as. No default: a service that invented a calibration would be shipping product policy (§102).',
+    parse: parseString,
+  } satisfies ParameterSpec<string>,
 
   BATTLE_ENGINE_TICK_MS: {
     group: 'feeds',

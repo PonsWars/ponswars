@@ -28,6 +28,7 @@ COPY apps/server/package.json apps/server/
 COPY packages/auth/package.json packages/auth/
 COPY packages/battle-engine/package.json packages/battle-engine/
 COPY packages/battle-math/package.json packages/battle-math/
+COPY packages/calibration/package.json packages/calibration/
 COPY packages/chain/package.json packages/chain/
 COPY packages/config/package.json packages/config/
 COPY packages/genesis-service/package.json packages/genesis-service/

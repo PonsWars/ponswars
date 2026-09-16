@@ -154,6 +154,9 @@ importers:
       '@ponswars/battle-math':
         specifier: workspace:*
         version: link:../../packages/battle-math
+      '@ponswars/calibration':
+        specifier: workspace:*
+        version: link:../../packages/calibration
       '@ponswars/chain':
         specifier: workspace:*
         version: link:../../packages/chain

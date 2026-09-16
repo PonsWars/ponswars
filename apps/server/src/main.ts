@@ -13,19 +13,13 @@ import {
   secretVaultReader,
 } from '@ponswars/chain';
 import { GenesisFlow } from '@ponswars/genesis-service';
-import {
-  CURRENT_ENGINE_VERSIONS,
-  type EngineConfig,
-  type RoundEngineState,
-} from '@ponswars/battle-engine';
-import { RATIO_SCALE, type ConfidenceCalibration } from '@ponswars/battle-math';
+import type { RoundEngineState } from '@ponswars/battle-engine';
 import { ConfigError, loadConfig, type MarketDataProvider } from '@ponswars/config';
 import { startSocketServer } from '@ponswars/gateway';
 import { runRounds, type DriverEvent, type RoundPorts } from '@ponswars/round-service';
 import {
   baseUnits,
   chainLabel,
-  milliseconds,
   parseDecimalToBaseUnits,
   SECRET_REWARD_SPY_DECIMAL,
   tokenDecimals,
@@ -44,6 +38,7 @@ import {
   PostgresRoundStore,
   readFinalizedResult,
 } from '@ponswars/store-postgres';
+import { loadEngineCalibration } from './calibration.js';
 import { followClaims } from './claims.js';
 import { startMarket, type RunningMarket } from './market.js';
 import { connectPostgres } from './postgres.js';
@@ -93,41 +88,15 @@ const now = (): UtcTimestamp => utcTimestamp(Date.now());
  */
 const TIEBREAK_POLL_MS = 15_000;
 
-/**
- * Engine calibration.
- *
- * `OPEN` production tuning (§59.4) and these are *not* the production values —
- * they are the ones every test in this repository exercises. They are here
- * rather than in the environment because §59.4 covers the whole block as one
- * decision: a deployment that set half of it from variables would be a
- * calibration nobody had looked at as a whole. When someone decides, this moves
- * to the parameter table with the rest.
- */
-const CONFIG: EngineConfig = {
-  scoring: {
-    priceEdgeDivisor: 2n * RATIO_SCALE,
-    volumeEdgeDivisor: 1n * RATIO_SCALE,
-    ponsEdgeDivisor: 20n * RATIO_SCALE,
-    cardEdgeDivisor: 10n * RATIO_SCALE,
-  },
-  momentum: { push: 100_000n, surge: 200_000n, dominance: 400_000n, comeback: 300_000n },
-  victory: { narrowMargin: 4_000_000n, decisiveMargin: 30_000_000n },
-  finalization: { maxWait: milliseconds(5_000) },
-  versions: CURRENT_ENGINE_VERSIONS,
-  cardSupportTiers: { medium: 100n, high: 1_000n, max: 10_000n },
-};
-
-/** Confidence bands (§10.1). Measured against the synthetic market, like the above. */
-const CONFIDENCE_CALIBRATION: ConfidenceCalibration = {
-  priceTrend: { strong: RATIO_SCALE / 2n, weak: -RATIO_SCALE / 2n },
-  volumePulse: { rising: 1_167_000n, weak: 1_033_000n },
-  ponsActivity: { high: 40n, medium: 20n },
-  momentumStability: { stable: 26, mixed: 32 },
-  matchup: { favored: 20, strongFavorite: 60, dominant: 120 },
-};
-
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
+
+  // How battles score and read, as one file (§59.4). Read before anything
+  // binds: a service that started and then found it had no calibration would
+  // have opened a round it could not score.
+  const { engine: CONFIG, confidence: CONFIDENCE_CALIBRATION } = await loadEngineCalibration(
+    config.ENGINE_CALIBRATION_FILE,
+  );
 
   // Before anything connects or binds. An RPC endpoint on another network
   // would break ties from blocks on a chain PonsWars does not run on, and

@@ -17,6 +17,7 @@
     "@ponswars/api": "workspace:*",
     "@ponswars/auth": "workspace:*",
     "@ponswars/battle-engine": "workspace:*",
+    "@ponswars/calibration": "workspace:*",
     "@ponswars/battle-math": "workspace:*",
     "@ponswars/chain": "workspace:*",
     "@ponswars/config": "workspace:*",

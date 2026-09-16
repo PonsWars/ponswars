@@ -40,6 +40,7 @@ const PLACEHOLDERS = {
   REDIS_URL: 'redis://localhost:6379',
   MIN_CLAIM_THRESHOLD_SPY: '0.001',
   PRICE_FEED_STALE_AFTER_MS: '<calibrate per source>',
+  ENGINE_CALIBRATION_FILE: 'tools/calibration/initial-candidate.json',
   VOLUME_FEED_STALE_AFTER_MS: '<calibrate per source>',
   PONS_FEED_STALE_AFTER_MS: '<calibrate per source>',
   BATTLE_ENGINE_TICK_MS: '1000',

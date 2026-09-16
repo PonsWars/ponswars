@@ -119,11 +119,13 @@ mix in a way nobody wanted is a suggestion to throw away.
 
 - **Market bounds** are environment variables. Set them in the deployment and
   regenerate nothing: `loadConfig` validates them at startup.
-- **Engine and confidence tuning** are still constants in
-  `apps/server/src/main.ts` (`CONFIG`, `CONFIDENCE_CALIBRATION`), because §59.4
-  treats them as one decision. When that decision is made, they move to the
-  parameter table with the rest — as one change, from the candidate that was
-  replayed.
+- **Engine and confidence tuning** are the file `ENGINE_CALIBRATION_FILE`
+  points at — the same file the tool replayed, since a candidate's `engine` and
+  `confidence` blocks are exactly what the server reads. §59.4 treats them as
+  one decision, so deploy the file that was measured rather than editing values
+  one at a time. The server reads it once at startup: changing a calibration is
+  a deploy, because a round scored under one and finalized under another is a
+  result no replay reproduces (§26).
 - **Record it.** Update `docs/OPEN_PARAMETERS.md` with the values, the tapes
   they were measured on, and the void rates they produce. A value nobody can
   trace back to a measurement is the guess §102 forbids.

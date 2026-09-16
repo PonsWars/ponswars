@@ -18,10 +18,14 @@ import { milliseconds } from '@ponswars/shared-types';
  * A candidate that calibrates cleanly is therefore one that loads cleanly.
  */
 
-export interface CalibrationCandidate {
-  readonly market: OnchainMarketSettings;
+/** The engine block §59.4 treats as one decision: how battles score and read. */
+export interface EngineTuning {
   readonly engine: EngineConfig;
   readonly confidence: ConfidenceCalibration;
+}
+
+export interface CalibrationCandidate extends EngineTuning {
+  readonly market: OnchainMarketSettings;
 }
 
 const MARKET_SETTINGS = [
@@ -68,6 +72,51 @@ export function parseCandidate(json: unknown): CalibrationCandidate {
     }
   }
 
+  const { engine, confidence } = engineTuning(root, problems);
+
+  if (problems.length === 0) {
+    try {
+      assertCalibration(confidence);
+    } catch (error) {
+      problems.push(`confidence: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `Invalid calibration candidate (${String(problems.length)} problem(s)):\n  ${problems.join('\n  ')}`,
+    );
+  }
+  return { market: market as unknown as OnchainMarketSettings, engine, confidence };
+}
+
+/**
+ * The engine's tuning and the confidence bands, without the market's bounds.
+ *
+ * Its own function because the server loads exactly this — the calibration it
+ * was decided to run under (§59.4) — from a file, while its market bounds come
+ * from the environment. One parser, so a file that calibrates is a file that
+ * runs.
+ */
+export function parseEngineTuning(json: unknown): EngineTuning {
+  const problems: string[] = [];
+  const root = objectAt(json, 'calibration', problems);
+  const tuning = engineTuning(root, problems);
+  if (problems.length === 0) {
+    try {
+      assertCalibration(tuning.confidence);
+    } catch (error) {
+      problems.push(`confidence: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `Invalid engine calibration (${String(problems.length)} problem(s)):\n  ${problems.join('\n  ')}`,
+    );
+  }
+  return tuning;
+}
+
+function engineTuning(root: Record<string, unknown>, problems: string[]): EngineTuning {
   const engineRaw = objectAt(root['engine'], 'engine', problems);
   const scoring = objectAt(engineRaw['scoring'], 'engine.scoring', problems);
   const momentum = objectAt(engineRaw['momentum'], 'engine.momentum', problems);
@@ -145,20 +194,7 @@ export function parseCandidate(json: unknown): CalibrationCandidate {
       dominant: count(matchup, 'confidence.matchup', 'dominant'),
     },
   };
-
-  if (problems.length === 0) {
-    try {
-      assertCalibration(confidence);
-    } catch (error) {
-      problems.push(`confidence: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-  if (problems.length > 0) {
-    throw new Error(
-      `Invalid calibration candidate (${String(problems.length)} problem(s)):\n  ${problems.join('\n  ')}`,
-    );
-  }
-  return { market: market as unknown as OnchainMarketSettings, engine, confidence };
+  return { engine, confidence };
 }
 
 function objectAt(value: unknown, path: string, problems: string[]): Record<string, unknown> {

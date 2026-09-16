@@ -35,6 +35,7 @@ const VALID: Readonly<Record<string, string>> = {
   PONS_MAX_IDENTICAL_PER_WALLET: '5',
   RPC_MIN_INTERVAL_MS: '150',
   BATTLE_ENGINE_TICK_MS: '1000',
+  ENGINE_CALIBRATION_FILE: 'config/engine-calibration.json',
   API_PORT: '4000',
   GATEWAY_PORT: '4001',
   ALLOWED_ORIGINS: 'https://play.example.invalid',

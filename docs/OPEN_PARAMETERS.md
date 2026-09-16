@@ -49,17 +49,18 @@ formula is locked, the constants inside it are not.
 The structural formulas are **locked** — 45/25/20/10, `sqrt(WP)`, 80/20, 2% cap.
 Only the constants inside them are open.
 
-| Parameter                                          | Status      | Notes                                                                                                                        |
-| -------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Volatility normalization constants                 | `CALIBRATE` | Price Momentum is volatility-adjusted (§12.1); the lookback and normalizer are not fixed.                                    |
-| Relative Volume historical baseline implementation | `CALIBRATE` | Must be ticker-specific and time-of-day aware (§12.2).                                                                       |
-| Battle Confidence label-gap thresholds             | `CALIBRATE` | Which score gap becomes `FAVORED` vs `DOMINANT`. The label set itself is locked (§10.2).                                     |
-| Feed freshness thresholds per source               | `OPEN`      | Source- and data-type-specific (§23.6). These decide when a battle VOIDs, so they are a product decision, not a tuning knob. |
-| Qualified Pons activity thresholds                 | `CALIBRATE` | Anti-abuse qualification before scoring (§12.3).                                                                             |
-| Anti-wash filters                                  | `CALIBRATE` | Suspicious-pattern filtering in the indexer (§21.2).                                                                         |
-| Card-support diminishing-return curve constants    | `CALIBRATE` | The 10-point cap and sqrt/log shape are locked (§12.4); the exact curve is not.                                              |
-| Battle engine tick cadence                         | `BASELINE`  | Masterplan says _approximately_ one authoritative tick per second (§12.5, §23.1).                                            |
-| Frontend visual interpolation window               | `BASELINE`  | 3–5 seconds (§13.2). Presentation only — never applied to winner math.                                                       |
+| Parameter                                          | Status      | Notes                                                                                                                                |
+| -------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Volatility normalization constants                 | `CALIBRATE` | Price Momentum is volatility-adjusted (§12.1); the lookback and normalizer are not fixed.                                            |
+| Relative Volume historical baseline implementation | `CALIBRATE` | Must be ticker-specific and time-of-day aware (§12.2).                                                                               |
+| Battle Confidence label-gap thresholds             | `CALIBRATE` | Which score gap becomes `FAVORED` vs `DOMINANT`. The label set itself is locked (§10.2).                                             |
+| Feed freshness thresholds per source               | `OPEN`      | Source- and data-type-specific (§23.6). These decide when a battle VOIDs, so they are a product decision, not a tuning knob.         |
+| Qualified Pons activity thresholds                 | `CALIBRATE` | Anti-abuse qualification before scoring (§12.3).                                                                                     |
+| Anti-wash filters                                  | `CALIBRATE` | Suspicious-pattern filtering in the indexer (§21.2).                                                                                 |
+| Card-support diminishing-return curve constants    | `CALIBRATE` | The 10-point cap and sqrt/log shape are locked (§12.4); the exact curve is not.                                                      |
+| Battle engine tick cadence                         | `BASELINE`  | Masterplan says _approximately_ one authoritative tick per second (§12.5, §23.1).                                                    |
+| Engine tuning and confidence bands                 | `CALIBRATE` | One decision (§59.4), one file: `ENGINE_CALIBRATION_FILE`, measured by `tools/calibrate-market.mjs` and deployed as it was replayed. |
+| Frontend visual interpolation window               | `BASELINE`  | 3–5 seconds (§13.2). Presentation only — never applied to winner math.                                                               |
 
 ### The on-chain market's guards
 
