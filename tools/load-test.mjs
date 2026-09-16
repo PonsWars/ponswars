@@ -24,23 +24,31 @@
  *   stopped publishing to some connections shows up as a shortfall;
  * - every socket that closed, errored or was refused.
  *
- * It signs in nobody and sends no picks: §47.5 needs a wallet signature per
- * request, and a load test that forged one would be measuring a path no player
- * can take.
+ * `--pickers <n>` adds the write path: that many throwaway wallets sign the
+ * EIP-4361 challenge with a real key, exchange it for a session and back a
+ * battle — the same three requests a player makes, through the same
+ * verification. Nothing is forged, so it measures a path a player can take.
+ * The keys are generated per run and hold nothing. Picks are only accepted
+ * during Pick Phase (§3.2), so a run that starts mid-battle reports them
+ * refused, which is the server being right.
  *
- * Plain ESM run directly by node. `ws` comes from the gateway's own dependency,
- * so the client here speaks what the server speaks.
+ * Plain ESM run directly by node. `ws` and `viem` come from the workspace's own
+ * dependencies, so the client here speaks what the server speaks.
  */
 
 import { argv, exit, stderr, stdout } from 'node:process';
 
 const USAGE =
-  'Usage: node tools/load-test.mjs [--api <url>] [--ws <url>] [--clients <n>] [--seconds <n>] [--ramp-ms <n>]';
+  'Usage: node tools/load-test.mjs [--api <url>] [--ws <url>] [--clients <n>] [--pickers <n>] [--chain-id <n>] [--seconds <n>] [--ramp-ms <n>]';
 
 const options = {
   api: 'http://127.0.0.1:4000',
   ws: 'ws://127.0.0.1:4001',
   clients: 100,
+  pickers: 0,
+  // What a sign-in signature is bound to (§45.2). The local stack is testnet;
+  // a run against a mainnet deployment passes --chain-id 4663.
+  chainId: 46630,
   seconds: 30,
   rampMs: 5_000,
 };
@@ -65,11 +73,18 @@ for (let index = 0; index < args.length; index += 1) {
     options.api = value.replace(/\/$/, '');
   } else if (name === '--ws') {
     options.ws = value.replace(/\/$/, '');
-  } else if (name === '--clients' || name === '--seconds' || name === '--ramp-ms') {
-    const key = name === '--ramp-ms' ? 'rampMs' : name.slice(2);
+  } else if (
+    name === '--clients' ||
+    name === '--seconds' ||
+    name === '--ramp-ms' ||
+    name === '--pickers' ||
+    name === '--chain-id'
+  ) {
+    const key = name === '--ramp-ms' ? 'rampMs' : name === '--chain-id' ? 'chainId' : name.slice(2);
     const parsed = Number(value);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      fail(`${name} must be a positive whole number.\n${USAGE}`);
+    const floor = name === '--pickers' ? 0 : 1;
+    if (!Number.isInteger(parsed) || parsed < floor) {
+      fail(`${name} must be a whole number of at least ${String(floor)}.\n${USAGE}`);
     }
     options[key] = parsed;
   } else {
@@ -80,6 +95,9 @@ for (let index = 0; index < args.length; index += 1) {
 
 const { default: WebSocket } = await import('ws').catch(() => {
   fail('Could not load `ws`. Run `pnpm install` first.');
+});
+const { generatePrivateKey, privateKeyToAccount } = await import('viem/accounts').catch(() => {
+  fail('Could not load `viem`. Run `pnpm install` first.');
 });
 
 /** Quantiles by nearest rank, the way the calibration report does them. */
@@ -126,8 +144,13 @@ say(
 const stats = {
   fetchMs: [],
   deliveryMs: [],
+  signInMs: [],
+  pickMs: [],
   updates: 0,
   connected: 0,
+  signedIn: 0,
+  picked: 0,
+  refusedPicks: 0,
   refusedSubscriptions: 0,
   errors: new Map(),
 };
@@ -200,6 +223,80 @@ async function spectator() {
   });
 }
 
+/**
+ * One player: sign in with a real signature, then back a battle.
+ *
+ * Three requests, in the order the client makes them, each measured. A refusal
+ * is counted rather than retried: a pick refused at the lock boundary is the
+ * server enforcing §3.2, and a load test that retried past it would be
+ * reporting a throughput nobody has.
+ */
+async function picker(index) {
+  const account = privateKeyToAccount(generatePrivateKey());
+  const wallet = account.address.toLowerCase();
+  const post = async (path, body, token) =>
+    fetch(`${options.api}${path}`, {
+      method: path.endsWith('/pick') ? 'PUT' : 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+      },
+      body: JSON.stringify(body),
+    });
+
+  const signInAt = Date.now();
+  let session;
+  try {
+    const challenged = await post('/v1/auth/challenge', { wallet, chainId: options.chainId });
+    if (!challenged.ok) {
+      note(`challenge ${String(challenged.status)}`);
+      return;
+    }
+    const challenge = await challenged.json();
+    const signature = await account.signMessage({ message: challenge.message });
+    const verified = await post('/v1/auth/verify', { wallet, nonce: challenge.nonce, signature });
+    if (!verified.ok) {
+      note(`verify ${String(verified.status)}`);
+      return;
+    }
+    session = await verified.json();
+    stats.signInMs.push(Date.now() - signInAt);
+    stats.signedIn += 1;
+  } catch (error) {
+    note(`sign-in failed: ${String(error).slice(0, 60)}`);
+    return;
+  }
+
+  // One battle per wallet per round (§4.2), so each picker takes one of the
+  // five and backs a side.
+  const battle = round.battles[index % round.battles.length];
+  const pickAt = Date.now();
+  try {
+    const response = await post(
+      `/v1/rounds/${round.roundId}/pick`,
+      {
+        roundId: round.roundId,
+        battleId: battle.battleId,
+        backedTicker: index % 2 === 0 ? battle.left : battle.right,
+        cardDecision: 'SAVE',
+        clientRequestId: `load-${String(index)}-${String(pickAt)}`,
+      },
+      session.token,
+    );
+    await response.json().catch(() => undefined);
+    if (response.ok) {
+      stats.pickMs.push(Date.now() - pickAt);
+      stats.picked += 1;
+    } else {
+      stats.refusedPicks += 1;
+      note(`pick ${String(response.status)}`);
+    }
+  } catch (error) {
+    note(`pick failed: ${String(error).slice(0, 60)}`);
+  }
+}
+
 const sockets = [];
 const gap = options.rampMs / options.clients;
 const startedAt = Date.now();
@@ -212,6 +309,12 @@ for (let index = 0; index < options.clients; index += 1) {
   await sleep(gap);
 }
 say(`connected ${String(stats.connected)}/${String(options.clients)}; holding`);
+
+if (options.pickers > 0) {
+  say(`signing in ${String(options.pickers)} wallet(s) and backing a battle each`);
+  await Promise.all(Array.from({ length: options.pickers }, (_, index) => picker(index)));
+  say(`${String(stats.picked)} pick(s) recorded, ${String(stats.refusedPicks)} refused`);
+}
 
 const held = options.seconds * 1_000;
 let reported = 0;
@@ -246,6 +349,13 @@ stdout.write(
     `Update delivery  ${ms(stats.deliveryMs)}`,
     `Updates          ${String(stats.updates)} in ${seconds.toFixed(0)} s ` +
       `(${(stats.updates / Math.max(1, seconds)).toFixed(0)}/s across all clients)`,
+    ...(options.pickers === 0
+      ? []
+      : [
+          `Sign-in          ${ms(stats.signInMs)}`,
+          `Pick             ${ms(stats.pickMs)}`,
+          `Picks            ${String(stats.picked)} recorded of ${String(options.pickers)}, ${String(stats.refusedPicks)} refused`,
+        ]),
     `Refused subs     ${String(stats.refusedSubscriptions)}`,
     stats.errors.size === 0
       ? 'Errors           none'

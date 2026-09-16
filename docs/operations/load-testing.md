@@ -22,10 +22,17 @@ does. The report gives the snapshot fetch and the update delivery at p50, p90
 and p99, updates received against the rate they should arrive at, and every
 socket that closed, errored or was refused.
 
-It signs in nobody and sends no picks: §47.5 needs a wallet signature per
-request, and a load test that forged one would measure a path no player can
-take. Picks are a few hundred requests a round against millions of updates;
-the transport is where the shape of this product lives.
+`--pickers <n>` adds the write path: that many throwaway wallets sign the
+EIP-4361 challenge with a real key, exchange it for a session and back a battle
+— the same three requests a player makes, through the same verification.
+Nothing is forged, so it measures a path a player can take, and the keys are
+generated per run and hold nothing. Picks are only accepted during Pick Phase
+(§3.2); a run during a battle reports them refused, which is the server being
+right rather than the test being wrong.
+
+```bash
+node tools/load-test.mjs --clients 200 --pickers 500 --seconds 40
+```
 
 **Run it during a battle.** Nothing publishes during Pick Phase, so a minute of
 load there reports zero updates and proves nothing. `--seconds 70` from a cold
@@ -46,6 +53,29 @@ running beside it:
 Delivery is measured from the `serverTime` the engine stamped on the tick to
 the instant the client parsed it, so on one machine it is a real figure and
 across a network it is a lower bound.
+
+The write path, on the same process:
+
+| Concurrent sign-ins | Sign-in p50/p99 | Pick p50/p99    | Refused |
+| ------------------- | --------------- | --------------- | ------- |
+| 50                  | 229 ms / 336 ms | 101 ms / 184 ms | none    |
+| 500                 | 1.53 s / 2.56 s | 0.95 s / 1.51 s | none    |
+
+**Signing in is the expensive request, and it is CPU.** Verifying an EIP-4361
+signature recovers a public key; five hundred of them at once queue behind each
+other on one event loop. A round opens every ten minutes and Pick Phase is
+sixty seconds (§3.1), so the spike is real: at five hundred concurrent sign-ins
+a player waits a second and a half, and the shape scales with cores rather than
+with memory. Two things follow for capacity: count sign-ins per round open, not
+players; and put the API behind more than one process before that number gets
+into the thousands.
+
+**Sign-in load pushes the tick tail, not the tick rate.** With five hundred
+sign-ins running through a live battle, updates still went out at the full
+rate to two hundred spectators and delivery held at 10 ms p50 — but p99 went
+from 18 ms to 114 ms. Nothing was dropped and no tick was skipped. §13.2
+interpolates over 3–5 seconds, so it does not show; it is the thing to watch
+if the API and the round driver ever share a process in production.
 
 What the numbers say, and do not:
 
