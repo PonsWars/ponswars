@@ -428,6 +428,26 @@ describe('decoding a frame', () => {
   });
 });
 
+describe('a server that is stopping', () => {
+  it('says it is going away (1001), so a client reconnects rather than backs off', async () => {
+    // A deploy, or a socket tier being scaled down. The connection did nothing
+    // wrong, and a client that reads 1006 instead would treat a planned restart
+    // as a failure and wait before coming back.
+    const { url } = start(() => null);
+    const socket = await client(url);
+    const code = new Promise<number>((resolve) => {
+      socket.once('close', (closeCode: number) => {
+        resolve(closeCode);
+      });
+    });
+
+    await running?.close();
+    running = null;
+
+    expect(await code).toBe(1001);
+  });
+});
+
 describe('a connection that abuses the socket', () => {
   /** Resolves with the close code the server sent. */
   function closed(socket: WebSocket): Promise<number> {

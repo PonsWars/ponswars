@@ -208,7 +208,12 @@ export function startSocketServer(options: SocketServerOptions): RunningSocketSe
     close: () =>
       new Promise<void>((resolve, reject) => {
         for (const socket of sockets.values()) {
-          socket.close();
+          // 1001, "going away": this server is stopping and the connection did
+          // nothing wrong. A client that can tell that from an abnormal close
+          // (1006) reconnects at once rather than backing off from a failure
+          // that did not happen — the difference between a rolling deploy
+          // nobody notices and one that empties the world for a few seconds.
+          socket.close(GOING_AWAY, 'server stopping');
         }
         sockets.clear();
         wss.close((error) => {
@@ -231,6 +236,9 @@ export function startSocketServer(options: SocketServerOptions): RunningSocketSe
  * messages large enough to be split, which is exactly the kind of bug that
  * survives every small test and fails in production.
  */
+/** WebSocket 1001: the server is going away, and the connection did nothing wrong. */
+const GOING_AWAY = 1001;
+
 /**
  * The largest frame a client may send, in bytes.
  *
