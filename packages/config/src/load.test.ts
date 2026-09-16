@@ -40,14 +40,55 @@ const VALID: Readonly<Record<string, string>> = {
   GATEWAY_PORT: '4001',
   ALLOWED_ORIGINS: 'https://play.example.invalid',
   MARKET_DATA_PROVIDER: 'synthetic',
+  API_TRUSTED_PROXIES: '',
   AUTH_ORIGIN: 'https://play.example.invalid',
   AUTH_CHALLENGE_TTL_MS: '300000',
   AUTH_SESSION_TTL_MS: '86400000',
+  AUTH_RATE_LIMIT_REQUESTS: '30',
+  AUTH_RATE_LIMIT_WINDOW_MS: '60000',
 };
 
 const withOverride = (
   patch: Readonly<Record<string, string | undefined>>,
 ): Record<string, string | undefined> => ({ ...VALID, ...patch });
+
+describe('the trusted proxy list', () => {
+  it('takes addresses, blocks and shorthands, and empty as no proxy at all', () => {
+    expect(loadConfig(withOverride({ API_TRUSTED_PROXIES: '' })).API_TRUSTED_PROXIES).toEqual([]);
+    expect(
+      loadConfig(withOverride({ API_TRUSTED_PROXIES: '10.0.0.4, 172.16.0.0/12, loopback, ::1' }))
+        .API_TRUSTED_PROXIES,
+    ).toEqual(['10.0.0.4', '172.16.0.0/12', 'loopback', '::1']);
+  });
+
+  it('refuses anything that is not an address, so a typo is not a silent one', () => {
+    // A host name cannot be matched against a connecting socket, and an entry
+    // nobody matches means X-Forwarded-For is never believed — which looks
+    // exactly like working until every caller shares one rate limit bucket.
+    expect(() => loadConfig(withOverride({ API_TRUSTED_PROXIES: 'proxy.example.com' }))).toThrow(
+      ConfigError,
+    );
+    expect(() => loadConfig(withOverride({ API_TRUSTED_PROXIES: '10.0.0.300' }))).toThrow(
+      ConfigError,
+    );
+    expect(() => loadConfig(withOverride({ API_TRUSTED_PROXIES: '10.0.0.0/33' }))).toThrow(
+      ConfigError,
+    );
+  });
+});
+
+describe('the sign-in rate limit', () => {
+  it('takes zero as unlimited, for a deployment that limits at its edge', () => {
+    expect(
+      loadConfig(withOverride({ AUTH_RATE_LIMIT_REQUESTS: '0' })).AUTH_RATE_LIMIT_REQUESTS,
+    ).toBe(0);
+  });
+
+  it('refuses a negative allowance and a window of no length', () => {
+    expect(() => loadConfig(withOverride({ AUTH_RATE_LIMIT_REQUESTS: '-1' }))).toThrow(ConfigError);
+    expect(() => loadConfig(withOverride({ AUTH_RATE_LIMIT_WINDOW_MS: '0' }))).toThrow(ConfigError);
+  });
+});
 
 describe('the market holiday list', () => {
   it('takes a list, and an empty value as a calendar with no holidays', () => {

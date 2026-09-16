@@ -105,6 +105,52 @@ function parseOriginList(raw: string): ParseResult<readonly string[]> {
   return { ok: true, value: origins };
 }
 
+/**
+ * Trusted proxies: comma-separated addresses, CIDR blocks or shorthands.
+ *
+ * Empty is a real answer — the API is reached directly and no forwarding header
+ * is believed — so it is parsed rather than treated as missing, for the same
+ * reason an empty origin list is.
+ *
+ * Checked here as well as by the server's own proxy matcher, so a typo is a
+ * startup error naming the entry rather than a header that quietly stops being
+ * believed and a rate limit that quietly counts everybody as one caller.
+ */
+function parseProxyList(raw: string): ParseResult<readonly string[]> {
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    return { ok: true, value: [] };
+  }
+
+  const shorthands = ['loopback', 'linklocal', 'uniquelocal'];
+  const entries = trimmed.split(',').map((entry) => entry.trim());
+  for (const entry of entries) {
+    if (shorthands.includes(entry)) {
+      continue;
+    }
+    const [address, prefix, ...rest] = entry.split('/');
+    if (address === undefined || rest.length > 0) {
+      return {
+        ok: false,
+        error: `${entry}: expected an address, a CIDR block or one of ${shorthands.join(', ')}`,
+      };
+    }
+    const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(address);
+    const isIpv4 = ipv4?.slice(1).every((octet) => Number(octet) <= 255) === true;
+    const isIpv6 = /^[0-9a-fA-F:]+$/.test(address) && address.includes(':');
+    if (!isIpv4 && !isIpv6) {
+      return { ok: false, error: `${entry}: ${address} is not an IP address` };
+    }
+    if (prefix !== undefined) {
+      const bits = parseInteger(prefix, { min: 0, max: isIpv4 ? 32 : 128 });
+      if (!bits.ok) {
+        return { ok: false, error: `${entry}: prefix length ${bits.error}` };
+      }
+    }
+  }
+  return { ok: true, value: entries };
+}
+
 /** Basis points, 1 to 10,000. */
 function parseBps(raw: string): ParseResult<number> {
   return parseInteger(raw, { min: 1, max: 10_000 });
@@ -426,6 +472,13 @@ export const PARAMETERS = {
     parse: parseOriginList,
   } satisfies ParameterSpec<readonly string[]>,
 
+  API_TRUSTED_PROXIES: {
+    group: 'serving',
+    description:
+      'The proxies in front of the API, comma separated (§59.3): IP addresses, CIDR blocks, or the shorthands loopback, linklocal and uniquelocal. The rate limiter counts per client address, so what counts as the client is a deployment fact. X-Forwarded-For is believed only from these; empty is a real answer meaning the API is reached directly and the header is never believed. Trusting it from anyone would let a caller invent an address and never be limited, which is worse than not limiting because it looks like limiting.',
+    parse: parseProxyList,
+  } satisfies ParameterSpec<readonly string[]>,
+
   MARKET_DATA_PROVIDER: {
     group: 'serving',
     description:
@@ -452,6 +505,20 @@ export const PARAMETERS = {
     group: 'auth',
     description:
       'How long a session lasts before the wallet is asked again (§45.2). OPEN, and the more consequential of the two: a session is a bearer credential, so this is how long a stolen one works.',
+    parse: parseDurationMs,
+  } satisfies ParameterSpec<number>,
+
+  AUTH_RATE_LIMIT_REQUESTS: {
+    group: 'auth',
+    description:
+      'How many sign-in requests one client address may make per AUTH_RATE_LIMIT_WINDOW_MS (§59.3). Verifying a signature is the only request in this API whose cost is CPU, so this is what stops one caller spending everybody’s. A sign-in costs two: the challenge and the verify share a bucket. OPEN, and 0 is a real answer meaning unlimited — for a deployment that limits at its edge instead.',
+    parse: (raw) => parseInteger(raw, { min: 0 }),
+  } satisfies ParameterSpec<number>,
+
+  AUTH_RATE_LIMIT_WINDOW_MS: {
+    group: 'auth',
+    description:
+      'How long refilling a whole sign-in allowance takes (§59.3). The allowance is a token bucket, so this is the sustained rate and AUTH_RATE_LIMIT_REQUESTS is also the largest burst a caller who has been quiet may make at once. OPEN: nothing in the masterplan names a figure, and the honest way to choose is against the load a round boundary actually produces (docs/operations/load-testing.md).',
     parse: parseDurationMs,
   } satisfies ParameterSpec<number>,
 } as const;
