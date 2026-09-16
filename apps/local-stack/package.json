@@ -18,6 +18,8 @@
     "@ponswars/gateway": "workspace:*",
     "@ponswars/market-data": "workspace:*",
     "@ponswars/player-service": "workspace:*",
+    "@ponswars/postgres": "workspace:*",
+    "@ponswars/store-postgres": "workspace:*",
     "@ponswars/realtime": "workspace:*",
     "@ponswars/round-service": "workspace:*",
     "@ponswars/shared-types": "workspace:*"

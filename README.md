@@ -82,12 +82,14 @@ nine and finalize, and anything connected watches it happen.
 curl http://127.0.0.1:4000/v1/rounds/current
 ```
 
-**It is a development stack and says so on startup.** Two of the five ports are
-stand-ins: the market is synthetic and the store is in memory. That is not a
-shortcut taken to get something running — the market-data vendor and the
-database are `OPEN` decisions (§102), and a stack that quietly picked one would
-be shipping that decision as policy. Replacing either is one constructor
-argument, which is the property the stack exists to demonstrate.
+**It is a development stack and says so on startup.** The market is synthetic
+and the store is in memory — not a shortcut taken to get something running, but
+the two decisions that are not this repository's to make (§102).
+
+Replacing a port is one constructor argument, and the store is where that is
+demonstrable rather than claimed: set `DATABASE_URL` and the same stack runs on
+the PostgreSQL adapters the deployable server runs, against a migrated
+database. `docs/operations/load-testing.md` has what that costs.
 
 The synthetic market is explicitly not a real market and must never pass for
 one. The real one is the deployable server's `MARKET_DATA_PROVIDER=onchain`:

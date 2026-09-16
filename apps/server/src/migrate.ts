@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { connectPostgres } from './postgres.js';
+import { connectPostgres } from '@ponswars/postgres';
 
 /**
  * Applies the schema (§21.3, §49).

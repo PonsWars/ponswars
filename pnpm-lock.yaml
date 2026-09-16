@@ -136,6 +136,9 @@ importers:
       '@ponswars/player-service':
         specifier: workspace:*
         version: link:../../packages/player-service
+      '@ponswars/postgres':
+        specifier: workspace:*
+        version: link:../../packages/postgres
       '@ponswars/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime
@@ -145,6 +148,9 @@ importers:
       '@ponswars/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@ponswars/store-postgres':
+        specifier: workspace:*
+        version: link:../../packages/store-postgres
 
   apps/server:
     dependencies:
@@ -178,6 +184,9 @@ importers:
       '@ponswars/market-data':
         specifier: workspace:*
         version: link:../../packages/market-data
+      '@ponswars/postgres':
+        specifier: workspace:*
+        version: link:../../packages/postgres
       '@ponswars/round-service':
         specifier: workspace:*
         version: link:../../packages/round-service
@@ -187,16 +196,9 @@ importers:
       '@ponswars/store-postgres':
         specifier: workspace:*
         version: link:../../packages/store-postgres
-      pg:
-        specifier: ^8.16.4
-        version: 8.23.0
       viem:
         specifier: ^2.56.3
         version: 2.56.3(typescript@6.0.3)(zod@4.5.4)
-    devDependencies:
-      '@types/pg':
-        specifier: ^8.15.7
-        version: 8.23.1
 
   apps/web:
     dependencies:
@@ -379,6 +381,19 @@ importers:
       '@ponswars/shared-types':
         specifier: workspace:*
         version: link:../shared-types
+
+  packages/postgres:
+    dependencies:
+      '@ponswars/store-postgres':
+        specifier: workspace:*
+        version: link:../store-postgres
+      pg:
+        specifier: ^8.16.4
+        version: 8.23.0
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.15.7
+        version: 8.23.1
 
   packages/realtime:
     dependencies:

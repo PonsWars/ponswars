@@ -24,13 +24,11 @@
     "@ponswars/gateway": "workspace:*",
     "@ponswars/genesis-service": "workspace:*",
     "@ponswars/market-data": "workspace:*",
+    "@ponswars/postgres": "workspace:*",
     "@ponswars/round-service": "workspace:*",
     "@ponswars/shared-types": "workspace:*",
     "@ponswars/store-postgres": "workspace:*",
-    "pg": "^8.16.4",
     "viem": "^2.56.3"
   },
-  "devDependencies": {
-    "@types/pg": "^8.15.7"
-  }
+  "devDependencies": {}
 }

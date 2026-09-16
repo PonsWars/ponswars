@@ -17,6 +17,8 @@
     { "path": "../../packages/realtime/tsconfig.build.json" },
     { "path": "../../packages/round-service/tsconfig.build.json" },
     { "path": "../../packages/player-service/tsconfig.build.json" },
+    { "path": "../../packages/postgres/tsconfig.build.json" },
+    { "path": "../../packages/store-postgres/tsconfig.build.json" },
     { "path": "../api/tsconfig.build.json" },
     { "path": "../gateway/tsconfig.build.json" }
   ]

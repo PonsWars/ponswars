@@ -23,6 +23,15 @@ import {
   type WalletAddress,
 } from '@ponswars/shared-types';
 import { SyntheticMarket } from '@ponswars/market-data';
+import { connectPostgres } from '@ponswars/postgres';
+import {
+  PostgresAuthStore,
+  PostgresCardHoldings,
+  PostgresPickStore,
+  PostgresPlayerRecords,
+  PostgresRoundStore,
+  readFinalizedResult,
+} from '@ponswars/store-postgres';
 
 /**
  * The whole loop, running locally (§68).
@@ -154,17 +163,30 @@ const AUTH_POLICY: AuthPolicy = {
 };
 
 async function main(): Promise<void> {
-  // No card holdings: the local stack records no Genesis claims, so no wallet
-  // can arm a card here — exactly as in production until claims are recorded.
-  const cards = new MemoryCardHoldings();
-  const picks = new PickStore(cards);
-  const store = new MemoryRoundStore();
+  // The store is the one thing this stack will take from a deployment: set
+  // DATABASE_URL and it runs the same PostgreSQL adapters the server runs,
+  // against a database `pnpm run db:migrate` has migrated. That is the claim
+  // this stack exists to demonstrate — a port is one constructor argument —
+  // and a claim nobody can run is not one.
+  const databaseUrl = process.env['DATABASE_URL'];
+  const database =
+    databaseUrl === undefined || databaseUrl === ''
+      ? null
+      : connectPostgres({ connectionString: databaseUrl, maxConnections: 10 });
+
+  // No card holdings in memory: the local stack records no Genesis claims, so
+  // no wallet can arm a card here — exactly as in production until claims are
+  // recorded.
+  const cards = database === null ? new MemoryCardHoldings() : new PostgresCardHoldings(database);
+  const picks = database === null ? new PickStore(cards) : new PostgresPickStore(database);
+  const memoryStore = new MemoryRoundStore();
+  const store = database === null ? memoryStore : new PostgresRoundStore(database);
   const market = new SyntheticMarket();
   // The same spread over cores the deployable server uses, so a load test
   // against this stack measures what a deployment would do.
   const recovery = workerRecovery();
   const auth = new AuthService({
-    store: new MemoryAuthStore(),
+    store: database === null ? new MemoryAuthStore() : new PostgresAuthStore(database),
     policy: AUTH_POLICY,
     now,
     ...(recovery === null ? {} : { recover: recovery.recover }),
@@ -207,14 +229,19 @@ async function main(): Promise<void> {
     // immutable once it exists, so there is nothing to cache and nothing that
     // could go stale — a second copy would only be a second thing to be wrong.
     finalizedResult: (battleId) =>
-      Promise.resolve(
-        store.finalizations
-          .flatMap((finalization) => finalization.results)
-          .find((result) => result.battleId === battleId) ?? null,
-      ),
+      database === null
+        ? Promise.resolve(
+            memoryStore.finalizations
+              .flatMap((finalization) => finalization.results)
+              .find((result) => result.battleId === battleId) ?? null,
+          )
+        : readFinalizedResult(database, battleId),
     // From the same finalizations, through the same derivation a deployment
     // uses — a record in the local stack follows the rules production does.
-    playerRecords: new MemoryPlayerRecords(() => store.finalizations),
+    playerRecords:
+      database === null
+        ? new MemoryPlayerRecords(() => memoryStore.finalizations)
+        : new PostgresPlayerRecords(database),
     cards,
     picks,
     config: CONFIG,
@@ -236,8 +263,10 @@ async function main(): Promise<void> {
     [
       '',
       'PonsWars local stack — development only.',
-      '  The market is synthetic and the store is in memory. Neither is a',
-      '  production choice; both are still OPEN decisions (§102).',
+      '  The market is synthetic: generated prices, not a market (§102).',
+      database === null
+        ? '  The store is in memory. Set DATABASE_URL to run on PostgreSQL.'
+        : '  The store is PostgreSQL, through the adapters the server uses.',
       '',
       `  API       http://127.0.0.1:${String(PORT_API)}/v1/rounds/current`,
       `  WebSocket ws://127.0.0.1:${String(PORT_WS)}`,
@@ -270,6 +299,8 @@ async function main(): Promise<void> {
     // A process that exits is a process someone notices.
     await api.close();
     await sockets.close();
+    await recovery?.close();
+    await database?.close();
   }
 }
 

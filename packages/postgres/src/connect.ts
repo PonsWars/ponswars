@@ -6,9 +6,9 @@ import type { SqlDatabase, SqlExecutor } from '@ponswars/store-postgres';
  *
  * `@ponswars/store-postgres` deliberately imports no driver — which client
  * library talks to PostgreSQL is a deployment detail, and a package that picked
- * one would be a decision about it. This is where the decision is made, in the
- * service that deploys, and it is about thirty lines because that is all the
- * seam is.
+ * one would be a decision about it. This package is where that decision is
+ * made, once, for every deployable that connects: the server, its jobs and the
+ * local stack. It is about thirty lines because that is all the seam is.
  *
  * PostgreSQL itself is not the open question. `database/migrations` is
  * PostgreSQL DDL; §59.3 leaves the managed *provider* open, which is a hosting

@@ -41,7 +41,7 @@ import {
 import { loadEngineCalibration } from './calibration.js';
 import { followClaims } from './claims.js';
 import { startMarket, type RunningMarket } from './market.js';
-import { connectPostgres } from './postgres.js';
+import { connectPostgres } from '@ponswars/postgres';
 
 /**
  * The deployable service (§21.3, §59.3, §65.2).

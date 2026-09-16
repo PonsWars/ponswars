@@ -4,7 +4,7 @@ import { baseUnits, robinhoodChainNetwork, utcTimestamp } from '@ponswars/shared
 import { DistributionError, PostgresDistributionStore } from '@ponswars/store-postgres';
 import { DISTRIBUTION_USAGE, parseDistributionArgs } from './distribution-args.js';
 import { privateKeyToAccount } from 'viem/accounts';
-import { connectPostgres } from './postgres.js';
+import { connectPostgres } from '@ponswars/postgres';
 import { publishDistribution } from './publication.js';
 
 /**

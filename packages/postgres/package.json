@@ -1,0 +1,29 @@
+{
+  "name": "@ponswars/postgres",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The PostgreSQL client every deployable uses, and nothing else.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/store-postgres": "workspace:*",
+    "pg": "^8.16.4"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.7"
+  }
+}

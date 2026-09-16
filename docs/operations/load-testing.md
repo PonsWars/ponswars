@@ -12,6 +12,14 @@ snapshot fetch each one makes on the way in.
 pnpm run local
 ```
 
+To measure the write path against a real database rather than memory, give the
+stack one — the same PostgreSQL adapters the server runs:
+
+```bash
+pnpm run db:up && pnpm run db:migrate
+DATABASE_URL=postgres://ponswars:ponswars_dev_only@localhost:5432/ponswars pnpm run local
+```
+
 ```bash
 node tools/load-test.mjs --clients 1000 --seconds 60 --ramp-ms 15000
 ```
@@ -77,6 +85,24 @@ longer doing elliptic-curve arithmetic between requests.
 Two things still follow for capacity: count sign-ins per round open rather than
 players, and put the API behind more than one process before that number gets
 into the thousands.
+
+**On PostgreSQL rather than memory** (the compose database on the same
+machine), with two hundred spectators watching throughout:
+
+| Concurrent sign-ins | Sign-in p50/p99 | Pick p50/p99    | Recorded     |
+| ------------------- | --------------- | --------------- | ------------ |
+| 500                 | 1.48 s / 1.75 s | 443 ms / 576 ms | 500 of 500   |
+| 2,000               | 5.21 s / 6.13 s | 1.05 s / 1.47 s | 2000 of 2000 |
+
+Nothing was refused or lost, and the round that followed finalized with all of
+it: five results, 2,640 tick-evidence rows, and War Points in the ledger for
+every winner. Delivery to the spectators held at 23 ms p50 while those writes
+were happening.
+
+Both numbers are a burst: the test fires every sign-in at the same instant,
+where real arrivals spread across a sixty-second Pick Phase. Read them as "two
+thousand sign-ins clear in about seven seconds", not as a per-request cost a
+player would feel.
 
 **Sign-in load pushes the tick tail, not the tick rate.** With five hundred
 sign-ins running through a live battle, updates still went out at the full

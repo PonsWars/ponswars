@@ -3,7 +3,7 @@ import { baseUnits, robinhoodChainNetwork, utcTimestamp } from '@ponswars/shared
 import { DistributionError, PostgresDistributionStore } from '@ponswars/store-postgres';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
-import { connectPostgres } from './postgres.js';
+import { connectPostgres } from '@ponswars/postgres';
 import { nextWindowStep } from './rewards-window.js';
 
 /**
