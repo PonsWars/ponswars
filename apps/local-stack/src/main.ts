@@ -31,6 +31,7 @@ import {
   PostgresPickStore,
   PostgresPlayerRecords,
   PostgresRoundStore,
+  readBattleVoid,
   readFinalizedResult,
 } from '@ponswars/store-postgres';
 
@@ -292,6 +293,17 @@ async function main(): Promise<void> {
               .find((result) => result.battleId === battleId) ?? null,
           )
         : readFinalizedResult(database, battleId),
+    // Why a battle ended without one, so a result link for a voided battle says
+    // so rather than "nothing has finished yet" (§4.4).
+    voidedBattle: (battleId) =>
+      database === null
+        ? Promise.resolve(
+            memoryStore.finalizations
+              .flatMap((finalization) => finalization.state.battles)
+              .find((battle) => battle.setup.battleId === battleId && battle.state === 'VOID')
+              ?.voidReason ?? null,
+          )
+        : readBattleVoid(database, battleId),
     // From the same finalizations, through the same derivation a deployment
     // uses — a record in the local stack follows the rules production does.
     playerRecords:

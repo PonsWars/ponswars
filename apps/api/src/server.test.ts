@@ -887,6 +887,41 @@ describe('GET /v1/battles/:battleId/result', () => {
     expect(apiErrorSchema.parse(live.json()).code).toBe(apiErrorSchema.parse(unknown.json()).code);
   });
 
+  it('says a battle voided rather than sending somebody back for a result', async () => {
+    // §4.4 never revives a void, so "a result appears when the battle
+    // finalizes" would be an instruction to wait for nothing. The answer is
+    // still a 404 — the result genuinely does not exist — but it names the
+    // reason and carries §110.6's sentence about the card charge.
+    const battleId = round.battles[0]?.setup.battleId ?? '';
+    const voided = buildServer({
+      ...serverDeps,
+      voidedBattle: (asked) => Promise.resolve(asked === battleId ? 'DATA_INTEGRITY' : null),
+    });
+
+    const response = await voided.inject({ method: 'GET', url: `/v1/battles/${battleId}/result` });
+    expect(response.statusCode).toBe(404);
+    const body = apiErrorSchema.parse(response.json());
+    expect(body.code).toBe('BATTLE_VOIDED');
+    expect(body.stateIsSafe).toBe(true);
+    expect(body.nextStep).toContain('has been restored');
+
+    // And a battle that simply has no result yet still gets the ordinary
+    // answer: the two are only worth telling apart when they differ.
+    const running = await voided.inject({ method: 'GET', url: '/v1/battles/nope/result' });
+    expect(apiErrorSchema.parse(running.json()).code).toBe('RESULT_NOT_FOUND');
+
+    await voided.close();
+  });
+
+  it('answers a missing result the same way when nothing can tell voids apart', async () => {
+    // A deployment whose store cannot answer why a battle has no result says
+    // what it knows, which is that there is none. Guessing at a void would be
+    // telling a player their card came back on no evidence at all.
+    const response = await app.inject({ method: 'GET', url: '/v1/battles/nope/result' });
+
+    expect(apiErrorSchema.parse(response.json()).code).toBe('RESULT_NOT_FOUND');
+  });
+
   it('carries scores at engine scale, summing to one hundred points', async () => {
     // The scale that has been wrong here before: a component reading 24_342_750
     // is 24.3 points. Both halves together are always a hundred, and a response

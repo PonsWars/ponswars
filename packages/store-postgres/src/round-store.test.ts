@@ -32,7 +32,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PostgresPickStore } from './pick-store.js';
-import { PostgresRoundStore, readFinalizedResult } from './round-store.js';
+import { PostgresRoundStore, readBattleVoid, readFinalizedResult } from './round-store.js';
 import type { SqlDatabase, SqlRow } from './sql.js';
 
 /**
@@ -573,6 +573,25 @@ describe('reading a result back', () => {
 
   it('has nothing for a battle it has never heard of', async () => {
     expect(await readFinalizedResult(database(pg), 'battle-nobody-fought')).toBeNull();
+  });
+
+  it('tells a battle that voided from one that has not finished', async () => {
+    // A missing result cannot say which. The API answers them differently —
+    // §4.4 never revives a void, so "come back when it finalizes" would be an
+    // instruction to wait for nothing.
+    const round = openRound();
+    await store.saveState(round);
+    const running = round.battles[0]!.setup.battleId;
+    expect(await readBattleVoid(database(pg), running)).toBeNull();
+
+    // Nothing was ever scored, so every battle voids.
+    const locked = lockRound(round, at(60_000), []);
+    const finalization = finalizeRound(locked, at(600_000), BLOCK, CONFIG);
+    await store.saveFinalization(finalization);
+
+    expect(finalization.voided).toContain(running);
+    expect(await readBattleVoid(database(pg), running)).toBe('DATA_INTEGRITY');
+    expect(await readBattleVoid(database(pg), 'battle-nobody-fought')).toBeNull();
   });
 
   it('returns what the finalization wrote', async () => {

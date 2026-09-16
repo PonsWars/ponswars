@@ -34,12 +34,14 @@ import {
   roundId as toRoundId,
   type FinalizedBattleResult,
   type UtcTimestamp,
+  type VoidReasonCategory,
   type WalletAddress,
 } from '@ponswars/shared-types';
 import { PROTOCOL_VERSION } from '@ponswars/realtime';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import {
   battleNotInRound,
+  battleVoided,
   chainUnavailable,
   genesisRequestNotFound,
   genesisUnavailable,
@@ -186,6 +188,18 @@ export interface ServerDeps {
    * one — the one deployments actually run — impossible to write.
    */
   readonly finalizedResult: (battleId: string) => Promise<FinalizedBattleResult | null>;
+  /**
+   * Why a battle ended with no result, where it voided (§4.4, §110.6).
+   *
+   * Asked only when there is no result, and the answer separates two facts a
+   * bare 404 runs together: a battle still running, and a battle that ended
+   * without one. The second is final — §4.4 never revives a void — so telling
+   * somebody to come back later would be telling them to wait for nothing.
+   *
+   * Absent where a deployment cannot tell them apart, and then a missing result
+   * stays a missing result rather than being guessed at.
+   */
+  readonly voidedBattle?: (battleId: string) => Promise<VoidReasonCategory | null>;
   /**
    * The connected wallet's record (§69.9).
    *
@@ -1216,7 +1230,15 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const { battleId } = request.params as { battleId: string };
     const result = await deps.finalizedResult(battleId);
     if (result === null) {
-      return send(reply, resultNotFound(battleId, correlationId()));
+      // A voided battle did finish. Answering it as "not found yet" would tell
+      // somebody to come back for a result that is never coming (§4.4).
+      const voided = (await deps.voidedBattle?.(battleId)) ?? null;
+      return send(
+        reply,
+        voided === null
+          ? resultNotFound(battleId, correlationId())
+          : battleVoided(battleId, voided, correlationId()),
+      );
     }
     return reply.send(battleResultSchema.parse(result));
   });

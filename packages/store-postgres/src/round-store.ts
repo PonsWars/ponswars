@@ -16,6 +16,7 @@ import {
   utcTimestamp,
   type BattleId,
   type CanonicalClock,
+  type VoidReasonCategory,
   type ConfidenceSnapshot,
   type FinalizedBattleResult,
 } from '@ponswars/shared-types';
@@ -470,6 +471,26 @@ function toTimestamp(at: number): string {
  * components are scaled points under 1e8, so the narrowing is exact rather
  * than hopeful.
  */
+/**
+ * Why a battle ended with no result, or `null` if it did not void (§4.4).
+ *
+ * The other half of {@link readFinalizedResult}: between them a caller can tell
+ * a battle still running from one that finished without a result, which a
+ * missing row alone cannot say. The reason is the one the engine recorded when
+ * it voided, written with the state in the same transaction.
+ */
+export async function readBattleVoid(
+  db: SqlExecutor,
+  battleId: string,
+): Promise<VoidReasonCategory | null> {
+  const { rows } = await db.query(
+    `SELECT void_reason FROM battles WHERE battle_id = $1 AND state = 'VOID'`,
+    [battleId],
+  );
+  const reason = rows[0]?.['void_reason'];
+  return reason === null || reason === undefined ? null : (text(reason) as VoidReasonCategory);
+}
+
 export async function readFinalizedResult(
   db: SqlExecutor,
   battleId: string,

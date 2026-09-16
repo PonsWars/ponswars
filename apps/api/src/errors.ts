@@ -1,5 +1,5 @@
 import { apiErrorSchema, type ApiError } from '@ponswars/schemas';
-import { chainLabel } from '@ponswars/shared-types';
+import { chainLabel, type VoidReasonCategory } from '@ponswars/shared-types';
 
 /**
  * Every error this API returns (§110.5, §47).
@@ -163,6 +163,39 @@ export function resultNotFound(battleId: string, correlationId: string): ErrorRe
     `No finalized result for battle ${battleId}.`,
     true,
     'A result appears when the battle finalizes, at the end of its round.',
+    correlationId,
+  );
+}
+
+/**
+ * The battle ended without a result, because it voided (§4.4, §110.6).
+ *
+ * Its own answer rather than {@link resultNotFound}, and the difference is not
+ * a detail: "no result yet" tells somebody to come back later, and for a voided
+ * battle nothing is coming. §4.4 never revives one.
+ *
+ * Still a 404, because the result they asked for genuinely does not exist — but
+ * with the reason it does not, and with §110.6's sentence, which is the part a
+ * player who spent a Genesis charge needs. Every charge deployed on a voided
+ * battle is put back in the same transaction that finalized the round, so the
+ * sentence is true of the battle rather than of one wallet, and this endpoint
+ * is public: it says nothing about who deployed what.
+ */
+export function battleVoided(
+  battleId: string,
+  reason: VoidReasonCategory,
+  correlationId: string,
+): ErrorResponse {
+  const why =
+    reason === 'DATA_INTEGRITY'
+      ? 'the data integrity threshold was not met'
+      : 'the market halted during it';
+  return error(
+    404,
+    'BATTLE_VOIDED',
+    `Battle ${battleId} voided: ${why}, so it produced no result.`,
+    true,
+    'No War Points were awarded and nothing was lost. Any deployed card use for this battle has been restored.',
     correlationId,
   );
 }

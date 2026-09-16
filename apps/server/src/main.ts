@@ -36,6 +36,7 @@ import {
   PostgresPickStore,
   PostgresPlayerRecords,
   PostgresRoundStore,
+  readBattleVoid,
   readFinalizedResult,
 } from '@ponswars/store-postgres';
 import { parseServerArgs } from './server-args.js';
@@ -371,6 +372,9 @@ async function main(): Promise<void> {
     // link has to answer after a restart, on an instance that never ran the
     // battle. Reading it from memory would have made both of those a 404.
     finalizedResult: (battleId) => readFinalizedResult(database, battleId),
+    // §4.4: a battle that voided did finish, and saying "no result yet" would
+    // send somebody back for one that is never coming.
+    voidedBattle: (battleId) => readBattleVoid(database, battleId),
     // Derived from the ledgers finalization wrote, on every request (§49.2).
     playerRecords: new PostgresPlayerRecords(database),
     // From the cards table. Until Genesis claims are recorded from the chain it
