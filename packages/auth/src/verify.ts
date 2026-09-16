@@ -19,6 +19,20 @@ import { parseSiweMessage, validateSiweMessage } from 'viem/siwe';
  * today instead of a silent acceptance nobody checked.
  */
 
+/**
+ * Recovering the address that signed a message.
+ *
+ * A seam, because this is the expensive half of a sign-in: recovering a public
+ * key from a signature is elliptic-curve arithmetic in JavaScript, measured at
+ * a few hundred a second on one core, and a round's Pick Phase is sixty
+ * seconds long (§3.1). The default runs in the caller's thread; a service
+ * expecting a crowd hands in one that spreads the work over cores.
+ */
+export type RecoverSigner = (message: string, signature: string) => Promise<string>;
+
+export const recoverInThisThread: RecoverSigner = (message, signature) =>
+  recoverMessageAddress({ message, signature: signature as `0x${string}` });
+
 export type VerificationFailure =
   'MESSAGE_MALFORMED' | 'DOMAIN_MISMATCH' | 'CHAIN_MISMATCH' | 'EXPIRED' | 'SIGNATURE_INVALID';
 
@@ -36,6 +50,8 @@ export interface VerifyInput {
   readonly expectedDomain: string;
   readonly expectedChainId: number;
   readonly at: Date;
+  /** How the signer is recovered; the caller's own thread by default. */
+  readonly recover?: RecoverSigner;
 }
 
 export type VerifyResult =
@@ -63,10 +79,7 @@ export async function verifySignedChallenge(input: VerifyInput): Promise<VerifyR
 
   let recovered: string;
   try {
-    recovered = await recoverMessageAddress({
-      message: input.message,
-      signature: input.signature as `0x${string}`,
-    });
+    recovered = await (input.recover ?? recoverInThisThread)(input.message, input.signature);
   } catch {
     // A signature that is not a signature — wrong length, not hex, truncated by
     // a client. Indistinguishable from a wrong one as far as the caller is

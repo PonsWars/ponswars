@@ -7,7 +7,7 @@ import {
 import { challengeMessage } from './message.js';
 import { generateNonce, generateSessionToken, tokenFingerprint } from './nonce.js';
 import type { AuthStore } from './ports.js';
-import { verifySignedChallenge, type VerificationFailure } from './verify.js';
+import { verifySignedChallenge, type RecoverSigner, type VerificationFailure } from './verify.js';
 
 /**
  * Wallet sign-in, end to end (§45.2, §68.2).
@@ -71,17 +71,28 @@ export interface AuthServiceOptions {
   readonly store: AuthStore;
   readonly policy: AuthPolicy;
   readonly now: () => UtcTimestamp;
+  /**
+   * How a signature's signer is recovered; the caller's own thread by default.
+   *
+   * The one piece of a sign-in limited by arithmetic rather than IO, and every
+   * player arriving at a round boundary asks for one inside the same minute
+   * (§3.1) — so a deployment hands in `workerRecovery()` and spreads it over
+   * cores. Tests and the local stack leave it alone.
+   */
+  readonly recover?: RecoverSigner;
 }
 
 export class AuthService {
   readonly #store: AuthStore;
   readonly #policy: AuthPolicy;
   readonly #now: () => UtcTimestamp;
+  readonly #recover: RecoverSigner | undefined;
 
   constructor(options: AuthServiceOptions) {
     this.#store = options.store;
     this.#policy = options.policy;
     this.#now = options.now;
+    this.#recover = options.recover;
   }
 
   /** The chain this deployment accepts signatures for. */
@@ -146,6 +157,7 @@ export class AuthService {
       expectedDomain: this.#policy.domain,
       expectedChainId: challenge.chainId,
       at: new Date(at),
+      ...(this.#recover === undefined ? {} : { recover: this.#recover }),
     });
     if (!verified.ok) {
       return { ok: false, reason: verified.reason };

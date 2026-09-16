@@ -1,5 +1,5 @@
 import { bearer, buildServer } from '@ponswars/api';
-import { AuthService } from '@ponswars/auth';
+import { AuthService, workerRecovery } from '@ponswars/auth';
 import {
   assertChain,
   assertReserver,
@@ -192,8 +192,19 @@ async function main(): Promise<void> {
    * everybody out, and a session must be revocable — neither is possible for a
    * credential a single process settles on its own.
    */
+  // Sign-in is the one request limited by arithmetic: recovering a signer runs
+  // a few hundred times a second on one core, and everybody who opens the app
+  // at a round boundary signs in within the same minute (§3.1). Spread over the
+  // cores this process already has; `null` where there is only one.
+  const recovery = workerRecovery();
+  if (recovery !== null) {
+    say(`sign-in signatures verify on ${String(recovery.threads)} threads
+`);
+  }
+
   const auth = new AuthService({
     store: new PostgresAuthStore(database),
+    ...(recovery === null ? {} : { recover: recovery.recover }),
     policy: {
       challengeTtlMs: config.AUTH_CHALLENGE_TTL_MS,
       sessionTtlMs: config.AUTH_SESSION_TTL_MS,
@@ -445,6 +456,7 @@ async function main(): Promise<void> {
     await readingClaims;
     await api.close();
     await sockets.close();
+    await recovery?.close();
     await database.close();
   }
 

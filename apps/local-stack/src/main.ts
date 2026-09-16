@@ -1,6 +1,6 @@
 import { bearer, buildServer, PickStore } from '@ponswars/api';
 import { MemoryPlayerRecords } from '@ponswars/player-service';
-import { AuthService, MemoryAuthStore, type AuthPolicy } from '@ponswars/auth';
+import { AuthService, MemoryAuthStore, workerRecovery, type AuthPolicy } from '@ponswars/auth';
 import {
   CURRENT_ENGINE_VERSIONS,
   type EngineConfig,
@@ -160,7 +160,15 @@ async function main(): Promise<void> {
   const picks = new PickStore(cards);
   const store = new MemoryRoundStore();
   const market = new SyntheticMarket();
-  const auth = new AuthService({ store: new MemoryAuthStore(), policy: AUTH_POLICY, now });
+  // The same spread over cores the deployable server uses, so a load test
+  // against this stack measures what a deployment would do.
+  const recovery = workerRecovery();
+  const auth = new AuthService({
+    store: new MemoryAuthStore(),
+    policy: AUTH_POLICY,
+    now,
+    ...(recovery === null ? {} : { recover: recovery.recover }),
+  });
 
   const walletOf = (authorization: string | undefined): Promise<WalletAddress | null> => {
     const token = bearer(authorization);

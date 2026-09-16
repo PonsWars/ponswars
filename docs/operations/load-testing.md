@@ -62,12 +62,20 @@ The write path, on the same process:
 | 500                 | 1.53 s / 2.56 s | 0.95 s / 1.51 s | none    |
 
 **Signing in is the expensive request, and it is CPU.** Verifying an EIP-4361
-signature recovers a public key; five hundred of them at once queue behind each
-other on one event loop. A round opens every ten minutes and Pick Phase is
-sixty seconds (§3.1), so the spike is real: at five hundred concurrent sign-ins
-a player waits a second and a half, and the shape scales with cores rather than
-with memory. Two things follow for capacity: count sign-ins per round open, not
-players; and put the API behind more than one process before that number gets
+signature recovers a public key: measured at 281 a second on one core of this
+machine. A round opens every ten minutes and Pick Phase is sixty seconds
+(§3.1), so everyone who opens the app at a boundary signs in inside the same
+minute.
+
+That work now runs on threads (`workerRecovery`, wired into the server and the
+local stack), which took recovery to 1,502 a second on eight of twelve cores —
+5.3×. The table above is from before that landed; what it changed most is not
+sign-in itself but everything queued behind it. With five hundred sign-ins in
+flight, a pick went from 949 ms to 113 ms at p50, because the event loop was no
+longer doing elliptic-curve arithmetic between requests.
+
+Two things still follow for capacity: count sign-ins per round open rather than
+players, and put the API behind more than one process before that number gets
 into the thousands.
 
 **Sign-in load pushes the tick tail, not the tick rate.** With five hundred
