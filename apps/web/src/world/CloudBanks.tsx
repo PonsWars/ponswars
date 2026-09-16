@@ -13,6 +13,7 @@ import { useSession } from '../state/session.js';
 import { NOISE_GLSL } from './Atmosphere.js';
 import { cloudBanks, type CloudIsland, type CloudOptions } from './clouds.js';
 import { MARKET_CORE, SECTOR_ISLAND_RADIUS, SECTOR_POSITIONS } from './layout.js';
+import { sectorGlows } from './sector-glow.js';
 import { VOID_SKY } from './navigation-config.js';
 
 /**
@@ -53,9 +54,29 @@ const DENSITY: Readonly<Record<QualityTier, CloudOptions>> = {
 /** Where the moonlight comes from. The same side as the key light and the planet's sun. */
 const SUN = new Vector3(0.45, 0.8, 0.4).normalize();
 
+/** The five sectors, whose light these banks hang in (§38.10, §36.14). */
+const GLOWS = 5;
+
+/**
+ * How far a sector's light reaches through the banks, in world units.
+ *
+ * `CALIBRATE` (§59.4). Tighter than the deck's, because these hang at the
+ * islands' own height: a bank beside a battle should take its colour, and one
+ * two sectors away should not.
+ */
+const GLOW_REACH = 340;
+
+/** How much colour a sector at full momentum puts into a bank beside it. */
+const GLOW_GAIN = 0.3;
+
+/** How much of it reaches the weather before the fighting starts (§38.6). */
+const CALM = 0.3;
+
 export function CloudBanks(): JSX.Element {
   const quality = useSession((state) => state.quality);
   const reducedMotion = useSession((state) => state.reducedMotion);
+  const battles = useSession((state) => state.battles);
+  const roundState = useSession((state) => state.round?.state ?? null);
   const density = DENSITY[quality];
 
   const geometry = useMemo(() => {
@@ -90,20 +111,29 @@ export function CloudBanks(): JSX.Element {
         uniforms: {
           uTime: { value: 0 },
           uSun: { value: SUN },
-          uLit: { value: new Color('#557a91') },
-          uShadow: { value: new Color('#070e14') },
+          // Dimmer and colder than the light on the islands. §36.5 keeps this
+          // world dark: the weather is a middle distance for silhouettes to
+          // separate against, and a bank brighter than the rock it hangs beside
+          // flattens the frame into one grey.
+          uLit: { value: new Color('#3d5c70') },
+          uShadow: { value: new Color('#060c12') },
           uGlow: { value: new Color('#c9a25a') },
           uHorizon: { value: new Color(VOID_SKY.horizon) },
+          uSector: { value: Array.from({ length: GLOWS }, () => new Vector3()) },
+          uSectorColour: { value: Array.from({ length: GLOWS }, () => new Color()) },
         },
         vertexShader: `
           attribute vec3 aCenter;
           attribute float aSize;
           attribute float aSeed;
           uniform float uTime;
+          uniform vec3 uSector[${String(GLOWS)}];
+          uniform vec3 uSectorColour[${String(GLOWS)}];
           varying vec2 vUv;
           varying float vSeed;
           varying float vDepth;
           varying float vCore;
+          varying vec3 vSectorLight;
           void main() {
             // A slow drift, each puff on its own phase.
             vec3 centre = aCenter + vec3(
@@ -119,6 +149,15 @@ export function CloudBanks(): JSX.Element {
             vSeed = aSeed;
             vDepth = -view.z;
             vCore = exp(-length(centre.xz) / 260.0);
+            // The battles this bank hangs beside, gathered once per puff rather
+            // than per pixel: a bank is one small billboard, and its light does
+            // not change across it.
+            vSectorLight = vec3(0.0);
+            for (int i = 0; i < ${String(GLOWS)}; i++) {
+              vec3 sector = uSector[i];
+              float reach = exp(-distance(centre.xz, sector.xy) / ${String(GLOW_REACH)}.0);
+              vSectorLight += uSectorColour[i] * sector.z * reach * ${String(GLOW_GAIN)};
+            }
           }
         `,
         fragmentShader: `
@@ -131,6 +170,7 @@ export function CloudBanks(): JSX.Element {
           varying float vSeed;
           varying float vDepth;
           varying float vCore;
+          varying vec3 vSectorLight;
           ${NOISE_GLSL}
           void main() {
             vec2 p = vUv * 2.0 - 1.0;
@@ -149,11 +189,16 @@ export function CloudBanks(): JSX.Element {
             vec3 colour = mix(uShadow, uLit, light);
             // The core's warm light, up through the banks round it.
             colour += uGlow * vCore * (1.0 - light) * 0.35;
+            // And the battle beside it, strongest where the bank is in shadow —
+            // a lit cloud top is already carrying the key light, and a faction
+            // accent laid over that would be a wash rather than an accent
+            // (§36.5).
+            colour += vSectorLight * (0.35 + (1.0 - light) * 0.85) * body;
             // Into the horizon with distance, like everything else in the void.
             colour = mix(colour, uHorizon, smoothstep(900.0, 2800.0, vDepth));
             float near = smoothstep(40.0, 240.0, vDepth);
             float far = 1.0 - smoothstep(2600.0, 3400.0, vDepth);
-            gl_FragColor = vec4(colour, body * 0.5 * near * far);
+            gl_FragColor = vec4(colour, body * 0.44 * near * far);
           }
         `,
       }),
@@ -172,6 +217,25 @@ export function CloudBanks(): JSX.Element {
     },
     [material],
   );
+
+  /** The light the sectors are throwing, rewritten when a battle changes. */
+  useEffect(() => {
+    const glows = sectorGlows(battles, SECTOR_POSITIONS);
+    const burning = roundState === 'BATTLE_LIVE' ? 1 : CALM;
+    const where = material.uniforms['uSector']?.value as Vector3[] | undefined;
+    const colour = material.uniforms['uSectorColour']?.value as Color[] | undefined;
+    if (where === undefined || colour === undefined) {
+      return;
+    }
+    for (let index = 0; index < GLOWS; index += 1) {
+      const glow = glows[index];
+      where[index]?.set(glow?.x ?? 0, glow?.z ?? 0, (glow?.strength ?? 0) * burning);
+      colour[index]?.set(glow?.left ?? '#000000');
+      if (glow !== undefined) {
+        colour[index]?.lerp(new Color(glow.right), 1 - glow.hold);
+      }
+    }
+  }, [battles, roundState, material]);
 
   useFrame((state) => {
     if (reducedMotion) {

@@ -1,7 +1,9 @@
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, type JSX } from 'react';
-import { Color, ShaderMaterial } from 'three';
+import { Color, ShaderMaterial, Vector3 } from 'three';
 import { useSession } from '../state/session.js';
+import { SECTOR_POSITIONS } from './layout.js';
+import { sectorGlows } from './sector-glow.js';
 import { VOID_SKY } from './navigation-config.js';
 
 /**
@@ -67,8 +69,8 @@ export const NOISE_GLSL = `
  * put it *in* the weather rather than above it.
  */
 const LAYERS = [
-  { y: -170, scale: 0.0021, drift: 1, opacity: 0.9, lit: '#2e5a72', shadow: '#0a1822' },
-  { y: -260, scale: 0.0012, drift: 0.55, opacity: 0.76, lit: '#1c3e56', shadow: '#060f17' },
+  { y: -170, scale: 0.0021, drift: 1, opacity: 0.9, lit: '#27506a', shadow: '#07121b' },
+  { y: -260, scale: 0.0012, drift: 0.55, opacity: 0.76, lit: '#173547', shadow: '#040b12' },
 ] as const;
 
 /**
@@ -83,8 +85,34 @@ const FADE = 3_600;
 /** The Market Core's own light, thrown up through the cloud beneath it (§38.2). */
 const CORE_GLOW = '#2a8a78';
 
+/** How many sectors the deck can carry light from: the five of §4.1. */
+const GLOWS = 5;
+
+/**
+ * How far a sector's light carries across the deck, in world units.
+ *
+ * `CALIBRATE` (§59.4). Wide enough that the pools overlap into weather rather
+ * than reading as five spotlights, tight enough that a sector's own colour is
+ * still under its own rock.
+ */
+const GLOW_REACH = 460;
+
+/** How much of the deck's brightness a sector at full momentum may add. */
+const GLOW_GAIN = 0.45;
+
+/**
+ * How much of a sector's light reaches the deck before the fighting starts.
+ *
+ * §38.6 makes Pick Phase comparatively calm and the locked round the moment
+ * everything comes on at once. The sectors are still lit — they are staging,
+ * not dark — but the weather only burns when the battles do.
+ */
+const CALM = 0.3;
+
 export function CloudSea(): JSX.Element {
   const reducedMotion = useSession((state) => state.reducedMotion);
+  const battles = useSession((state) => state.battles);
+  const roundState = useSession((state) => state.round?.state ?? null);
 
   // Paired with the layer that configures it, rather than a parallel array the
   // render then indexes into: an index lookup is optional by type, and a mesh
@@ -107,6 +135,11 @@ export function CloudSea(): JSX.Element {
             uShadow: { value: new Color(layer.shadow) },
             uHorizon: { value: new Color(VOID_SKY.horizon) },
             uGlow: { value: new Color(CORE_GLOW) },
+            // Five sectors' light: where it comes from and how hard it burns
+            // (xz, strength), and what colour it is. Updated per frame rather
+            // than rebuilt, so a momentum change costs no compile.
+            uSector: { value: Array.from({ length: GLOWS }, () => new Vector3()) },
+            uSectorColour: { value: Array.from({ length: GLOWS }, () => new Color()) },
           },
           vertexShader: `
               varying vec2 vWorld;
@@ -128,6 +161,8 @@ export function CloudSea(): JSX.Element {
               uniform vec3 uShadow;
               uniform vec3 uHorizon;
               uniform vec3 uGlow;
+              uniform vec3 uSector[${String(GLOWS)}];
+              uniform vec3 uSectorColour[${String(GLOWS)}];
               varying vec2 vWorld;
               ${NOISE_GLSL}
               void main() {
@@ -142,6 +177,15 @@ export function CloudSea(): JSX.Element {
                 // key light reaches.
                 vec3 colour = mix(uShadow, uLit, smoothstep(0.45, 0.95, n));
                 colour += uGlow * exp(-dist / 300.0) * body * 0.34;
+                // And the battles above it. A sector's light pools in the cloud
+                // under its own rock, in the accent of whichever faction is
+                // pushing — §36.15's "which side is winning" said in light,
+                // legible from any distance and before any label is.
+                for (int i = 0; i < ${String(GLOWS)}; i++) {
+                  vec3 sector = uSector[i];
+                  float reach = exp(-distance(vWorld, sector.xy) / ${String(GLOW_REACH)}.0);
+                  colour += uSectorColour[i] * sector.z * reach * body * ${String(GLOW_GAIN)};
+                }
                 // Melting into the horizon, so the sea has no edge.
                 colour = mix(colour, uHorizon, smoothstep(uFade * 0.28, uFade, dist));
                 float alpha = body * uOpacity * (1.0 - smoothstep(uFade * 0.7, uFade, dist));
@@ -161,6 +205,39 @@ export function CloudSea(): JSX.Element {
     },
     [sheets],
   );
+
+  /**
+   * The light each sector is throwing, rewritten in place.
+   *
+   * An effect rather than a frame hook: it changes when a battle's momentum or
+   * frontline changes, which is about once a second (§23.1), and writing five
+   * vectors sixty times a second to say the same thing would be work for
+   * nothing. `Vector3` and `Color` are mutated rather than replaced, because
+   * three reads the same objects it was handed at compile.
+   */
+  useEffect(() => {
+    const glows = sectorGlows(battles, SECTOR_POSITIONS);
+    const burning = roundState === 'BATTLE_LIVE' ? 1 : CALM;
+    for (const sheet of sheets) {
+      const where = sheet.material.uniforms['uSector']?.value as Vector3[] | undefined;
+      const colour = sheet.material.uniforms['uSectorColour']?.value as Color[] | undefined;
+      if (where === undefined || colour === undefined) {
+        continue;
+      }
+      for (let index = 0; index < GLOWS; index += 1) {
+        const glow = glows[index];
+        // A sector with no battle in it throws nothing, rather than throwing
+        // the last battle's colour into the next round's weather.
+        where[index]?.set(glow?.x ?? 0, glow?.z ?? 0, (glow?.strength ?? 0) * burning);
+        colour[index]?.set(glow?.left ?? '#000000');
+        if (glow !== undefined) {
+          // Mixed by the frontline: the side holding more of the field puts
+          // more of its colour in the cloud (§13.2).
+          colour[index]?.lerp(new Color(glow.right), 1 - glow.hold);
+        }
+      }
+    }
+  }, [battles, roundState, sheets]);
 
   useFrame((state) => {
     if (reducedMotion) {
