@@ -251,7 +251,19 @@ function applyEvent(event: string, payload: unknown, resync: () => void): void {
       // whether the card charge they spent on it came back.
       const parsed = PUBLIC_EVENT_PAYLOADS.BATTLE_VOID.safeParse(payload);
       if (parsed.success) {
-        useSession.getState().rememberVoid(parsed.data);
+        // The event's flag is about the battle: somebody's charge came back.
+        // The sentence a player reads is about theirs, so it is narrowed here,
+        // while the round this battle belongs to is still the one in the store
+        // and its backing still says whether this wallet deployed a card.
+        const session = useSession.getState();
+        const mine = session.battles.find(
+          (battle) => battle.battleId === parsed.data.battleId,
+        )?.backing;
+        session.rememberVoid({
+          battleId: parsed.data.battleId,
+          reason: parsed.data.reason,
+          cardUseRestored: parsed.data.cardUseRestored && (mine?.cardDeployed ?? false),
+        });
       }
       // No resync: a void is one battle, and the round's own finalization is
       // what changes more than a payload can describe.

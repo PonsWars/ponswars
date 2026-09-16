@@ -177,15 +177,32 @@ export function toSnapshot(body: ReturnType<typeof currentRoundSchema.parse>): R
  * that was not connected when the battle ended can still show it, which is the
  * common case: the result screen is reached *after* the round it describes.
  *
- * `null` means no result yet, which the server answers identically for a battle
- * that is still running and one that does not exist (§12.6).
+ * Three answers, because there are three states worth telling apart: a result,
+ * a battle that voided, and nothing yet. The last is what the server answers
+ * identically for a battle still running and one that does not exist (§12.6);
+ * the middle one is final, and showing it as "nothing yet" would leave somebody
+ * waiting for a result §4.4 never produces.
  */
+export type BattleResultLookup =
+  | { readonly kind: 'RESULT'; readonly result: FinalizedBattleResult }
+  /**
+   * The battle voided, in the server's own words.
+   *
+   * The sentences rather than a category, because §110.5 already makes the
+   * envelope say what happened and what it means for the player — including
+   * §110.6's line about the card charge. Re-deriving that copy here would be a
+   * second place for it to drift, and parsing a category back out of prose
+   * would be worse than either.
+   */
+  | { readonly kind: 'VOID'; readonly message: string; readonly nextStep: string }
+  | { readonly kind: 'NONE' };
+
 export async function fetchBattleResult(
   endpoints: LiveEndpoints,
   battleId: string,
   signal?: AbortSignal,
   fetchImpl: typeof fetch = fetch,
-): Promise<FinalizedBattleResult | null> {
+): Promise<BattleResultLookup> {
   let response: Response;
   try {
     response = await fetchImpl(`${endpoints.api}/v1/battles/${battleId}/result`, {
@@ -193,22 +210,28 @@ export async function fetchBattleResult(
       headers: { accept: 'application/json' },
     });
   } catch {
-    return null;
-  }
-  if (!response.ok) {
-    return null;
+    return { kind: 'NONE' };
   }
 
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    return null;
+    body = null;
+  }
+
+  if (!response.ok) {
+    // A void is the one refusal that is an answer about the battle rather than
+    // about this request, and the code is how the two are told apart.
+    const refusal = apiErrorSchema.safeParse(body);
+    return refusal.success && refusal.data.code === 'BATTLE_VOIDED'
+      ? { kind: 'VOID', message: refusal.data.message, nextStep: refusal.data.nextStep }
+      : { kind: 'NONE' };
   }
 
   const parsed = battleResultSchema.safeParse(body);
   if (!parsed.success) {
-    return null;
+    return { kind: 'NONE' };
   }
 
   const {
@@ -220,11 +243,14 @@ export async function fetchBattleResult(
     ...rest
   } = parsed.data;
   return {
-    ...rest,
-    battleId: toBattleId(id),
-    roundId: toRoundId(roundId),
-    finalizedAt: utcTimestamp(finalizedAt),
-    ...(tiebreakStep === undefined ? {} : { tiebreakStep }),
-    ...(tiebreakBlockHash === undefined ? {} : { tiebreakBlockHash }),
+    kind: 'RESULT',
+    result: {
+      ...rest,
+      battleId: toBattleId(id),
+      roundId: toRoundId(roundId),
+      finalizedAt: utcTimestamp(finalizedAt),
+      ...(tiebreakStep === undefined ? {} : { tiebreakStep }),
+      ...(tiebreakBlockHash === undefined ? {} : { tiebreakBlockHash }),
+    },
   };
 }

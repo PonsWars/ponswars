@@ -54,9 +54,11 @@ import { NAVIGATION } from '../world/navigation-config.js';
 /**
  * What a `BATTLE_VOID` said about one battle (§48.3, §110.6).
  *
- * `cardUseRestored` is the server's answer, not an inference: it is true only
- * where a charge was actually put back, so the sentence §110.6 fixes is only
- * ever shown to a player it is true for.
+ * `cardUseRestored` is narrowed to this wallet on the way in: the event's flag
+ * says a charge was put back on that battle, and this says one of them was
+ * this player's. Both are needed for §110.6's sentence to be true of the person
+ * reading it — the server's answer alone would show "your deployed card use has
+ * been restored" to somebody who never deployed one.
  */
 export interface BattleVoidNotice {
   readonly battleId: string;

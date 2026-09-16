@@ -6,7 +6,7 @@ import {
 } from '@ponswars/shared-types';
 import type { Profile } from '@ponswars/schemas';
 import { LAYER } from '@ponswars/ui-tokens';
-import { lazy, Suspense, useEffect, useMemo, type JSX } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type JSX } from 'react';
 import { liveEndpoints } from './live/endpoints.js';
 import { Factions } from './factions/Factions.js';
 import { cardEffectLine } from './art/GenesisCardFace.js';
@@ -432,6 +432,18 @@ export function App(): JSX.Element {
   const status = useLiveWorld(walletSession.authorization);
 
   const lastResults = useSession((state) => state.lastResults);
+  /**
+   * A battle named in the URL that voided (§4.4).
+   *
+   * Component state rather than the session store: it belongs to the page a
+   * link opened, not to the round in play, and it is the server's own sentences
+   * (§110.5) rather than anything this client derived.
+   */
+  const [voidedResult, setVoidedResult] = useState<{
+    readonly battleId: string;
+    readonly message: string;
+    readonly nextStep: string;
+  } | null>(null);
   const setWalletWarPoints = useSession((state) => state.setWalletWarPoints);
   const setWalletWarBalance = useSession((state) => state.setWalletWarBalance);
 
@@ -598,9 +610,17 @@ export function App(): JSX.Element {
       return;
     }
     const controller = new AbortController();
-    void fetchBattleResult(endpoints, route.battleId, controller.signal).then((result) => {
-      if (result !== null) {
-        useSession.getState().rememberResult(result);
+    const battleId = route.battleId;
+    void fetchBattleResult(endpoints, battleId, controller.signal).then((lookup) => {
+      if (lookup.kind === 'RESULT') {
+        useSession.getState().rememberResult(lookup.result);
+        return;
+      }
+      if (lookup.kind === 'VOID') {
+        // §4.4: this battle did finish, with no result. Kept so the page says
+        // so instead of "nothing has finished yet", which is true of the
+        // client and false of the battle.
+        setVoidedResult({ battleId, message: lookup.message, nextStep: lookup.nextStep });
       }
     });
     return () => {
@@ -758,6 +778,15 @@ export function App(): JSX.Element {
                 }
           }
           result={status.live ? finished : PLACEHOLDER_RESULT}
+          // Only for the battle the page is actually showing: a void kept from
+          // an earlier link would explain the wrong battle.
+          voided={
+            voidedResult !== null &&
+            route.kind === 'RESULT' &&
+            route.battleId === voidedResult.battleId
+              ? { message: voidedResult.message, nextStep: voidedResult.nextStep }
+              : null
+          }
         />
       ) : null}
     </WalletSessionProvider>

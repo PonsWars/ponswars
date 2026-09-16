@@ -47,6 +47,7 @@ export function Presentations({
   secret,
   genesis,
   result,
+  voided,
 }: {
   readonly route: PresentationRoute | ResultRoute;
   readonly navigate: (next: Route) => void;
@@ -59,6 +60,14 @@ export function Presentations({
   readonly secret: { readonly view: SecretClaimView; readonly onClaim: () => void } | null;
   readonly genesis: PersonalData<GenesisPageData>;
   readonly result: FinishedBattle | null;
+  /**
+   * The battle this page was opened for, if it voided (§4.4).
+   *
+   * Separate from `result` because it is not one: a void produces no score, no
+   * winner and no award. What it produces is an explanation, and the page owes
+   * the reader that rather than "nothing has finished yet".
+   */
+  readonly voided: { readonly message: string; readonly nextStep: string } | null;
 }): JSX.Element {
   const close = (): void => {
     navigate(WORLD_ROUTE);
@@ -165,7 +174,18 @@ export function Presentations({
           nav={<NavBar current={route} onNavigate={navigate} />}
           onClose={close}
         >
-          {result === null ? (
+          {result === null && voided !== null ? (
+            // §4.4: this battle did finish, and nothing further is coming. The
+            // sentences are the server's own (§110.5, §110.6) — including the
+            // one about the card charge — because a client that wrote its own
+            // would be a second place for that copy to drift.
+            <EmptyState
+              headline="BATTLE VOID"
+              body={`${voided.message} ${voided.nextStep}`}
+              action="WATCH THE WORLD →"
+              onAction={close}
+            />
+          ) : result === null ? (
             // §22: a result exists only after finalization. Before that there is
             // nothing honest to show, and inventing a placeholder scoreline on
             // the one screen that carries real numbers would be the worst place

@@ -1,6 +1,6 @@
 import { currentRoundSchema } from '@ponswars/schemas';
 import { describe, expect, it } from 'vitest';
-import { fetchCurrentRound, toSnapshot } from './round-client.js';
+import { fetchBattleResult, fetchCurrentRound, toSnapshot } from './round-client.js';
 
 /**
  * Mapping the server's round onto the client's.
@@ -216,5 +216,59 @@ describe('fetching a round', () => {
       }),
     );
     expect(result.ok ? null : result.failure.kind).toBe('MALFORMED');
+  });
+});
+
+describe('asking for a battle result', () => {
+  it('tells a battle that voided from one with nothing yet', async () => {
+    // §4.4 never revives a void, so the two cannot share an answer: one means
+    // come back later, and the other means nothing further is coming.
+    const voided = await fetchBattleResult(
+      ENDPOINTS,
+      'b-1',
+      undefined,
+      stubFetch({
+        ok: false,
+        status: 404,
+        json: () =>
+          Promise.resolve({
+            code: 'BATTLE_VOIDED',
+            message:
+              'Battle b-1 voided: the data integrity threshold was not met, so it produced no result.',
+            stateIsSafe: true,
+            nextStep:
+              'No War Points were awarded and nothing was lost. Any deployed card use for this battle has been restored.',
+            correlationId: 'req_test',
+          }),
+      }),
+    );
+
+    expect(voided.kind).toBe('VOID');
+    // The server's own sentences, carried rather than rewritten: §110.5 makes
+    // the envelope say what happened and what it means, and a second copy here
+    // is a second place for it to drift.
+    expect(voided.kind === 'VOID' && voided.nextStep).toContain('has been restored');
+  });
+
+  it('treats every other refusal as nothing to show', async () => {
+    const missing = await fetchBattleResult(
+      ENDPOINTS,
+      'b-1',
+      undefined,
+      stubFetch({
+        ok: false,
+        status: 404,
+        json: () =>
+          Promise.resolve({
+            code: 'RESULT_NOT_FOUND',
+            message: 'No finalized result for battle b-1.',
+            stateIsSafe: true,
+            nextStep: 'A result appears when the battle finalizes, at the end of its round.',
+            correlationId: 'req_test',
+          }),
+      }),
+    );
+
+    expect(missing.kind).toBe('NONE');
   });
 });
