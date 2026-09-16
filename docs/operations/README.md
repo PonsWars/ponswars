@@ -26,7 +26,9 @@ deployment consists of, and what is still open — and
 [Deploying the contracts](contract-deployment.md) — putting the distributor and
 the Secret vault on Robinhood Chain, and granting their roles.
 
-Measuring before launching: [Calibrating the market](market-calibration.md) —
+Measuring before launching: [Load testing the transport](load-testing.md) —
+what spectator load costs, with numbers to argue with — and
+[Calibrating the market](market-calibration.md) —
 recording the mainnet market and replaying it to choose the market's bounds,
 the score's divisors and the confidence bands.
 
