@@ -45,6 +45,7 @@ import { DeckProps, PropField, type Prop } from './DeckProps.js';
 import { InstancedField, preparedGeometry, type Placement } from './InstancedField.js';
 import { Dropship, DROPSHIPS } from './Dropship.js';
 import { IslandMass } from './IslandMass.js';
+import { SectorTerrain } from './SectorTerrain.js';
 import { LightPool } from './LightPool.js';
 import { Planet } from './Planet.js';
 import { islet } from './rock.js';
@@ -628,6 +629,11 @@ function Sector({
         detail={detail}
         top={SECTOR_PLATFORM_TOP}
       />
+
+      {/* What makes this sector somewhere rather than a disc (§38.4). Outside
+          the ground the frontline is read on, so it is a landmark the camera
+          passes over and never terrain an army disappears behind (§36.15). */}
+      <SectorTerrain index={index} detail={detail} />
 
       {detail !== 'SILHOUETTE' ? (
         <>
