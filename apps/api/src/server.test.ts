@@ -49,6 +49,7 @@ import type { FastifyInstance } from 'fastify';
 import { privateKeyToAccount } from 'viem/accounts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryCardHoldings, type CardHolding } from '@ponswars/round-service';
+import { memoryRateLimit, type RateLimitRule } from './rate-limit.js';
 import { PickStore } from './pick-store.js';
 import { buildServer, CHAIN_READ_TIMEOUT_MS, MAX_BODY_BYTES, type ServerDeps } from './server.js';
 
@@ -941,6 +942,122 @@ describe('GET /v1/status', () => {
     // this stays a decision rather than a habit.
     const keys = Object.keys((await app.inject({ method: 'GET', url: '/v1/status' })).json());
     expect(keys.sort()).toEqual(['protocolVersion', 'round', 'status']);
+  });
+});
+
+describe('the sign-in rate limit', () => {
+  /** Two requests, which is one whole sign-in: a challenge and a verify. */
+  const RULE: RateLimitRule = { limit: 2, windowMs: 60_000 };
+
+  /** The same server with an allowance, counted on one process for the test. */
+  function limited(extra: Partial<ServerDeps> = {}): FastifyInstance {
+    return buildServer({
+      ...serverDeps,
+      signInLimit: { rule: RULE, check: memoryRateLimit(() => now) },
+      ...extra,
+    });
+  }
+
+  const ask = (app: FastifyInstance, headers: Record<string, string> = {}) =>
+    app.inject({
+      method: 'POST',
+      url: '/v1/auth/challenge',
+      payload: { wallet: WALLET, chainId: AUTH_POLICY.chainId },
+      headers,
+    });
+
+  it('refuses a caller who keeps asking, and says when they may come back', async () => {
+    const app = limited();
+
+    expect((await ask(app)).statusCode).toBe(201);
+    expect((await ask(app)).statusCode).toBe(201);
+
+    const refused = await ask(app);
+    expect(refused.statusCode).toBe(429);
+    const body = apiErrorSchema.parse(refused.json());
+    expect(body.code).toBe('RATE_LIMITED');
+    // Nothing a player did is at stake: they were not signed in to begin with.
+    expect(body.stateIsSafe).toBe(true);
+    // Half the window buys one token back, and the header says the same thing
+    // in the units every proxy and client library already understands.
+    expect(body.retryAt).toBe(now + 30_000);
+    expect(refused.headers['retry-after']).toBe('30');
+
+    await app.close();
+  });
+
+  it('counts the challenge and the verify against one bucket', async () => {
+    // Asking for challenges and never finishing them costs a caller exactly
+    // what signing in costs, so the cheap half cannot be used to spend the
+    // expensive one.
+    const app = limited();
+    await ask(app);
+
+    const verify = async (): Promise<number> =>
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/auth/verify',
+          payload: {
+            wallet: WALLET,
+            nonce: 'a-nonce-that-was-never-issued',
+            signature: `0x${'11'.repeat(65)}`,
+          },
+        })
+      ).statusCode;
+
+    // The second request spends the last token and is answered on its merits;
+    // the third is refused before any signature is looked at.
+    expect(await verify()).toBe(401);
+    expect(await verify()).toBe(429);
+
+    await app.close();
+  });
+
+  it('counts each caller separately', async () => {
+    const app = limited();
+    await ask(app);
+    await ask(app);
+
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/auth/challenge',
+          payload: { wallet: WALLET, chainId: AUTH_POLICY.chainId },
+          remoteAddress: '198.51.100.7',
+        })
+      ).statusCode,
+    ).toBe(201);
+
+    await app.close();
+  });
+
+  it('believes a forwarded address only from a proxy it was told about', async () => {
+    // Without the list, a caller could put a fresh address in the header on
+    // every request and never be limited at all — which is worse than no limit,
+    // because it looks like one.
+    const open = limited();
+    await ask(open, { 'x-forwarded-for': '203.0.113.1' });
+    await ask(open, { 'x-forwarded-for': '203.0.113.2' });
+    expect((await ask(open, { 'x-forwarded-for': '203.0.113.3' })).statusCode).toBe(429);
+    await open.close();
+
+    // `inject` connects from 127.0.0.1, so a server told to trust it reads the
+    // forwarded address, and the three are three callers.
+    const behindProxy = limited({ trustedProxies: ['127.0.0.1'] });
+    for (const client of ['203.0.113.1', '203.0.113.2', '203.0.113.3']) {
+      expect((await ask(behindProxy, { 'x-forwarded-for': client })).statusCode).toBe(201);
+    }
+    await behindProxy.close();
+  });
+
+  it('limits nothing when no allowance is configured', async () => {
+    // The local stack and a single-process deployment behind an edge that
+    // already limits. Absent has to mean unlimited rather than zero.
+    for (let request = 0; request < RULE.limit * 3; request += 1) {
+      expect((await ask(app)).statusCode).toBe(201);
+    }
   });
 });
 

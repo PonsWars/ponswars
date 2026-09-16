@@ -52,10 +52,12 @@ import {
   roundNotFound,
   signInRefused,
   tickerNotInBattle,
+  tooManyRequests,
   unauthenticated,
   wrongChain,
   type ErrorResponse,
 } from './errors.js';
+import type { RateLimit, RateLimitRule } from './rate-limit.js';
 import type { PlayerRecordSource } from '@ponswars/player-service';
 import {
   GenesisChainError,
@@ -124,6 +126,39 @@ export interface ServerDeps {
    * composition wire half of it.
    */
   readonly auth: AuthService;
+  /**
+   * How often one client address may ask to sign in (§59.3).
+   *
+   * Absent means unlimited, which is a real answer for a deployment that limits
+   * at its edge — and the only answer available to a process that is the whole
+   * deployment, like the local stack.
+   *
+   * Only the sign-in flow is limited. Everything else this API serves is a read
+   * a spectator is entitled to (§5), and the two sign-in routes are the pair
+   * whose cost is CPU: `challenge` writes a row, `verify` recovers a public key
+   * from a signature. They share one bucket, so a sign-in costs two tokens and
+   * asking for challenges without ever finishing one costs the same as
+   * finishing them.
+   */
+  readonly signInLimit?: {
+    readonly rule: RateLimitRule;
+    readonly check: RateLimit;
+  };
+  /**
+   * The proxies in front of this server, by address or CIDR (§59.3).
+   *
+   * Empty or absent means none: the caller is whoever opened the socket. Behind
+   * a load balancer that is the balancer — every request would share one rate
+   * limit bucket, and the first limited caller would lock out the internet — so
+   * a deployment that has proxies lists them, and `X-Forwarded-For` is believed
+   * only when the connection came from one of them. Believing the header from
+   * anyone would let a caller invent an address and never be limited at all,
+   * which is worse than not limiting, because it looks like limiting.
+   *
+   * Addresses rather than a hop count: Fastify 5.12 stopped supporting a count,
+   * because a count cannot check who the immediate peer is.
+   */
+  readonly trustedProxies?: readonly string[];
   /**
    * Browser origins allowed to read this API.
    *
@@ -419,6 +454,13 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     // framework's default is a mebibyte, parsed as JSON before any route looks
     // at it — work any visitor could make every instance do, for nothing.
     bodyLimit: MAX_BODY_BYTES,
+    // `request.ip` is the rate limiter's key, so what counts as the caller has
+    // to be a deployment fact rather than whatever the last hop claims. `false`
+    // is the socket's own address: no header is believed at all.
+    trustProxy:
+      deps.trustedProxies === undefined || deps.trustedProxies.length === 0
+        ? false
+        : [...deps.trustedProxies],
   });
 
   const allowed = new Set(deps.allowedOrigins);
@@ -474,6 +516,30 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
   const send = (reply: FastifyReply, failure: ErrorResponse): FastifyReply =>
     reply.code(failure.status).send(failure.body);
+
+  /**
+   * Charges one sign-in request against the caller's address (§59.3).
+   *
+   * Returns the refusal to send, or `null` to carry on. `Retry-After` goes with
+   * it in seconds, because that is the header every client, proxy and crawler
+   * already understands; `retryAt` in the body is the exact instant, for the one
+   * client written against this API.
+   */
+  const chargeSignIn = async (
+    request: { readonly ip: string },
+    reply: FastifyReply,
+    id: string,
+  ): Promise<ErrorResponse | null> => {
+    if (deps.signInLimit === undefined) {
+      return null;
+    }
+    const waitMs = await deps.signInLimit.check(`signin:${request.ip}`, deps.signInLimit.rule);
+    if (waitMs <= 0) {
+      return null;
+    }
+    void reply.header('retry-after', String(Math.ceil(waitMs / 1_000)));
+    return tooManyRequests(deps.now() + waitMs, id);
+  };
 
   /**
    * `GET /v1/roster` (§47.1, §4.1, §4.2).
@@ -565,6 +631,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
    */
   app.post('/v1/auth/challenge', async (request, reply) => {
     const id = correlationId();
+    const limited = await chargeSignIn(request, reply, id);
+    if (limited !== null) {
+      return send(reply, limited);
+    }
     const parsed = authChallengeRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return send(reply, invalidRequest(parsed.error.issues[0]?.message ?? 'unknown', id));
@@ -600,6 +670,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
    */
   app.post('/v1/auth/verify', async (request, reply) => {
     const id = correlationId();
+    const limited = await chargeSignIn(request, reply, id);
+    if (limited !== null) {
+      return send(reply, limited);
+    }
     const parsed = authVerifyRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return send(reply, invalidRequest(parsed.error.issues[0]?.message ?? 'unknown', id));

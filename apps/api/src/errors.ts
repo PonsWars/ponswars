@@ -219,6 +219,31 @@ export function unauthenticated(correlationId: string): ErrorResponse {
   );
 }
 
+/**
+ * Too many requests from one caller, too quickly (§59.3).
+ *
+ * Only sign-in is limited, and only because verifying a signature is the one
+ * request in this API whose cost is CPU rather than IO. The message says the
+ * limit is per client address rather than per wallet: a player sharing an
+ * office network with somebody who just signed in should be able to tell why
+ * they are waiting, and the answer is not "your wallet".
+ *
+ * `retryAt` is the instant the next request can succeed, not a guess — the
+ * bucket knows exactly when it refills a token, so a client can wait once
+ * instead of retrying into the same refusal.
+ */
+export function tooManyRequests(retryAt: number, correlationId: string): ErrorResponse {
+  return error(
+    429,
+    'RATE_LIMITED',
+    'Too many sign-in requests from this network in a short time.',
+    true,
+    `Nothing was recorded. Try again at ${new Date(retryAt).toISOString()}; watching needs no sign-in.`,
+    correlationId,
+    retryAt,
+  );
+}
+
 /** This server reads no chain, so it cannot deal a Genesis card (§69.6). */
 export function genesisUnavailable(correlationId: string): ErrorResponse {
   return error(
