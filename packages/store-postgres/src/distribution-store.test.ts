@@ -174,6 +174,30 @@ describe('opening a window', () => {
   });
 });
 
+describe('the latest window', () => {
+  it('is nothing before the first one is opened', async () => {
+    expect(await store.latestWindow()).toBeNull();
+  });
+
+  it('is the newest window, with its hours and its state', async () => {
+    // A window that closed an hour ago, then the one that followed it.
+    const start = utcTimestamp(Date.now() - 25 * HOUR);
+    await store.openWindow({ distributionId: 41n, windowStart: start });
+    await store.snapshot({ distributionId: 41n, poolBalance: baseUnits(0n) });
+    await store.openWindow({
+      distributionId: 42n,
+      windowStart: utcTimestamp(start + 24 * HOUR),
+    });
+
+    expect(await store.latestWindow()).toEqual({
+      distributionId: 42n,
+      state: 'OPEN',
+      windowStart: utcTimestamp(start + 24 * HOUR),
+      windowEnd: utcTimestamp(start + 48 * HOUR),
+    });
+  });
+});
+
 describe('taking a snapshot', () => {
   it('refuses a window whose 24 hours are not over', async () => {
     await store.openWindow({ distributionId: 3n, windowStart: utcTimestamp(Date.now()) });

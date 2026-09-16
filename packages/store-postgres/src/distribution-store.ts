@@ -62,6 +62,23 @@ export interface CalculatedDistribution {
   readonly publicationTx: `0x${string}` | null;
 }
 
+/** The states a window moves through (§16.2, §17). */
+export const DISTRIBUTION_STATES = [
+  'OPEN',
+  'SNAPSHOT',
+  'CALCULATED',
+  'PUBLISHED',
+  'CLOSED',
+] as const;
+
+/** A window as a scheduler sees it: which one, what state, and its hours. */
+export interface DistributionWindow {
+  readonly distributionId: bigint;
+  readonly state: (typeof DISTRIBUTION_STATES)[number];
+  readonly windowStart: UtcTimestamp;
+  readonly windowEnd: UtcTimestamp;
+}
+
 /** A wallet's published allocation, with what `RewardsDistributor.claim` takes. */
 export interface PublishedClaim {
   readonly distributionId: bigint;
@@ -416,6 +433,39 @@ export class PostgresDistributionStore {
       );
       return readCalculated(tx, input.distributionId);
     });
+  }
+
+  /**
+   * The most recent window, whatever state it is in (§16.2).
+   *
+   * What a scheduler needs to know: whether one is open, when it ends, and
+   * where the next one starts. Ordered by id, which is the order they are
+   * opened in — a window is opened where the last one ended, so the newest id
+   * is the newest window.
+   */
+  async latestWindow(): Promise<DistributionWindow | null> {
+    const { rows } = await this.#db.query(
+      `SELECT distribution_id, state,
+              (EXTRACT(EPOCH FROM window_start) * 1000)::bigint::text AS window_start,
+              (EXTRACT(EPOCH FROM window_end) * 1000)::bigint::text AS window_end
+         FROM distribution_windows
+        ORDER BY distribution_id::numeric DESC
+        LIMIT 1`,
+    );
+    const row = rows[0];
+    if (row === undefined) {
+      return null;
+    }
+    const state = String(row['state']);
+    if (!(DISTRIBUTION_STATES as readonly string[]).includes(state)) {
+      throw new TypeError(`Stored distribution state ${state} is not one`);
+    }
+    return {
+      distributionId: BigInt(String(row['distribution_id'])),
+      state: state as DistributionWindow['state'],
+      windowStart: utcTimestamp(Number(String(row['window_start']))),
+      windowEnd: utcTimestamp(Number(String(row['window_end']))),
+    };
   }
 
   /** A wallet's allocations in published windows, with their proofs (§17). */

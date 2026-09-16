@@ -68,6 +68,13 @@ the role and refuses to start if it does not; a Secret is then reserved on chain
 before it is recorded, and a reservation that fails is retried on the next read.
 The banner says which. The key needs gas ETH for `reserve` transactions.
 
+**The rewards windows need their job running.** §16.2 opens a 24-hour window
+every 24 hours forever. `rewards-worker.js` in the server image does the
+opening and the snapshot; calculating and publishing stay operator commands
+with a verification in front of each (see
+[Rewards distribution](rewards-distribution.md)). Without the job running,
+nothing opens a window and no rewards accrue to one.
+
 **The last tiebreak step (§12.7).** Only a battle
 level through every market component reaches it, and for that battle the server
 waits for the first Robinhood Chain block at or after the cutoff to be

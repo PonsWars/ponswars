@@ -19,6 +19,31 @@ Each step is a point of no return in a different way:
 - **CLOSED** ends claiming against that window. Unclaimed rewards are never
   swept (`RewardsDistributor` has a test named for it).
 
+## Running the windows on time
+
+The two steps with no judgement in them — opening each window where the last
+one ended and snapshotting it at its close — are a job that runs continuously:
+
+```bash
+node apps/server/dist/rewards-worker.js --snapshots /var/lib/ponswars/snapshots
+```
+
+It reads `DATABASE_URL`, `RPC_URL`, `CHAIN_ID`, `REWARDS_DISTRIBUTOR_ADDRESS`
+and `REWARDS_MINIMUM_CLAIM` (base units, §16.7 — it records the number in every
+snapshot and never invents one). The pool is the distributor's uncommitted
+balance, read at the snapshot.
+
+**It stops at the snapshot file, deliberately.** Calculating and publishing
+each have a check in front of them below, and a scheduler that ran ahead would
+automate past the two steps that exist to be read by somebody. §17 makes a
+published root immutable.
+
+A worker that was down for a day opens the window it owes, starting where the
+last one ended: windows stay contiguous (§16.2), so the late one is a late
+window rather than a gap nobody could earn points in. The commands below are
+still the way to run a window by hand, and the two ways do not conflict — the
+job reads the state that is there.
+
 ## Opening a window
 
 A window opens at an instant the operator chooses and lasts exactly 24 hours
