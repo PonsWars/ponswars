@@ -103,7 +103,7 @@ market and replays it under candidate values.
 | Alert thresholds                                   | `OPEN`                                                             |
 | Asset and log retention durations                  | `OPEN`                                                             |
 | Launch concurrency target                          | `OPEN`                                                             |
-| WebSocket connection and rate limits               | `OPEN`                                                             |
+| WebSocket connection and rate limits               | `OPEN` — the API's sign-in limit is now configuration; see §4      |
 
 ## 4. Wallet authentication (§45.2, §102)
 
@@ -112,11 +112,32 @@ figure for either. Both are therefore deployment decisions, and both are real
 ones: the first bounds how long an unsigned challenge is worth stealing, and the
 second is how long a stolen session works.
 
-| Parameter               | Status | Note                                                                                     |
-| ----------------------- | ------ | ---------------------------------------------------------------------------------------- |
-| `AUTH_CHALLENGE_TTL_MS` | `OPEN` | Long enough for a hardware wallet, short enough that a stolen challenge is worth little. |
-| `AUTH_SESSION_TTL_MS`   | `OPEN` | How long a bearer session lasts. Rotation (§45.2) is what keeps a long visit signed in.  |
-| `AUTH_ORIGIN`           | `OPEN` | The client's public origin. A signature is bound to it and must not work elsewhere.      |
+| Parameter                   | Status | Note                                                                                      |
+| --------------------------- | ------ | ----------------------------------------------------------------------------------------- |
+| `AUTH_CHALLENGE_TTL_MS`     | `OPEN` | Long enough for a hardware wallet, short enough that a stolen challenge is worth little.  |
+| `AUTH_SESSION_TTL_MS`       | `OPEN` | How long a bearer session lasts. Rotation (§45.2) is what keeps a long visit signed in.   |
+| `AUTH_ORIGIN`               | `OPEN` | The client's public origin. A signature is bound to it and must not work elsewhere.       |
+| `AUTH_RATE_LIMIT_REQUESTS`  | `OPEN` | Sign-in requests one client address may make per window. `0` means unlimited.             |
+| `AUTH_RATE_LIMIT_WINDOW_MS` | `OPEN` | How long refilling the whole allowance takes.                                             |
+| `API_TRUSTED_PROXIES`       | `OPEN` | The proxies whose `X-Forwarded-For` is believed. Empty means the API is reached directly. |
+
+The rate limit exists because sign-in is the only request in the API whose cost
+is CPU rather than IO: verifying an EIP-4361 signature recovers a public key,
+measured at 281 a second on one core (`docs/operations/load-testing.md`). It is
+a token bucket, so `AUTH_RATE_LIMIT_REQUESTS` is both the sustained allowance
+per window and the largest burst a caller who has been quiet may make at once,
+and one sign-in spends two of it — the challenge and the verify share a bucket.
+
+Choosing it needs a number nobody has yet: how many people open the app at a
+round boundary (§3.1), since every one of them signs in inside the same minute.
+Until then the honest setting is one generous enough that no player meets it —
+the point is to stop one machine spending every core, not to ration players.
+
+`API_TRUSTED_PROXIES` is not a tuning decision but a fact about the deployment,
+and it is listed here because getting it wrong breaks the limit in both
+directions: empty behind a load balancer puts every caller in one bucket, and
+trusting a forwarded address from anyone lets a caller invent a new one per
+request.
 
 ## 5. Visual implementation tuning (§59.4)
 

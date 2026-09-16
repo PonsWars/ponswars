@@ -86,6 +86,14 @@ Two things still follow for capacity: count sign-ins per round open rather than
 players, and put the API behind more than one process before that number gets
 into the thousands.
 
+It is also why a deployment limits sign-in and nothing else
+(`AUTH_RATE_LIMIT_REQUESTS`, `docs/operations/deployment.md`). **The local stack
+runs no limiter, deliberately** — the whole point here is to fire a thousand
+sign-ins from one address and read what they cost, which a limiter would turn
+into a measurement of the limiter. A run against a deployment measures the limit
+first, so set it above the load you are trying to measure, or read the `429`s as
+the limit working rather than the server failing.
+
 **On PostgreSQL rather than memory** (the compose database on the same
 machine), with two hundred spectators watching throughout:
 

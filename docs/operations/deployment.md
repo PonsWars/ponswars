@@ -280,16 +280,32 @@ most 16 KiB, a WebSocket frame at most 4 KiB, a socket may follow at most 32
 channels and have at most 64 frames waiting, and a card can only be armed by a
 wallet that holds one.
 
-What it cannot bound is **how many requests one client sends**. That needs the
-client's real address, and behind a load balancer or CDN the address this
-process sees is the proxy's — so the limit belongs to whatever sits in front of
-it, which is the hosting decision still open. Until one is in place, the edge
-must rate-limit at least:
+It also bounds **how often one client may sign in**, which is the request that
+costs CPU rather than IO: verifying an EIP-4361 signature recovers a public key,
+measured at 281 a second on one core (`docs/operations/load-testing.md`).
+`AUTH_RATE_LIMIT_REQUESTS` per `AUTH_RATE_LIMIT_WINDOW_MS` is a token bucket
+per client address, kept in Redis so every instance counts against the same one,
+and spent by `POST /v1/auth/challenge` and `POST /v1/auth/verify` together — so
+asking for challenges and never finishing them costs what signing in costs, and
+the challenge table cannot be grown faster than the allowance. A caller over it
+gets `429 RATE_LIMITED`, a `Retry-After` in seconds and a `retryAt` naming the
+instant a token comes back. `AUTH_RATE_LIMIT_REQUESTS=0` turns it off, for a
+deployment that limits at its edge instead.
 
-- `POST /v1/auth/challenge` — every request stores a challenge row until it
-  expires and the hourly prune removes it, so an unlimited client grows the
-  table as fast as it can send;
-- WebSocket upgrades — each connection holds a socket and its subscriptions.
+**Set `API_TRUSTED_PROXIES` or the limit counts the wrong thing.** The bucket is
+keyed by the client's address, and behind a load balancer or CDN the address
+this process sees is the proxy's: with the list empty, every caller in the world
+shares one bucket and the first one over it locks out everybody. List the
+proxies — addresses, CIDR blocks, or the shorthands `loopback`, `linklocal`,
+`uniquelocal` — and `X-Forwarded-For` is believed from those and nowhere else. A
+deployment reached directly leaves it empty, which is also the right answer, and
+the wrong answer in the other direction is trusting the header from anyone: a
+caller can then invent an address per request and is never limited at all.
+
+What the service still cannot bound is everything before it has a handler:
+connection floods, WebSocket upgrades (each holds a socket and its
+subscriptions), and traffic volume as such. Those belong to whatever sits in
+front of it, which is the hosting decision still open (§102).
 
 ## Verifying a deployment
 
