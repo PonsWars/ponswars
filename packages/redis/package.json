@@ -1,0 +1,28 @@
+{
+  "name": "@ponswars/redis",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Realtime events across instances: one publisher, every gateway fans out (§21.3, §48).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ponswars/realtime": "workspace:*",
+    "@ponswars/round-service": "workspace:*",
+    "@ponswars/shared-types": "workspace:*",
+    "redis": "^6.2.1"
+  }
+}

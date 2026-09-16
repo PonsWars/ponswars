@@ -4,7 +4,9 @@ import {
   disconnect,
   EMPTY_HUB,
   identify,
+  noteSequence,
   publish,
+  recipientsOf,
   subscribe,
   unsubscribe,
   type Channel,
@@ -163,6 +165,21 @@ export class Gateway implements PublisherPort {
    * fire-and-forget, and making the round loop wait on the slowest subscriber
    * would let one stalled connection delay a battle tick for everyone.
    */
+  /**
+   * Hands an envelope another publisher sequenced to this process's listeners.
+   *
+   * Used when events cross instances (§21.3): the publishing process assigned
+   * the sequence, and re-stamping it here would give two clients two different
+   * numbers for one event.
+   */
+  deliver(envelope: Envelope<unknown>): void {
+    this.hub = noteSequence(this.hub, envelope.channel, envelope.sequence);
+    const frame = JSON.stringify(envelope);
+    for (const connectionId of recipientsOf(this.hub, envelope.channel)) {
+      this.send(connectionId, frame);
+    }
+  }
+
   publish(event: string, channel: Channel, at: UtcTimestamp, payload: unknown): Promise<void> {
     const delivery = publish(this.hub, event, channel, at, payload);
     this.hub = delivery.state;

@@ -25,6 +25,7 @@
     "@ponswars/genesis-service": "workspace:*",
     "@ponswars/market-data": "workspace:*",
     "@ponswars/postgres": "workspace:*",
+    "@ponswars/redis": "workspace:*",
     "@ponswars/round-service": "workspace:*",
     "@ponswars/shared-types": "workspace:*",
     "@ponswars/store-postgres": "workspace:*",

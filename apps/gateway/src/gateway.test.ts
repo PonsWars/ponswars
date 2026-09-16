@@ -1,4 +1,10 @@
-import { battleChannel, walletChannel, WORLD_CHANNEL, type Envelope } from '@ponswars/realtime';
+import {
+  battleChannel,
+  PROTOCOL_VERSION,
+  walletChannel,
+  WORLD_CHANNEL,
+  type Envelope,
+} from '@ponswars/realtime';
 import { utcTimestamp, walletAddress } from '@ponswars/shared-types';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Gateway, MAX_SUBSCRIPTIONS } from './gateway.js';
@@ -241,5 +247,69 @@ describe('limits', () => {
     gateway.receive('c1', frame({ type: 'SUBSCRIBE', channel: battleChannel('replacement') }));
 
     expect(lastTo('c1')).toMatchObject({ type: 'SUBSCRIBED' });
+  });
+});
+
+describe('an envelope from another instance', () => {
+  it('reaches this instance’s subscribers with the sequence it came with', () => {
+    // §21.3: the instance that published it assigned the sequence. Re-stamping
+    // it here would give two clients two numbers for one event.
+    gateway.open('c1', null);
+    gateway.receive('c1', frame({ type: 'SUBSCRIBE', channel: WORLD_CHANNEL }));
+    sent = [];
+
+    gateway.deliver({
+      event: 'ROUND_OPENED',
+      version: PROTOCOL_VERSION,
+      sequence: 41,
+      emittedAt: AT,
+      channel: WORLD_CHANNEL,
+      payload: { roundId: 'round-1' },
+    });
+
+    expect(received('c1')).toEqual([
+      {
+        event: 'ROUND_OPENED',
+        version: PROTOCOL_VERSION,
+        sequence: 41,
+        emittedAt: AT,
+        channel: WORLD_CHANNEL,
+        payload: { roundId: 'round-1' },
+      },
+    ]);
+  });
+
+  it('leaves nothing for a channel nobody here follows', () => {
+    gateway.open('c1', null);
+    gateway.receive('c1', frame({ type: 'SUBSCRIBE', channel: WORLD_CHANNEL }));
+    sent = [];
+
+    gateway.deliver({
+      event: 'BATTLE_STATE_UPDATE',
+      version: PROTOCOL_VERSION,
+      sequence: 3,
+      emittedAt: AT,
+      channel: battleChannel('b-9'),
+      payload: {},
+    });
+
+    expect(sent).toEqual([]);
+  });
+
+  it('tells a later subscriber where the channel has got to', () => {
+    // §24: the reply names the sequence the client has reached, so a gap it
+    // detects afterwards is a real one.
+    gateway.deliver({
+      event: 'ROUND_OPENED',
+      version: PROTOCOL_VERSION,
+      sequence: 12,
+      emittedAt: AT,
+      channel: WORLD_CHANNEL,
+      payload: {},
+    });
+    gateway.open('late', null);
+    gateway.receive('late', frame({ type: 'SUBSCRIBE', channel: WORLD_CHANNEL }));
+
+    expect(lastTo('late')).toMatchObject({ type: 'SUBSCRIBED', sequence: 12 });
   });
 });

@@ -37,6 +37,7 @@ COPY packages/player-service/package.json packages/player-service/
 COPY packages/pons-indexer/package.json packages/pons-indexer/
 COPY packages/postgres/package.json packages/postgres/
 COPY packages/realtime/package.json packages/realtime/
+COPY packages/redis/package.json packages/redis/
 COPY packages/rewards-math/package.json packages/rewards-math/
 COPY packages/round-service/package.json packages/round-service/
 COPY packages/schemas/package.json packages/schemas/

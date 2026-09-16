@@ -23,6 +23,7 @@ import {
   type WalletAddress,
 } from '@ponswars/shared-types';
 import { SyntheticMarket } from '@ponswars/market-data';
+import { redisEventBus, takeLease, type Lease } from '@ponswars/redis';
 import { connectPostgres } from '@ponswars/postgres';
 import {
   PostgresAuthStore,
@@ -53,6 +54,15 @@ import {
 
 const PORT_API = Number(process.env['PORT_API'] ?? 4000);
 const PORT_WS = Number(process.env['PORT_WS'] ?? 4001);
+
+/**
+ * How long the rounds lease lives without renewal.
+ *
+ * Long enough that an ordinary pause does not hand the rounds to somebody
+ * else, short enough that a crashed leader is replaced inside a round: ten
+ * seconds against a ten-minute round (§3.1).
+ */
+const LEASE_TTL_MS = 10_000;
 
 /**
  * Scoring tick interval (§12.5, §23.1).
@@ -163,6 +173,10 @@ const AUTH_POLICY: AuthPolicy = {
 };
 
 async function main(): Promise<void> {
+  // Set once the rounds lease is taken, if there is one to take. Declared up
+  // here because what this instance serves depends on whether it is driving.
+  let lease: Lease | null = null;
+
   // The store is the one thing this stack will take from a deployment: set
   // DATABASE_URL and it runs the same PostgreSQL adapters the server runs,
   // against a database `pnpm run db:migrate` has migrated. That is the claim
@@ -199,6 +213,24 @@ async function main(): Promise<void> {
 
   const sockets = startSocketServer({ port: PORT_WS, now, walletOf });
 
+  // Events across instances, when there is more than one (§21.3). With
+  // REDIS_URL the publisher is the bus: every instance's gateway delivers what
+  // any instance published, with the sequence Redis assigned. Without it, this
+  // process publishes to its own connections and there is nobody else to tell.
+  const redisUrl = process.env['REDIS_URL'];
+  const bus =
+    redisUrl === undefined || redisUrl === ''
+      ? null
+      : await redisEventBus({
+          url: redisUrl,
+          onProblem: (problem) => {
+            process.stdout.write(`${problem}\n`);
+          },
+        });
+  await bus?.subscribe((envelope) => {
+    sockets.gateway.deliver(envelope);
+  });
+
   // Before anything else binds. A failed WebSocket bind surfaces a tick later
   // than the call that caused it, so without this the API port was already
   // taken by the time the process died — leaving a half-started stack and a
@@ -212,12 +244,36 @@ async function main(): Promise<void> {
     // what makes the tiebreak unpredictable in advance — a constant here would
     // make it predictable, and that is fine for a demo and fatal in production.
     chain: { finalizationBlockHash: () => Promise.resolve(`0x${'e1'.repeat(32)}`) },
-    publisher: sockets.gateway,
+    publisher: bus ?? sockets.gateway,
     store,
   };
 
   // The driver holds the round; this is how anything serving it reads it.
   let round: RoundEngineState | null = null;
+
+  /**
+   * An instance that is not driving still has to serve the round.
+   *
+   * §5 makes every instance a place to watch from, and the round is the
+   * driver's — which on another instance means the store's. Read once a second:
+   * the checkpoint is written at every transition (§25), so a follower is at
+   * most a second behind on the phase, and not behind at all on the ticks,
+   * which reach it through the bus.
+   */
+  const followStore = setInterval(() => {
+    if (lease?.held === true) {
+      return;
+    }
+    void store
+      .loadLatest()
+      .then((latest) => {
+        if (latest !== null) {
+          round = latest;
+        }
+      })
+      .catch(() => undefined);
+  }, 1_000);
+  followStore.unref();
 
   const api = buildServer({
     // The Vite dev server, on both spellings of localhost — a browser treats
@@ -274,11 +330,41 @@ async function main(): Promise<void> {
     ].join('\n'),
   );
 
+  // One instance drives the rounds (§25). With Redis that is whoever holds the
+  // lease; the others serve the API and fan out what the leader publishes,
+  // which is what makes a second instance useful rather than dangerous.
+  const stopping = new AbortController();
+  lease =
+    bus === null
+      ? null
+      : await takeLease({
+          url: redisUrl ?? '',
+          name: 'rounds',
+          holder: `local-${String(process.pid)}`,
+          ttlMs: LEASE_TTL_MS,
+          signal: stopping.signal,
+          onProblem: (problem) => {
+            process.stdout.write(`${problem}\n`);
+          },
+        });
+  if (bus !== null) {
+    process.stdout.write(
+      lease === null ? 'not driving rounds\n' : 'holding the rounds lease; driving\n',
+    );
+    // A lease lost mid-round stops this driver at once: after the expiry
+    // another instance is entitled to drive, and two drivers is the thing the
+    // lease exists to prevent.
+    void lease?.lost.then(() => {
+      stopping.abort();
+    });
+  }
+
   // The loop itself lives in `@ponswars/round-service`, because the deployable
   // server runs the same one. What is local about this stack is which ports it
   // hands over, not how a round is driven.
   try {
     await runRounds({
+      signal: stopping.signal,
       ports,
       config: CONFIG,
       calibration: CONFIDENCE_CALIBRATION,
@@ -297,8 +383,11 @@ async function main(): Promise<void> {
     // both hold the event loop open — so without this a stack whose round
     // loop had died stayed up, still answering with the last round it saw.
     // A process that exits is a process someone notices.
+    clearInterval(followStore);
     await api.close();
     await sockets.close();
+    await lease?.release();
+    await bus?.close();
     await recovery?.close();
     await database?.close();
   }

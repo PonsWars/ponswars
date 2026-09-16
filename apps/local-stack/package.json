@@ -21,6 +21,7 @@
     "@ponswars/postgres": "workspace:*",
     "@ponswars/store-postgres": "workspace:*",
     "@ponswars/realtime": "workspace:*",
+    "@ponswars/redis": "workspace:*",
     "@ponswars/round-service": "workspace:*",
     "@ponswars/shared-types": "workspace:*"
   }

@@ -200,6 +200,32 @@ export function publish<TPayload>(
   };
 }
 
+/**
+ * Who is listening to a channel, stamping nothing.
+ *
+ * For an envelope that was sequenced elsewhere — another instance published it
+ * and this one only has to hand it to its own connections (§21.3).
+ */
+export function recipientsOf(state: HubState, channel: Channel): readonly string[] {
+  return Object.entries(state.connections)
+    .filter(([, connection]) => connection.channels.includes(channel))
+    .map(([connectionId]) => connectionId);
+}
+
+/**
+ * Records a sequence assigned by another publisher.
+ *
+ * So that a `SUBSCRIBED` reply from this process names the sequence a client
+ * has actually reached (§24). Never moves a channel backwards: an envelope
+ * that arrives out of order must not make the next one look like a gap.
+ */
+export function noteSequence(state: HubState, channel: Channel, sequence: number): HubState {
+  const next = state.sequencer[channel] ?? 0;
+  return sequence + 1 > next
+    ? { ...state, sequencer: { ...state.sequencer, [channel]: sequence + 1 } }
+    : state;
+}
+
 /** The sequence a channel is currently at, for a snapshot to name (§24). */
 export function currentSequence(state: HubState, channel: Channel): number {
   const next = state.sequencer[channel] ?? 0;

@@ -40,6 +40,7 @@ import {
 } from '@ponswars/store-postgres';
 import { loadEngineCalibration } from './calibration.js';
 import { followClaims } from './claims.js';
+import { redisEventBus, takeLease, type Lease } from '@ponswars/redis';
 import { startMarket, type RunningMarket } from './market.js';
 import { connectPostgres } from '@ponswars/postgres';
 
@@ -77,6 +78,15 @@ import { connectPostgres } from '@ponswars/postgres';
  */
 
 const now = (): UtcTimestamp => utcTimestamp(Date.now());
+
+/**
+ * How long the rounds lease lives without renewal (§25).
+ *
+ * Long enough that an ordinary pause does not hand the rounds to another
+ * instance, short enough that a crashed leader is replaced inside the round it
+ * was driving: ten seconds against ten minutes (§3.1).
+ */
+const ROUNDS_LEASE_TTL_MS = 10_000;
 
 /**
  * How often a finalization waiting on its tiebreak block asks the chain again.
@@ -223,6 +233,19 @@ async function main(): Promise<void> {
   };
 
   const sockets = startSocketServer({ port: config.GATEWAY_PORT, now, walletOf });
+
+  // Events reach every instance, not only the one that published them (§21.3).
+  // The bus assigns the sequence, so two clients on two instances see one
+  // number for one event (§70.1); each gateway delivers to its own connections.
+  const bus = await redisEventBus({
+    url: config.REDIS_URL,
+    onProblem: (problem) => {
+      say(`${problem}\n`);
+    },
+  });
+  await bus.subscribe((envelope) => {
+    sockets.gateway.deliver(envelope);
+  });
   // Before anything else binds. A failed WebSocket bind surfaces a tick later
   // than the call that caused it, so without this the API port is already taken
   // by the time the process dies.
@@ -262,11 +285,35 @@ async function main(): Promise<void> {
         say(`tiebreak block read failed, retrying: ${String(error)}\n`);
       },
     }),
-    publisher: sockets.gateway,
+    publisher: bus,
     store,
   };
 
   let round: RoundEngineState | null = null;
+  /** Set once this instance is the one driving rounds; `null` while it is not. */
+  let lease: Lease | null = null;
+
+  /**
+   * An instance that is not driving still serves the round (§5).
+   *
+   * From the store, which the driver checkpoints at every transition (§25), so
+   * a follower is at most a second behind on the phase. The ticks do not wait
+   * for this: they arrive on the bus as they are published.
+   */
+  const followStore = setInterval(() => {
+    if (lease?.held === true) {
+      return;
+    }
+    void store
+      .loadLatest()
+      .then((latest) => {
+        if (latest !== null) {
+          round = latest;
+        }
+      })
+      .catch(() => undefined);
+  }, 1_000);
+  followStore.unref();
 
   // Started once the API is listening; `null` through the backfill.
   let market: RunningMarket | null = null;
@@ -420,7 +467,29 @@ async function main(): Promise<void> {
         throw error;
       }
     }
+    // Exactly one instance drives (§25). The rest serve reads and fan out what
+    // the leader publishes; this waits here until the lease is free, which on a
+    // single-instance deployment is immediately.
     if (market !== null) {
+      lease = await takeLease({
+        url: config.REDIS_URL,
+        name: 'rounds',
+        holder: `${config.NODE_ENV}-${String(process.pid)}-${String(Date.now())}`,
+        ttlMs: ROUNDS_LEASE_TTL_MS,
+        signal: stopping.signal,
+        onProblem: (problem) => {
+          say(`${problem}\n`);
+        },
+      });
+      // A lease lost mid-round stops this driver at once: past the expiry
+      // another instance is entitled to drive, and two drivers racing into one
+      // finalization is what the lease exists to prevent.
+      void lease?.lost.then(() => {
+        stopping.abort();
+      });
+    }
+    if (market !== null && lease !== null) {
+      say('holding the rounds lease; driving\n');
       await runRounds({
         ports: { ...ports, marketData: market.port },
         config: CONFIG,
@@ -443,6 +512,9 @@ async function main(): Promise<void> {
     }
   } finally {
     clearInterval(housekeeping);
+    clearInterval(followStore);
+    await lease?.release();
+    await bus.close();
     // `finally`, not the happy path. The driver can fail rather than stop — a
     // store write that fails, or a stop signal during a tiebreak wait — and without
     // this the process stayed up afterwards: the API kept the event loop

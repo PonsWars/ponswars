@@ -68,6 +68,33 @@ the role and refuses to start if it does not; a Secret is then reserved on chain
 before it is recorded, and a reservation that fails is retried on the next read.
 The banner says which. The key needs gas ETH for `reserve` transactions.
 
+**More than one instance is allowed, and Redis is what makes it safe.** §21.3
+gives Redis two jobs here and the server uses both:
+
+- **The rounds lease.** Exactly one instance drives (§25). Each takes
+  `ponswars:leader:rounds` with a ten-second expiry and renews it while it
+  drives; the others wait, serving the API and the sockets. An instance that
+  stops renewing — crashed, paused, partitioned — loses it, and another takes
+  it within about the expiry. Losing it stops that driver at once: past the
+  expiry another instance is entitled to drive, and two drivers racing into one
+  finalization is the thing the lease exists to prevent. A failover resumes the
+  round from its checkpoint (§25) rather than restarting it.
+- **The event bus.** Every event is published to `ponswars:events` with its
+  sequence taken from `INCR ponswars:seq:<channel>`, and every instance
+  delivers it to its own connections. The sequence is Redis' rather than a
+  process's because §70.1 promises it is monotonic per channel and §24 teaches
+  clients to re-fetch on a gap: a counter per process would restart wherever
+  the driver moved, and every client elsewhere would read that as a gap.
+
+An instance that is not driving serves the round from the store, re-read once a
+second, so it is at most a second behind on the phase; the ticks reach it on the
+bus as they are published. Measured locally, a client on a non-driving instance
+saw updates at 20 ms p50, and a killed leader was replaced — round resumed from
+its checkpoint — inside twenty-five seconds.
+
+Redis is not optional for the server: `REDIS_URL` is required, and a deployment
+without it does not start. A single instance uses the same paths as five.
+
 **The rewards windows need their job running.** §16.2 opens a 24-hour window
 every 24 hours forever. `rewards-worker.js` in the server image does the
 opening and the snapshot; calculating and publishing stay operator commands

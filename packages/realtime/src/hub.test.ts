@@ -8,7 +8,9 @@ import {
   disconnect,
   EMPTY_HUB,
   identify,
+  noteSequence,
   publish,
+  recipientsOf,
   subscribe,
   subscriberCount,
   unsubscribe,
@@ -270,5 +272,38 @@ describe('a reconnect', () => {
     const resubscribed = subscribe(hub, 'new', walletChannel(ALICE));
     expect(resubscribed.outcome.kind).toBe('SUBSCRIBED');
     expect(currentSequence(resubscribed.state, walletChannel(ALICE))).toBe(1);
+  });
+});
+
+describe('a sequence assigned elsewhere', () => {
+  it('names who is listening without stamping anything', () => {
+    // An envelope another instance published carries its own sequence (§21.3);
+    // this process only has to find its own listeners for it.
+    let hub = hubWith({ id: 'c1', wallet: null }, { id: 'c2', wallet: null });
+    hub = subscribe(hub, 'c1', battleChannel('b-1')).state;
+
+    expect(recipientsOf(hub, battleChannel('b-1'))).toEqual(['c1']);
+    expect(recipientsOf(hub, WORLD_CHANNEL)).toEqual([]);
+    // Nothing was consumed: the next local publish still starts at zero.
+    expect(publish(hub, 'x', battleChannel('b-1'), AT, {}).envelope.sequence).toBe(0);
+  });
+
+  it('moves a channel forward so this process agrees about where it is', () => {
+    // §24: a SUBSCRIBED reply names the sequence a client has reached. An
+    // instance that had only delivered other people's events must still answer
+    // with the number those events carried.
+    let hub = EMPTY_HUB;
+    hub = noteSequence(hub, WORLD_CHANNEL, 7);
+
+    expect(currentSequence(hub, WORLD_CHANNEL)).toBe(7);
+  });
+
+  it('never moves a channel backwards', () => {
+    // Pub/sub can deliver out of order. Rewinding here would make the next
+    // event look like a gap to every client on this instance.
+    let hub = noteSequence(EMPTY_HUB, WORLD_CHANNEL, 9);
+    hub = noteSequence(hub, WORLD_CHANNEL, 4);
+
+    expect(currentSequence(hub, WORLD_CHANNEL)).toBe(9);
   });
 });
