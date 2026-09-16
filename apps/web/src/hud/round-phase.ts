@@ -1,4 +1,9 @@
-import type { CanonicalClock, RoundState, UtcTimestamp } from '@ponswars/shared-types';
+import type {
+  CanonicalClock,
+  RoundState,
+  UtcTimestamp,
+  VoidReasonCategory,
+} from '@ponswars/shared-types';
 
 /**
  * What the HUD says about the round, derived from the round state machine (§22).
@@ -92,6 +97,33 @@ export function roundView(state: RoundState, clock: CanonicalClock): RoundView {
         voided: true,
       };
   }
+}
+
+/**
+ * What to tell a player whose own battle voided (§4.4, §110.6, §42.15).
+ *
+ * Two lines at most, and each of them a fact. §42.15 wants clarity before
+ * theme, and §110.5 wants an error to say whether anything was lost — which
+ * here is the whole point: a void costs a round and nothing else, and the
+ * player who spent a Genesis charge on it needs to know the charge is back.
+ *
+ * The refund sentence is shown only when the server said the charge was
+ * restored. §110.6 fixes the words; whether they are true is the server's
+ * answer, and printing them regardless would make them a slogan.
+ */
+export function voidNotice(notice: {
+  readonly reason: VoidReasonCategory;
+  readonly cardUseRestored: boolean;
+}): readonly string[] {
+  const why =
+    notice.reason === 'DATA_INTEGRITY'
+      ? 'Data integrity threshold was not met.'
+      : 'The market halted during the battle.';
+  return [
+    `BATTLE VOID — ${why}`,
+    ...(notice.cardUseRestored ? ['Your deployed card use has been restored.'] : []),
+    'No War Points were awarded, and nothing was lost.',
+  ];
 }
 
 /**

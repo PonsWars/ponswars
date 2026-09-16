@@ -11,6 +11,7 @@ import {
   formatCountdown,
   formatOpensAt,
   roundView,
+  voidNotice,
 } from './round-phase.js';
 
 const CLOCK: CanonicalClock = {
@@ -122,5 +123,36 @@ describe('connectionBanner', () => {
         expect(banner).not.toBeNull();
       }
     }
+  });
+});
+
+describe('what a player is told when their battle voided', () => {
+  it('says why, that the charge came back, and that nothing was lost', () => {
+    // §110.6 fixes the middle sentence and §110.5 asks every error to say
+    // whether anything is at stake. A void costs a round and nothing else, and
+    // the player who spent a Genesis charge on it needs that said out loud.
+    expect(voidNotice({ reason: 'DATA_INTEGRITY', cardUseRestored: true })).toEqual([
+      'BATTLE VOID — Data integrity threshold was not met.',
+      'Your deployed card use has been restored.',
+      'No War Points were awarded, and nothing was lost.',
+    ]);
+  });
+
+  it('does not promise a refund the server did not make', () => {
+    // The flag is the server's answer. A player who deployed no card has
+    // nothing to get back, and printing the sentence anyway would turn §110.6
+    // from a fact into a slogan.
+    expect(voidNotice({ reason: 'DATA_INTEGRITY', cardUseRestored: false })).not.toContain(
+      'Your deployed card use has been restored.',
+    );
+  });
+
+  it('tells a halted market from a broken feed', () => {
+    // §23.8: a halt is not ordinary flat price action, and a player told
+    // "data integrity" about a market that stopped trading would be told
+    // something untrue about their own battle.
+    expect(voidNotice({ reason: 'MARKET_HALT', cardUseRestored: false })[0]).toContain(
+      'market halted',
+    );
   });
 });

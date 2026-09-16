@@ -7,6 +7,7 @@ import type {
   MomentumState,
   PublicFeedHealth,
   RoundState,
+  VoidReasonCategory,
 } from '@ponswars/shared-types';
 import type { CardHolding } from '../hud/pick-flow.js';
 import type { ConnectionState } from '../hud/round-phase.js';
@@ -49,6 +50,19 @@ import {
   WORLD_BOUNDARY_RADIUS,
 } from '../world/layout.js';
 import { NAVIGATION } from '../world/navigation-config.js';
+
+/**
+ * What a `BATTLE_VOID` said about one battle (§48.3, §110.6).
+ *
+ * `cardUseRestored` is the server's answer, not an inference: it is true only
+ * where a charge was actually put back, so the sentence §110.6 fixes is only
+ * ever shown to a player it is true for.
+ */
+export interface BattleVoidNotice {
+  readonly battleId: string;
+  readonly reason: VoidReasonCategory;
+  readonly cardUseRestored: boolean;
+}
 
 /**
  * Transient client session state (§80.2).
@@ -255,6 +269,15 @@ interface SessionState {
    */
   readonly lastResults: Readonly<Record<string, FinalizedBattleResult>>;
   /**
+   * The battles of that round that voided, and what each one is owed (§4.4).
+   *
+   * A void produces no result, so it cannot arrive through `lastResults` — and
+   * an id in a list is not something to show a player. `BATTLE_VOID` carries the
+   * reason and §110.6's refund confirmation, and this is where they wait until
+   * whoever is looking at that battle can be told.
+   */
+  readonly lastVoids: Readonly<Record<string, BattleVoidNotice>>;
+  /**
    * Server time minus local time, in milliseconds (§23.5).
    *
    * Every countdown is projected through this. The device clock is never
@@ -296,7 +319,16 @@ interface SessionState {
   setPickGateway: (gateway: PickGateway | null) => void;
   setPickError: (error: { readonly message: string; readonly nextStep: string } | null) => void;
   /** Replaces the kept results, as a finalization does for a whole round. */
-  setLastResults: (results: readonly FinalizedBattleResult[]) => void;
+  /**
+   * The round's outcome, results and voids together.
+   *
+   * Both in one call because they are one fact: the five battles either
+   * finalized or voided, and keeping a void from a previous round beside this
+   * round's results is how a player gets told about a refund twice.
+   */
+  setLastResults: (results: readonly FinalizedBattleResult[], voided?: readonly string[]) => void;
+  /** Keeps what a `BATTLE_VOID` said, until the round it belongs to finalizes. */
+  rememberVoid: (notice: BattleVoidNotice) => void;
   /**
    * Adds one result without displacing the others.
    *
@@ -392,6 +424,7 @@ export const useSession = create<SessionState>((set, get) => ({
   picks: null,
   pickError: null,
   lastResults: {},
+  lastVoids: {},
   clockOffsetMs: 0,
 
   setBattles: (battles) => {
@@ -462,10 +495,21 @@ export const useSession = create<SessionState>((set, get) => ({
     set({ pickError });
   },
 
-  setLastResults: (results) => {
+  setLastResults: (results, voided) => {
+    const kept = new Set(voided ?? []);
     set({
       lastResults: Object.fromEntries(results.map((result) => [result.battleId, result])),
+      // Only the voids this round named. A notice for a battle the round does
+      // not call voided belongs to an older round, and a refund announced twice
+      // reads as two refunds.
+      lastVoids: Object.fromEntries(
+        Object.entries(get().lastVoids).filter(([battleId]) => kept.has(battleId)),
+      ),
     });
+  },
+
+  rememberVoid: (notice) => {
+    set({ lastVoids: { ...get().lastVoids, [notice.battleId]: notice } });
   },
 
   rememberResult: (result) => {

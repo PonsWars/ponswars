@@ -245,6 +245,18 @@ function applyEvent(event: string, payload: unknown, resync: () => void): void {
     // describes — the phase, the matchups, the picks, five results. Each of
     // those fetches the authoritative snapshot instead of patching a state
     // machine from the outside (§22, §70.7).
+    if (event === 'BATTLE_VOID') {
+      // §48.3 and §110.6. A void produces no result, so this is the only thing
+      // a player is ever told about a battle that ended without one — including
+      // whether the card charge they spent on it came back.
+      const parsed = PUBLIC_EVENT_PAYLOADS.BATTLE_VOID.safeParse(payload);
+      if (parsed.success) {
+        useSession.getState().rememberVoid(parsed.data);
+      }
+      // No resync: a void is one battle, and the round's own finalization is
+      // what changes more than a payload can describe.
+      return;
+    }
     if (event === 'ROUND_FINALIZED') {
       // Kept before the resync, because the resync replaces the round with the
       // next one. §12.6 reveals the breakdown at finalization and §27.8 shows
@@ -252,7 +264,9 @@ function applyEvent(event: string, payload: unknown, resync: () => void): void {
       // to show the player who just watched the battle end.
       const parsed = PUBLIC_EVENT_PAYLOADS.ROUND_FINALIZED.safeParse(payload);
       if (parsed.success) {
-        useSession.getState().setLastResults(parsed.data.results.map(toFinalizedResult));
+        useSession
+          .getState()
+          .setLastResults(parsed.data.results.map(toFinalizedResult), parsed.data.voided);
       }
     }
     if (event === 'ROUND_OPENED' || event === 'PICKS_LOCKED' || event === 'ROUND_FINALIZED') {

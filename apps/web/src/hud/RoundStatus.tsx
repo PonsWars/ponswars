@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import { useSession } from '../state/session.js';
-import { formatCountdown, roundView } from './round-phase.js';
+import { formatCountdown, roundView, voidNotice } from './round-phase.js';
 import { useSecondTick } from './useSecondTick.js';
 import { captionStyle, panelStyle } from './styles.js';
 
@@ -14,6 +14,12 @@ import { captionStyle, panelStyle } from './styles.js';
  */
 export function RoundStatus(): JSX.Element {
   const round = useSession((state) => state.round);
+  // The player's own battle, if the round that just finished voided it. A
+  // spectator has no charge to get back, and §5 makes spectating the normal
+  // case — so this line is for the wallet that spent one.
+  const notice = useSession((state) =>
+    state.myBattleId === null ? undefined : state.lastVoids[state.myBattleId],
+  );
 
   if (round === null) {
     // §42.14: a useful sync state, not a fabricated phase.
@@ -40,6 +46,26 @@ export function RoundStatus(): JSX.Element {
       >
         {view.label}
       </div>
+      {notice === undefined ? null : (
+        // The player's own battle, and only theirs: §110.6's sentence is about
+        // a charge they spent, and showing it to everybody watching would make
+        // it a slogan rather than a refund.
+        <div style={{ display: 'grid', gap: 2, marginTop: 'var(--pw-space-1)' }}>
+          {voidNotice(notice).map((line, index) => (
+            <div
+              key={line}
+              style={{
+                ...captionStyle,
+                letterSpacing: 0,
+                maxWidth: 240,
+                color: index === 0 ? 'var(--pw-danger)' : 'var(--pw-text-3)',
+              }}
+            >
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
       {round.feedHealth === 'DEGRADED' ? (
         // §23.6: say when the data is late. It is still real data, so the round
         // continues — but the player is told rather than left to wonder why the
