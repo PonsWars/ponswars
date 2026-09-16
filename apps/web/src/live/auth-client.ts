@@ -30,6 +30,16 @@ export type AuthFailure =
       readonly code: string;
       readonly message: string;
       readonly nextStep: string;
+      /**
+       * When asking again can succeed, where the server knows.
+       *
+       * A rate-limited sign-in names the instant a token comes back, to the
+       * millisecond. Carried rather than folded into the sentence because the
+       * useful thing to do with it is not print it: it is to stop the retry
+       * button working until then, so a player cannot spend the wait making it
+       * longer.
+       */
+      readonly retryAt?: number;
     }
   | { readonly kind: 'MALFORMED'; readonly detail: string };
 
@@ -77,24 +87,30 @@ export async function requestChallenge(
  * what a player's deployment is. A challenge issued by the probe is never
  * signed and expires on its own.
  *
- * `null` for anything else: an unreachable server, a refusal for another
- * reason, or a deployment on neither network. None of those is a chain a
- * wallet should be asked to switch to.
+ * `null` inside a successful result means a deployment on neither network,
+ * which is an answer. Anything that stopped the probe — an unreachable server,
+ * or a refusal that is not `WRONG_CHAIN`, such as a rate-limited sign-in — comes
+ * back as the failure it was. Both used to be `null`, and a player who had
+ * merely asked too often was told their wallet was on a network this deployment
+ * does not accept, which was not true and not actionable.
+ *
+ * Each probe spends a sign-in request, so this is asked only when a challenge
+ * has already come back `WRONG_CHAIN`, never on the way in.
  */
 export async function deploymentChain(
   endpoints: LiveEndpoints,
   wallet: string,
-): Promise<number | null> {
+): Promise<AuthResult<number | null>> {
   for (const network of ROBINHOOD_CHAIN_NETWORKS) {
     const probe = await requestChallenge(endpoints, wallet, network.chainId);
     if (probe.ok) {
-      return probe.value.chainId === network.chainId ? network.chainId : null;
+      return { ok: true, value: probe.value.chainId === network.chainId ? network.chainId : null };
     }
     if (probe.failure.kind !== 'REFUSED' || probe.failure.code !== 'WRONG_CHAIN') {
-      return null;
+      return { ok: false, failure: probe.failure };
     }
   }
-  return null;
+  return { ok: true, value: null };
 }
 
 /** Exchanges a signature for a session (§69.5). */
@@ -206,6 +222,7 @@ async function request<T>(
             code: error.data.code,
             message: error.data.message,
             nextStep: error.data.nextStep,
+            ...(error.data.retryAt === undefined ? {} : { retryAt: error.data.retryAt }),
           }
         : { kind: 'MALFORMED', detail: `HTTP ${String(response.status)}` },
     };

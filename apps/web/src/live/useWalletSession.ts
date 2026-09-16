@@ -8,10 +8,10 @@ import {
   rotateSession,
   signOut as revokeSession,
   verifySignature,
-  type AuthFailure,
   type Session,
 } from './auth-client.js';
 import { liveEndpoints, type LiveEndpoints } from './endpoints.js';
+import { fromServer, fromWallet, type WalletStatus } from './wallet-status.js';
 import { clearStoredSession, readStoredSession, storeSession } from './session-store.js';
 import {
   browserProvider,
@@ -19,7 +19,6 @@ import {
   currentChain,
   signMessage,
   switchChain,
-  type WalletFailure,
 } from './wallet-provider.js';
 
 /**
@@ -35,16 +34,7 @@ import {
  * state rather than a locked door. Nothing here runs until somebody clicks.
  */
 
-export type WalletStatus =
-  /** No wallet extension in this browser. Watching still works. */
-  | { readonly kind: 'UNAVAILABLE' }
-  /** A wallet is available and nobody has connected it. */
-  | { readonly kind: 'DISCONNECTED' }
-  /** Mid-flow. The wallet is showing a prompt, or the server is answering. */
-  | { readonly kind: 'CONNECTING'; readonly step: 'WALLET' | 'SIGNATURE' | 'SESSION' }
-  | { readonly kind: 'CONNECTED'; readonly wallet: string; readonly expiresAt: number }
-  /** It did not work, and this is what to say about it (§110.5). */
-  | { readonly kind: 'REFUSED'; readonly message: string; readonly nextStep: string };
+export type { WalletStatus };
 
 export interface WalletSession {
   readonly status: WalletStatus;
@@ -281,7 +271,14 @@ async function offerSwitch(
   endpoints: LiveEndpoints,
   address: string,
 ): Promise<WalletStatus> {
-  const expected = await deploymentChain(endpoints, address);
+  const probe = await deploymentChain(endpoints, address);
+  // A probe that was stopped says nothing about chains. Reporting it as one
+  // would tell a player who had merely asked too often that their wallet is on
+  // the wrong network.
+  if (!probe.ok) {
+    return fromServer(probe.failure);
+  }
+  const expected = probe.value;
   if (expected === null) {
     return {
       kind: 'REFUSED',
@@ -309,47 +306,6 @@ async function offerSwitch(
         message: `PonsWars runs on ${chainLabel(expected)}.`,
         nextStep: `Switch your wallet to ${chainLabel(expected)}, then connect again.`,
       };
-}
-
-function fromWallet(failure: WalletFailure): WalletStatus {
-  switch (failure.kind) {
-    case 'NO_WALLET':
-      return { kind: 'UNAVAILABLE' };
-    case 'DECLINED':
-      // Changing your mind is not an error. Back to where you were, silently.
-      return { kind: 'DISCONNECTED' };
-    case 'WRONG_CHAIN':
-      return {
-        kind: 'REFUSED',
-        message: `PonsWars runs on ${chainLabel(failure.expected)}.`,
-        nextStep: `Switch your wallet to ${chainLabel(failure.expected)}, then connect again.`,
-      };
-    case 'FAILED':
-      return {
-        kind: 'REFUSED',
-        message: `Your wallet could not complete the request: ${failure.detail}`,
-        nextStep: 'Try again. Nothing was signed and no funds moved.',
-      };
-  }
-}
-
-function fromServer(failure: AuthFailure): WalletStatus {
-  switch (failure.kind) {
-    case 'REFUSED':
-      return { kind: 'REFUSED', message: failure.message, nextStep: failure.nextStep };
-    case 'UNREACHABLE':
-      return {
-        kind: 'REFUSED',
-        message: 'The server did not answer.',
-        nextStep: 'Check your connection and try again. Nothing was recorded.',
-      };
-    case 'MALFORMED':
-      return {
-        kind: 'REFUSED',
-        message: 'The server answered with something this client cannot read.',
-        nextStep: 'Reload the page. If it keeps happening, this build is out of date.',
-      };
-  }
 }
 
 /** `0x4f2…9c1`. §42.2 keeps the full address out of the HUD. */

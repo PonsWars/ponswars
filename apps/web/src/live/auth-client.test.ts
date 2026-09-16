@@ -158,7 +158,7 @@ describe('finding the chain a deployment signs in on', () => {
   it('finds Robinhood Chain mainnet with one request', async () => {
     const asked = deploymentOn(4663);
 
-    expect(await deploymentChain(ENDPOINTS, SESSION.wallet)).toBe(4663);
+    expect(await deploymentChain(ENDPOINTS, SESSION.wallet)).toEqual({ ok: true, value: 4663 });
     expect(asked).toEqual([4663]);
   });
 
@@ -167,21 +167,89 @@ describe('finding the chain a deployment signs in on', () => {
     // wallet on the wrong network was never offered the switch at all.
     const asked = deploymentOn(46630);
 
-    expect(await deploymentChain(ENDPOINTS, SESSION.wallet)).toBe(46630);
+    expect(await deploymentChain(ENDPOINTS, SESSION.wallet)).toEqual({ ok: true, value: 46630 });
     expect(asked).toEqual([4663, 46630]);
   });
 
   it('names no chain for a deployment on neither network', async () => {
     deploymentOn(8453);
 
-    expect(await deploymentChain(ENDPOINTS, SESSION.wallet)).toBeNull();
+    expect(await deploymentChain(ENDPOINTS, SESSION.wallet)).toEqual({ ok: true, value: null });
   });
 
-  it('names no chain, and stops asking, when the server cannot be reached', async () => {
+  it('reports what stopped it, rather than calling it an answer about chains', async () => {
+    // Both of these used to come back as "no chain", which the bar showed as
+    // "your wallet is on a network this deployment does not accept" — untrue,
+    // and nothing a player could act on.
     const asked = deploymentOn('unreachable');
 
-    expect(await deploymentChain(ENDPOINTS, SESSION.wallet)).toBeNull();
+    const unreachable = await deploymentChain(ENDPOINTS, SESSION.wallet);
+    expect(!unreachable.ok && unreachable.failure.kind).toBe('UNREACHABLE');
     expect(asked).toEqual([4663]);
+
+    stub(
+      answer(429, {
+        code: 'RATE_LIMITED',
+        message: 'Too many sign-in requests from this network in a short time.',
+        stateIsSafe: true,
+        nextStep: 'Nothing was recorded. Try again shortly.',
+        correlationId: 'req_test',
+        retryAt: 1_700_000_000_000,
+      }),
+    );
+
+    const limited = await deploymentChain(ENDPOINTS, SESSION.wallet);
+    expect(limited).toEqual({
+      ok: false,
+      failure: {
+        kind: 'REFUSED',
+        status: 429,
+        code: 'RATE_LIMITED',
+        message: 'Too many sign-in requests from this network in a short time.',
+        nextStep: 'Nothing was recorded. Try again shortly.',
+        retryAt: 1_700_000_000_000,
+      },
+    });
+  });
+});
+
+describe('a refusal that names when to come back', () => {
+  it('carries the instant, so the client can wait instead of retrying into it', async () => {
+    stub(
+      answer(429, {
+        code: 'RATE_LIMITED',
+        message: 'Too many sign-in requests from this network in a short time.',
+        stateIsSafe: true,
+        nextStep: 'Nothing was recorded. Try again at 2023-11-14T22:13:20.000Z.',
+        correlationId: 'req_test',
+        retryAt: 1_700_000_000_000,
+      }),
+    );
+
+    const result = await requestChallenge(ENDPOINTS, SESSION.wallet, 4663);
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.failure).toMatchObject({
+      kind: 'REFUSED',
+      code: 'RATE_LIMITED',
+      retryAt: 1_700_000_000_000,
+    });
+  });
+
+  it('leaves it off a refusal no amount of waiting fixes', async () => {
+    stub(
+      answer(400, {
+        code: 'WRONG_CHAIN',
+        message: 'This deployment accepts signatures from another chain only.',
+        stateIsSafe: true,
+        nextStep: 'Switch your wallet and connect again.',
+        correlationId: 'req_test',
+      }),
+    );
+
+    const result = await requestChallenge(ENDPOINTS, SESSION.wallet, 1);
+
+    expect(!result.ok && 'retryAt' in result.failure).toBe(false);
   });
 });
 
