@@ -38,6 +38,7 @@ import {
   PostgresRoundStore,
   readFinalizedResult,
 } from '@ponswars/store-postgres';
+import { parseServerArgs } from './server-args.js';
 import { loadEngineCalibration } from './calibration.js';
 import { followClaims } from './claims.js';
 import { redisEventBus, redisRateLimit, takeLease, type Lease } from '@ponswars/redis';
@@ -99,6 +100,14 @@ const ROUNDS_LEASE_TTL_MS = 10_000;
 const TIEBREAK_POLL_MS = 15_000;
 
 async function main(): Promise<void> {
+  // Before the configuration, and long before anything connects: a mistyped
+  // argument should be a process that will not start rather than one that
+  // started and quietly did the other thing.
+  const args = parseServerArgs(process.argv.slice(2));
+  if (!args.ok) {
+    throw new Error(args.problem);
+  }
+
   const config = loadConfig(process.env);
 
   // How battles score and read, as one file (§59.4). Read before anything
@@ -232,7 +241,22 @@ async function main(): Promise<void> {
     return token === null ? Promise.resolve(null) : auth.walletOf(token);
   };
 
-  const sockets = startSocketServer({ port: config.GATEWAY_PORT, now, walletOf });
+  /**
+   * Sockets here, or somewhere else (§21.3, §48).
+   *
+   * One process serving everything is what a single-instance deployment wants,
+   * and it is the default. A deployment that runs the realtime tier separately
+   * — `node dist/gateway.js`, which scales with watchers rather than with
+   * players — starts this one with `--no-sockets`, and then it publishes to the
+   * bus without holding a connection of its own.
+   *
+   * An argument rather than an environment parameter: it says which processes a
+   * deployment is composed of, which is the same kind of decision as the
+   * rewards worker's `--snapshots`, and not a value §102 leaves open.
+   */
+  const sockets = args.servesSockets
+    ? startSocketServer({ port: config.GATEWAY_PORT, now, walletOf })
+    : null;
 
   // Events reach every instance, not only the one that published them (§21.3).
   // The bus assigns the sequence, so two clients on two instances see one
@@ -243,9 +267,13 @@ async function main(): Promise<void> {
       say(`${problem}\n`);
     },
   });
-  await bus.subscribe((envelope) => {
-    sockets.gateway.deliver(envelope);
-  });
+  if (sockets !== null) {
+    // Subscribed only where there are connections to deliver to. A server whose
+    // sockets live elsewhere publishes and reads nothing back.
+    await bus.subscribe((envelope) => {
+      sockets.gateway.deliver(envelope);
+    });
+  }
   // One sign-in allowance for the whole deployment, not one per instance
   // (§59.3). The rule is configuration with no default: 0 requests is the
   // answer for a deployment that limits at its edge instead.
@@ -262,7 +290,7 @@ async function main(): Promise<void> {
   // Before anything else binds. A failed WebSocket bind surfaces a tick later
   // than the call that caused it, so without this the API port is already taken
   // by the time the process dies.
-  await sockets.ready;
+  await sockets?.ready;
 
   const distributions = new PostgresDistributionStore(database);
   const claims = new PostgresClaimStore(database);
@@ -421,7 +449,7 @@ async function main(): Promise<void> {
     // unreachable from outside it.
     await api.listen({ port: config.API_PORT, host: '0.0.0.0' });
   } catch (error) {
-    await sockets.close();
+    await sockets?.close();
     await database.close();
     throw error;
   }
@@ -429,7 +457,7 @@ async function main(): Promise<void> {
   say(
     banner(
       config.API_PORT,
-      config.GATEWAY_PORT,
+      args.servesSockets ? config.GATEWAY_PORT : null,
       config.CHAIN_ID,
       secretVault !== null,
       config.MARKET_DATA_PROVIDER,
@@ -553,7 +581,7 @@ async function main(): Promise<void> {
     await market?.stopped;
     await readingClaims;
     await api.close();
-    await sockets.close();
+    await sockets?.close();
     await recovery?.close();
     await database.close();
   }
@@ -563,7 +591,7 @@ async function main(): Promise<void> {
 
 function banner(
   apiPort: number,
-  gatewayPort: number,
+  gatewayPort: number | null,
   chainId: number,
   secret: boolean,
   provider: MarketDataProvider,
@@ -572,7 +600,7 @@ function banner(
     '',
     'PonsWars server',
     `  API       :${String(apiPort)}   (health /v1/health, readiness /v1/ready)`,
-    `  Gateway   :${String(gatewayPort)}`,
+    `  Gateway   ${gatewayPort === null ? 'elsewhere — started with --no-sockets' : `:${String(gatewayPort)}`}`,
     `  Chain     ${chainLabel(chainId)}`,
     `  Secret    ${secret ? 'on — rewards reserved before reveal' : 'off — its band deals Legendary'}`,
     `  Market    ${provider === 'onchain' ? 'onchain — Stock Token trading on Robinhood Chain' : provider}`,
