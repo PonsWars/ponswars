@@ -125,9 +125,10 @@ What the numbers say, and do not:
   one process was still publishing every tick to every connection, ~180 ms
   behind at the tail. §13.2 interpolates the frontline over 3–5 seconds, so
   that is well inside what a player can see.
-- **They are one process on a laptop.** A deployment runs the gateway
-  separately (`apps/gateway`), on hardware nobody has chosen yet (§102), and
-  the useful number is the one measured there before launch.
+- **They are one process on a laptop.** A deployment can run the realtime tier
+  on its own — `node dist/gateway.js`, with the server started `--no-sockets`
+  (`docs/operations/deployment.md`) — on hardware nobody has chosen yet (§102),
+  and the useful number is the one measured there before launch.
 - **They say nothing about the database.** The local stack keeps rounds in
   memory. A run against PostgreSQL measures finalization, which is the other
   half of a launch-capacity question.

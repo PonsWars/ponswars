@@ -222,6 +222,51 @@ Start order is a dependency, not a delay:
 3. `server` starts, and is not considered healthy until `/v1/ready` answers
 4. `web` serves the built client
 
+## The processes in the server image
+
+One image, four entry points. Which of them a deployment runs is what its shape
+is:
+
+| Command                       | What it is                                         |
+| ----------------------------- | -------------------------------------------------- |
+| `node dist/main.js`           | The round driver, the REST API and the sockets     |
+| `node dist/gateway.js`        | The realtime tier on its own (§48)                 |
+| `node dist/migrate.js`        | The schema, run as a job before the rest (§49)     |
+| `node dist/rewards-worker.js` | Opens and snapshots rewards windows (§16.2, §16.3) |
+
+`node dist/main.js` alone is a whole deployment, and is what the compose file
+runs. It is the right answer for one host.
+
+### Running the realtime tier separately
+
+The two halves do not grow together. `docs/operations/load-testing.md` measures
+2,500 spectators against a few hundred sign-ins, §5 makes watching the normal
+case, and watchers are the cheap half to add machines for. Fan-out also shares
+an event loop with the round driver: with five hundred sign-ins in flight,
+delivery held its rate but its tail went from 18 ms to 114 ms.
+
+```bash
+node dist/main.js --no-sockets     # driver and API; publishes to Redis
+node dist/gateway.js               # sockets; delivers what the bus publishes
+```
+
+Several gateways can run at once, each delivering to its own connections. The
+sequence a client sees comes from Redis rather than from any process (§70.1), so
+two clients on two gateways read one number for one event. A gateway holds no
+round state: it resolves who a connection is against the sessions table, and
+`GET /v1/rounds/current` on the API is still where a snapshot comes from (§24).
+
+It serves `/v1/health` on `GATEWAY_PORT`, the same port the upgrade arrives on,
+so an ingress needs one route and an orchestrator that can only probe HTTP can
+still tell whether the process is alive. Stopping it closes every connection
+with WebSocket 1001, _going away_: a client reads that as a planned restart and
+reconnects at once instead of backing off from a failure that did not happen.
+
+The compose file does not split them, deliberately. It is the one-host
+reference, and on one host two processes and an ingress in front of them buy
+nothing; where the split pays is more than one machine, which is the hosting
+decision still open (§102).
+
 ## Migrations
 
 `node dist/migrate.js` in the server image, run as a job before the server.
