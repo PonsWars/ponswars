@@ -472,8 +472,15 @@ describe('a card at lock (§3.2, §40.7)', () => {
     );
     expect(finalization.voided).toContain(round.battles[0]?.setup.battleId);
 
-    await rounds.saveFinalization(finalization);
-    await rounds.saveFinalization(finalization);
+    const first = await rounds.saveFinalization(finalization);
+    const again = await rounds.saveFinalization(finalization);
+
+    // What it says it restored is what it restored. The event that carries
+    // §110.6's sentence to the player is built from this, so a retried
+    // finalization naming the battle a second time would be a second promise
+    // for one charge.
+    expect(first.cardUsesRestored).toContain(round.battles[0]?.setup.battleId);
+    expect(again.cardUsesRestored).toEqual([]);
 
     expect(await remaining(wallet(1))).toEqual({ remaining_uses: 3, depleted_at: null });
     const ledger = await db.query(

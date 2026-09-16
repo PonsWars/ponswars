@@ -8,12 +8,13 @@ import {
   type WpAward,
 } from '@ponswars/battle-engine';
 import { INITIAL_MOMENTUM_MEMORY, NO_CARD_SUPPORT, type SideInputs } from '@ponswars/battle-math';
-import type { RoundStorePort } from '@ponswars/round-service';
+import type { FinalizationRecord, RoundStorePort } from '@ponswars/round-service';
 import {
   battleId as toBattleId,
   buildCanonicalClock,
   roundId as toRoundId,
   utcTimestamp,
+  type BattleId,
   type CanonicalClock,
   type ConfidenceSnapshot,
   type FinalizedBattleResult,
@@ -133,8 +134,8 @@ export class PostgresRoundStore implements RoundStorePort {
    * than crediting twice — the constraint decides it, not a flag this code
    * checks first and then acts on.
    */
-  async saveFinalization(finalization: RoundFinalization): Promise<void> {
-    await this.db.transaction(async (tx) => {
+  async saveFinalization(finalization: RoundFinalization): Promise<FinalizationRecord> {
+    return this.db.transaction(async (tx) => {
       await this.writeState(tx, finalization.state);
 
       for (const result of finalization.results) {
@@ -143,7 +144,11 @@ export class PostgresRoundStore implements RoundStorePort {
       for (const award of finalization.awards) {
         await insertAward(tx, finalization.state.roundId, award);
       }
-      await refundVoidedCards(tx, finalization);
+      // What was actually put back, not what was meant to be: the caller
+      // announces this to players, and a refund claimed on a battle where the
+      // ledger already had one — a retried finalization — would be a second
+      // promise for one charge.
+      return { cardUsesRestored: await refundVoidedCards(tx, finalization) };
     });
   }
 
@@ -570,7 +575,11 @@ async function insertResult(tx: SqlExecutor, result: FinalizedBattleResult): Pro
  * written again refunds nothing new, and only the refunds actually recorded
  * restore a charge.
  */
-async function refundVoidedCards(tx: SqlExecutor, finalization: RoundFinalization): Promise<void> {
+async function refundVoidedCards(
+  tx: SqlExecutor,
+  finalization: RoundFinalization,
+): Promise<readonly BattleId[]> {
+  const restored: BattleId[] = [];
   for (const battleId of finalization.voided) {
     const { rows } = await tx.query(
       `INSERT INTO card_usage_ledger (card_instance_id, wallet, round_id, battle_id, event, delta)
@@ -581,6 +590,9 @@ async function refundVoidedCards(tx: SqlExecutor, finalization: RoundFinalizatio
        RETURNING card_instance_id`,
       [finalization.state.roundId, battleId],
     );
+    if (rows.length > 0) {
+      restored.push(battleId);
+    }
     for (const row of rows) {
       await tx.query(
         `UPDATE cards
@@ -590,6 +602,7 @@ async function refundVoidedCards(tx: SqlExecutor, finalization: RoundFinalizatio
       );
     }
   }
+  return restored;
 }
 
 async function insertAward(tx: SqlExecutor, roundId: string, award: WpAward): Promise<void> {

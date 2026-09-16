@@ -5,6 +5,7 @@ import type { ActiveTicker, RoundId, UtcTimestamp, WalletAddress } from '@ponswa
 import type { CardHolding, CardHoldings } from './picks.js';
 import type {
   ChainPort,
+  FinalizationRecord,
   MarketDataPort,
   MarketObservation,
   ObservationWindow,
@@ -65,10 +66,14 @@ export class MemoryRoundStore implements RoundStorePort {
     return Promise.resolve();
   }
 
-  saveFinalization(finalization: RoundFinalization): Promise<void> {
+  saveFinalization(finalization: RoundFinalization): Promise<FinalizationRecord> {
     this.finalizations.push(finalization);
     this.latest = finalization.state;
-    return Promise.resolve();
+    // No card is restored here, because no card is held here. Cards live in
+    // their own tables and a refund is part of the finalization transaction
+    // that writes them; this store keeps rounds in an array and would be
+    // claiming a refund nobody made.
+    return Promise.resolve({ cardUsesRestored: [] });
   }
 
   loadLatest(): Promise<RoundEngineState | null> {

@@ -1,7 +1,13 @@
 import type { LockedPick, RoundEngineState, RoundFinalization } from '@ponswars/battle-engine';
 import type { ConfidenceLookback, SideInputs } from '@ponswars/battle-math';
 import type { Channel } from '@ponswars/realtime';
-import type { ActiveTicker, FeedHealth, RoundId, UtcTimestamp } from '@ponswars/shared-types';
+import type {
+  ActiveTicker,
+  BattleId,
+  FeedHealth,
+  RoundId,
+  UtcTimestamp,
+} from '@ponswars/shared-types';
 
 /**
  * What the round loop needs from the outside world.
@@ -115,9 +121,24 @@ export interface PublisherPort {
  * evidence and War Points — the exactly-once boundary of §66.6, and the one
  * write in this system that must never happen twice.
  */
+export interface FinalizationRecord {
+  /**
+   * The voided battles whose deployed card uses this store actually put back
+   * (§4.4, §110.6).
+   *
+   * Reported rather than assumed, because it is the one fact the `BATTLE_VOID`
+   * event states on the product's behalf: *"Any deployed card use for this
+   * battle has been restored."* A store that refunded nothing — because nobody
+   * deployed a card on that battle, or because it keeps no cards at all — names
+   * no battle here, and the event says so. Telling a player a charge came back
+   * when it did not would be worse than telling them nothing.
+   */
+  readonly cardUsesRestored: readonly BattleId[];
+}
+
 export interface RoundStorePort {
   saveState(state: RoundEngineState): Promise<void>;
-  saveFinalization(finalization: RoundFinalization): Promise<void>;
+  saveFinalization(finalization: RoundFinalization): Promise<FinalizationRecord>;
   /**
    * The most recent round as it was last checkpointed, or `null` for a store
    * that has never held one.

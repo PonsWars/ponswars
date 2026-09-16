@@ -316,6 +316,38 @@ describe('finalizing', () => {
     expect(p.store.finalizations).toHaveLength(1);
   });
 
+  it('tells the battle it voided, why, and whether a card came back', async () => {
+    // §48.3 and §110.6. A voided battle reaching clients as an id in a list
+    // leaves the one sentence that matters unsaid — and the flag is the store's
+    // answer rather than this loop's assumption, so the sentence is only shown
+    // where a charge was actually put back.
+    const p = ports({ market: (ticker) => healthy(ticker, 'UNAVAILABLE') });
+    const state = (await stepRound(openRound(), CLOCK.lockAt, p, CONFIG)).state;
+    const finalized = await stepRound(state, CLOCK.battleEndAt, p, CONFIG);
+    const voided = finalized.finalization?.voided ?? [];
+
+    const voids = p.publisher.published.filter((envelope) => envelope.event === 'BATTLE_VOID');
+    expect(voids).toHaveLength(voided.length);
+    for (const envelope of voids) {
+      const payload = envelope.payload as {
+        battleId: string;
+        reason: string;
+        cardUseRestored: boolean;
+      };
+      expect(voided).toContain(payload.battleId);
+      expect(payload.reason).toBe('DATA_INTEGRITY');
+      // The in-memory store holds no cards, so it restored none and says so.
+      // Announcing a refund nobody made would be worse than announcing nothing.
+      expect(payload.cardUseRestored).toBe(false);
+      // On the battle's own channel, where somebody watching that battle is.
+      expect(envelope.channel).toBe(`battle:${payload.battleId}`);
+    }
+
+    // Every void is announced before the round's own result.
+    const order = p.publisher.published.map((envelope) => envelope.event);
+    expect(order.lastIndexOf('BATTLE_VOID')).toBeLessThan(order.indexOf('ROUND_FINALIZED'));
+  });
+
   it('voids rather than inventing a result when nothing was scorable', async () => {
     // §61 principle 19. The loop reached the cutoff with no usable data and the
     // engine refused to produce a winner.
@@ -478,17 +510,15 @@ describe('the published contract', () => {
     }
   });
 
-  it('publishes exactly the three names a round loop owns', async () => {
+  it('publishes exactly the names a round loop owns, and no others', async () => {
     // Names, not shapes. `PICKS_LOCKED` was published as `ROUND_LOCKED` — a
     // name no contract mentions — which a shape test would never have caught
     // because the payload was fine.
     //
-    // The other two names in §48.3 are deliberately absent, and this asserts
-    // that rather than leaving it to be noticed. `ROUND_OPENED` belongs to
-    // whoever creates a round; the loop is handed one. `BATTLE_VOID` carries
-    // §110.6's card-refund confirmation, which is the Player service's fact —
-    // publishing it from here would mean claiming a refund happened that this
-    // service never made.
+    // `ROUND_OPENED` is deliberately absent, and this asserts that rather than
+    // leaving it to be noticed: it belongs to whoever creates a round, and the
+    // loop is handed one. `BATTLE_VOID` is absent here for the ordinary reason
+    // that nothing voided.
     const round = openRound();
     const p = ports({});
 

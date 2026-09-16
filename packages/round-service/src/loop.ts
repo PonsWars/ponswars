@@ -27,13 +27,16 @@ import type { RoundPorts } from './ports.js';
  * refuses the second, or does nothing at all. Nothing here decides that a round
  * should void, and nothing retries a failed finalization silently.
  *
- * It publishes three of the five names in §48.3, and the two it leaves alone
- * are worth saying out loud. `ROUND_OPENED` belongs to whoever creates a round;
- * this loop is handed one already open. `BATTLE_VOID` carries §110.6's
- * card-refund confirmation — *"Any deployed card use for this battle has been
- * restored"* — and that is the Player service's fact to state; a void reaches
- * clients here as the `voided` list on `ROUND_FINALIZED` instead. Publishing a
- * refund this service never made would be worse than publishing nothing.
+ * It publishes four of the five names in §48.3. `ROUND_OPENED` is the one it
+ * leaves alone, because it belongs to whoever creates a round and this loop is
+ * handed one already open.
+ *
+ * `BATTLE_VOID` carries §110.6's card-refund confirmation — *"Any deployed card
+ * use for this battle has been restored"* — which is why it is published from
+ * here and only from here: the store puts those charges back inside the
+ * finalization transaction, and it reports which battles it actually restored.
+ * The flag is that answer rather than an assumption. A refund this service
+ * never made would be worse to announce than nothing at all.
  */
 
 export interface StepResult {
@@ -206,7 +209,39 @@ async function performFinalize(
     : null;
   const finalization = finalizeRound(state, state.clock.battleEndAt, blockHash, config);
 
-  await ports.store.saveFinalization(finalization);
+  const record = await ports.store.saveFinalization(finalization);
+
+  // Before the round's own result. A client watching a battle that voided
+  // should be told why on that battle's channel, rather than having to work it
+  // out from an id in a list — and §70.1 sequences a channel, not the order two
+  // channels are written in, so this is about what each channel says rather
+  // than about arrival order.
+  const restored = new Set<string>(record.cardUsesRestored);
+  for (const battle of finalization.state.battles) {
+    if (!finalization.voided.includes(battle.setup.battleId)) {
+      continue;
+    }
+    if (battle.voidReason === null) {
+      // Unreachable by construction — the engine names a reason every time it
+      // voids, and the test above pins that by counting one event per voided
+      // battle. It is here because the type allows it and because the cautious
+      // answer is silence: §48.3's categories are a product decision (§102), so
+      // an unexplained void reaches clients as an id on ROUND_FINALIZED and
+      // nothing more, rather than as a reason nobody chose.
+      continue;
+    }
+    await ports.publisher.publish(
+      'BATTLE_VOID',
+      battleChannel(battle.setup.battleId),
+      state.clock.battleEndAt,
+      {
+        battleId: battle.setup.battleId,
+        reason: battle.voidReason,
+        cardUseRestored: restored.has(battle.setup.battleId),
+      },
+    );
+  }
+
   await ports.publisher.publish(
     'ROUND_FINALIZED',
     roundChannel(state.roundId),
