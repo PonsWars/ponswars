@@ -1,6 +1,8 @@
 import { useState, type JSX } from 'react';
 import { useWalletSessionContext } from '../live/WalletSessionContext.js';
+import { formatCountdown } from './round-phase.js';
 import { captionStyle, controlStyle } from './styles.js';
+import { useSecondTick } from './useSecondTick.js';
 
 /**
  * Connecting a wallet, from the bar (§42.2, §45.2, §68.2).
@@ -88,12 +90,57 @@ export function WalletConnect({
             detail={session.status.nextStep}
             compact={compact}
           />
-          <button type="button" onClick={run(session.connect)} style={buttonStyle} disabled={busy}>
-            RETRY
-          </button>
+          <Retry
+            onRetry={run(session.connect)}
+            busy={busy}
+            {...(session.status.retryAt === undefined ? {} : { until: session.status.retryAt })}
+          />
         </div>
       );
   }
+}
+
+/**
+ * Retry, or the wait before it is worth pressing.
+ *
+ * A sign-in refused for asking too often names the instant a request will work
+ * again (§59.3), and the honest thing to do with it is disable the button until
+ * then: a player pressing retry in a loop is spending the allowance they are
+ * waiting on, and every press makes the wait longer. So the button says how
+ * long instead, and comes back on its own.
+ */
+function Retry({
+  onRetry,
+  busy,
+  until,
+}: {
+  readonly onRetry: () => void;
+  readonly busy: boolean;
+  readonly until?: number;
+}): JSX.Element {
+  // Ticks whether or not there is a wait; a hook cannot be conditional, and one
+  // second of arithmetic is cheaper than a second component to avoid it.
+  const now = useSecondTick();
+  const remaining = until === undefined ? 0 : until - now;
+
+  if (remaining <= 0) {
+    return (
+      <button type="button" onClick={onRetry} style={buttonStyle} disabled={busy}>
+        RETRY
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      style={{ ...buttonStyle, opacity: 0.6, cursor: 'not-allowed' }}
+      disabled
+      title="Too many sign-in attempts from this network."
+    >
+      {`RETRY IN ${formatCountdown(remaining)}`}
+    </button>
+  );
 }
 
 /** What the wallet is doing, in the player's terms rather than the protocol's. */

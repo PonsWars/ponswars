@@ -1,6 +1,7 @@
-import { useEffect, useState, type JSX } from 'react';
+import type { JSX } from 'react';
 import { useSession } from '../state/session.js';
 import { formatCountdown, roundView } from './round-phase.js';
+import { useSecondTick } from './useSecondTick.js';
 import { captionStyle, panelStyle } from './styles.js';
 
 /**
@@ -99,32 +100,4 @@ export function Countdown(): JSX.Element | null {
       </div>
     </div>
   );
-}
-
-/**
- * Local time, refreshed once a second.
- *
- * Aligned to the next whole second rather than set on a fixed interval from
- * mount, so the digit changes when the second changes instead of drifting a few
- * hundred milliseconds behind it.
- */
-function useSecondTick(): number {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-
-    const schedule = (): void => {
-      const current = Date.now();
-      setNow(current);
-      timer = setTimeout(schedule, 1_000 - (current % 1_000));
-    };
-    schedule();
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, []);
-
-  return now;
 }
