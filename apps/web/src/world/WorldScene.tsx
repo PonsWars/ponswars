@@ -1,3 +1,4 @@
+import type { ActiveTicker } from '@ponswars/shared-types';
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
 import {
   debrisField,
@@ -46,6 +47,7 @@ import { InstancedField, preparedGeometry, type Placement } from './InstancedFie
 import { Dropship, DROPSHIPS } from './Dropship.js';
 import { IslandMass } from './IslandMass.js';
 import { SectorTerrain } from './SectorTerrain.js';
+import { fobShape, type FobPart } from './fob-shape.js';
 import { LightPool } from './LightPool.js';
 import { Planet } from './Planet.js';
 import { islet } from './rock.js';
@@ -729,6 +731,7 @@ function Sector({
         <>
           <ForwardBase
             side={-1}
+            ticker={battle.left}
             accent={leftAccent}
             innerRef={(node) => {
               bases.current[0] = node;
@@ -736,6 +739,7 @@ function Sector({
           />
           <ForwardBase
             side={1}
+            ticker={battle.right}
             accent={rightAccent}
             innerRef={(node) => {
               bases.current[1] = node;
@@ -1295,12 +1299,39 @@ function BaseSupply({ side }: { readonly side: -1 | 1 }): JSX.Element {
  * light: it is the one thing on the platform that is *not* permanent, and a
  * heavy fortress would read as the faction having settled there.
  */
+/**
+ * One solid of a base, sized the way its kind is sized.
+ *
+ * The mapping lives here rather than in the data, so `fob-shape.ts` stays a
+ * description of structures and knows nothing about three's argument orders.
+ */
+function FobGeometry({ part }: { readonly part: FobPart }): JSX.Element {
+  const [a, b, c] = part.size;
+  switch (part.shape) {
+    case 'box':
+      return <boxGeometry args={[a, b, c]} />;
+    case 'cylinder':
+      // Six-sided, like the rest of this world's machinery: a smooth cylinder
+      // at this scale reads as plastic.
+      return <cylinderGeometry args={[a, c, b, 6]} />;
+    case 'cone':
+      return <coneGeometry args={[a, b, 6]} />;
+    case 'octahedron':
+      return <octahedronGeometry args={[a, 0]} />;
+    case 'torus':
+      return <torusGeometry args={[a, b, 6, 18]} />;
+  }
+}
+
 function ForwardBase({
   side,
+  ticker,
   accent,
   innerRef,
 }: {
   readonly side: -1 | 1;
+  /** Whose base this is: §36.7 makes the structure the identity, not the colour. */
+  readonly ticker: ActiveTicker;
   readonly accent: string;
   /**
    * Handed back to the sector, which drives the deployment each frame (§15
@@ -1310,20 +1341,33 @@ function ForwardBase({
    */
   readonly innerRef: (node: Group | null) => void;
 }): JSX.Element {
+  const shape = fobShape(ticker);
+
   return (
     <group ref={innerRef} position={[side * 92, 11, 0]}>
-      <mesh position={[0, 3, 0]}>
-        <cylinderGeometry args={[10, 13, 6, 6]} />
-        <meshStandardMaterial color="#111d26" metalness={0.22} roughness={0.6} />
-      </mesh>
-      <mesh position={[0, 20, 0]}>
-        <cylinderGeometry args={[1.4, 1.4, 28, 6]} />
-        <meshStandardMaterial color="#243745" metalness={0.24} roughness={0.45} />
-      </mesh>
-      <mesh position={[0, 35, 0]}>
-        <octahedronGeometry args={[4, 0]} />
-        <meshBasicMaterial color={accent} />
-      </mesh>
+      {/* Mirrored by turning the whole base rather than by a negative scale,
+          for the reason the army is: a negative scale turns a mesh inside out,
+          and a structure lit from one side would light from the wrong one. */}
+      <group rotation={[0, side === 1 ? Math.PI : 0, 0]}>
+        {shape.parts.map((part, index) => (
+          <mesh
+            key={`${part.shape}-${String(index)}`}
+            position={[part.position[0], part.position[1], part.position[2]]}
+            rotation={[part.rotation[0], part.rotation[1], part.rotation[2]]}
+          >
+            <FobGeometry part={part} />
+            {part.material === 'accent' ? (
+              <meshBasicMaterial color={accent} />
+            ) : (
+              <meshStandardMaterial
+                color={part.material === 'hull' ? '#243745' : '#111d26'}
+                metalness={part.material === 'hull' ? 0.24 : 0.22}
+                roughness={part.material === 'hull' ? 0.45 : 0.6}
+              />
+            )}
+          </mesh>
+        ))}
+      </group>
       {/* Landed with it and folded away with it: children of the group the
           reshuffle scales, so they deploy and retract as the base does (§15). */}
       <Suspense fallback={null}>
