@@ -40,7 +40,7 @@ import {
 } from '@ponswars/store-postgres';
 import { loadEngineCalibration } from './calibration.js';
 import { followClaims } from './claims.js';
-import { redisEventBus, takeLease, type Lease } from '@ponswars/redis';
+import { redisEventBus, redisRateLimit, takeLease, type Lease } from '@ponswars/redis';
 import { startMarket, type RunningMarket } from './market.js';
 import { connectPostgres } from '@ponswars/postgres';
 
@@ -246,6 +246,19 @@ async function main(): Promise<void> {
   await bus.subscribe((envelope) => {
     sockets.gateway.deliver(envelope);
   });
+  // One sign-in allowance for the whole deployment, not one per instance
+  // (§59.3). The rule is configuration with no default: 0 requests is the
+  // answer for a deployment that limits at its edge instead.
+  const signInLimit =
+    config.AUTH_RATE_LIMIT_REQUESTS === 0
+      ? null
+      : await redisRateLimit({
+          url: config.REDIS_URL,
+          onProblem: (problem) => {
+            say(`${problem}\n`);
+          },
+        });
+
   // Before anything else binds. A failed WebSocket bind surfaces a tick later
   // than the call that caused it, so without this the API port is already taken
   // by the time the process dies.
@@ -383,6 +396,18 @@ async function main(): Promise<void> {
       amount: secretReward,
       entitlementOf: (wallet) => vaultReader.entitlementOf(wallet),
     },
+    ...(signInLimit === null
+      ? {}
+      : {
+          signInLimit: {
+            rule: {
+              limit: config.AUTH_RATE_LIMIT_REQUESTS,
+              windowMs: config.AUTH_RATE_LIMIT_WINDOW_MS,
+            },
+            check: (key, rule) => signInLimit.check(key, rule),
+          },
+        }),
+    trustedProxies: config.API_TRUSTED_PROXIES,
     picks,
     config: CONFIG,
     now,
@@ -515,6 +540,7 @@ async function main(): Promise<void> {
     clearInterval(followStore);
     await lease?.release();
     await bus.close();
+    await signInLimit?.close();
     // `finally`, not the happy path. The driver can fail rather than stop — a
     // store write that fails, or a stop signal during a tiebreak wait — and without
     // this the process stayed up afterwards: the API kept the event loop

@@ -299,6 +299,11 @@ async function main(): Promise<void> {
         ? new MemoryPlayerRecords(() => memoryStore.finalizations)
         : new PostgresPlayerRecords(database),
     cards,
+    // No sign-in rate limit, deliberately (§59.3). A deployment configures one
+    // and runs it in Redis so every instance counts against the same bucket;
+    // here the whole point is to be able to fire a thousand sign-ins at the
+    // process and read what it costs (docs/operations/load-testing.md), which a
+    // limiter would turn into a measurement of the limiter.
     picks,
     config: CONFIG,
     now,
