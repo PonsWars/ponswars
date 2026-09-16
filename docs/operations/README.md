@@ -55,9 +55,10 @@ never a re-finalization, which the round state machine refuses anyway.
 
 ## Before you act
 
-- **Reproduce it.** Every round is replayable from its recording
-  (`simulations/src/replay.ts`, §26). A theory that does not survive a replay is
-  a theory.
+- **Reproduce it.** Every round is replayable from its recording —
+  `node tools/replay-round.mjs round.json`, over `@ponswars/replay` (§26), with
+  the steps in [a disputed result](disputed-result.md). A theory that does not
+  survive a replay is a theory.
 - **Write down the round or distribution id first.** Ids are how the evidence is
   found later, and they are the first thing lost in an incident.
 - **Check whether the system already handled it.** Most degradation paths are
