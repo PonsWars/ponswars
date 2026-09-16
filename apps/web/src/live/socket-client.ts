@@ -62,8 +62,22 @@ export interface LiveSocketOptions {
    * and changed without deriving anything.
    */
   readonly backoffMs?: readonly number[];
+  /**
+   * How long reconnects are spread over after a planned close.
+   *
+   * A restart tells every connection at the same instant, so what matters is
+   * not how fast one client comes back but how far apart they all do. Every
+   * client picking a moment inside this window turns a wall of reconnects into
+   * an arrival rate the new instance can answer: at 2,500 watchers, three
+   * seconds is under a thousand a second, and the snapshot each one fetches on
+   * the way in is the request that actually costs something
+   * (`docs/operations/load-testing.md`).
+   */
+  readonly plannedSpreadMs?: number;
   /** Injected so tests do not need a network. */
   readonly socketFactory?: (url: string) => WebSocketLike;
+  /** Injected so a test can assert a delay rather than a range. */
+  readonly random?: () => number;
 }
 
 /** The part of `WebSocket` this uses, so a test can supply a fake. */
@@ -77,6 +91,12 @@ export interface WebSocketLike {
 }
 
 const DEFAULT_BACKOFF = [500, 1_000, 2_000, 5_000, 10_000] as const;
+
+/** WebSocket 1001: the server said it is going away, not that anything failed. */
+const GOING_AWAY = 1001;
+
+/** How long reconnects are spread over after a planned close. */
+const DEFAULT_PLANNED_SPREAD_MS = 3_000;
 
 export interface LiveSocket {
   /**
@@ -98,6 +118,8 @@ export interface LiveSocket {
  */
 export function openLiveSocket(options: LiveSocketOptions): LiveSocket {
   const backoff = options.backoffMs ?? DEFAULT_BACKOFF;
+  const spread = options.plannedSpreadMs ?? DEFAULT_PLANNED_SPREAD_MS;
+  const random = options.random ?? Math.random;
   const factory = options.socketFactory ?? ((url: string) => new WebSocket(url) as WebSocketLike);
 
   let socket: WebSocketLike | null = null;
@@ -149,18 +171,32 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocket {
       // would count one failure twice and skip a backoff step.
     };
 
-    next.onclose = () => {
+    next.onclose = (event) => {
       socket = null;
       if (closed) {
+        return;
+      }
+      if (closeCode(event) === GOING_AWAY) {
+        // The server said it is stopping: a deploy, or a socket tier being
+        // scaled down. Nothing failed, so the ladder is not climbed — counting
+        // a planned restart as an outage would leave a player reading `OFFLINE`
+        // and waiting ten seconds for a server that is already back.
+        attempt = 0;
+        options.handlers.onConnectionChange('RECONNECTING');
+        retryTimer = setTimeout(connect, Math.floor(spread * random()));
         return;
       }
       // §42.14 and §110.5: say which. `RECONNECTING` promises the world will
       // come back; `OFFLINE` admits the display is out of date, and a client
       // that keeps promising through a long outage is lying.
-      const delay = backoff[Math.min(attempt, backoff.length - 1)] ?? 10_000;
+      const step = backoff[Math.min(attempt, backoff.length - 1)] ?? 10_000;
       options.handlers.onConnectionChange(attempt === 0 ? 'RECONNECTING' : 'OFFLINE');
       attempt += 1;
-      retryTimer = setTimeout(connect, delay);
+      // Half the step, and up to half again. A process that dies drops every
+      // connection it held in the same instant, and a fleet that waits exactly
+      // the same time comes back as one wall — which would repeat the outage on
+      // whatever replaced it.
+      retryTimer = setTimeout(connect, Math.floor(step / 2 + (step / 2) * random()));
     };
   };
 
@@ -230,6 +266,21 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocket {
  * Checked structurally rather than by trusting a `type` field, because the
  * receiver's guarantees rest on `sequence` and `version` actually being there.
  */
+/**
+ * The code a close carried, where there was one.
+ *
+ * `onclose` is handed a `CloseEvent` by a browser, but the fake a test supplies
+ * need not be one. Read defensively: an unreadable close is treated as
+ * unplanned, which is the cautious reading of the two.
+ */
+function closeCode(event: unknown): number | null {
+  if (typeof event !== 'object' || event === null || !('code' in event)) {
+    return null;
+  }
+  const code = (event as { readonly code: unknown }).code;
+  return typeof code === 'number' ? code : null;
+}
+
 function isEnvelope(value: unknown): value is Envelope<unknown> {
   if (typeof value !== 'object' || value === null) {
     return false;

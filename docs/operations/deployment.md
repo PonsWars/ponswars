@@ -259,8 +259,11 @@ round state: it resolves who a connection is against the sessions table, and
 It serves `/v1/health` on `GATEWAY_PORT`, the same port the upgrade arrives on,
 so an ingress needs one route and an orchestrator that can only probe HTTP can
 still tell whether the process is alive. Stopping it closes every connection
-with WebSocket 1001, _going away_: a client reads that as a planned restart and
-reconnects at once instead of backing off from a failure that did not happen.
+with WebSocket 1001, _going away_. The client reads that as a planned restart
+rather than an outage: it does not climb its backoff ladder and does not tell
+the player the world is offline, and it comes back inside a three-second window
+chosen at random per client — because every connection is told at the same
+instant, and a fleet that all waited the same time would arrive as one wall.
 
 The compose file does not split them, deliberately. It is the one-host
 reference, and on one host two processes and an ingress in front of them buy

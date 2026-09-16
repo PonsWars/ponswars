@@ -68,6 +68,9 @@ function harness(): Harness {
   const live = openLiveSocket({
     endpoints: ENDPOINTS,
     backoffMs: [10, 20],
+    plannedSpreadMs: 100,
+    // Half of every window, so a delay can be asserted rather than a range.
+    random: () => 0.5,
     socketFactory: () => {
       const socket = new FakeSocket();
       sockets.push(socket);
@@ -229,6 +232,58 @@ describe('losing the connection', () => {
     h.sockets[1]?.onclose?.({});
 
     expect(h.connections).toEqual(['CONNECTED', 'RECONNECTING', 'OFFLINE']);
+    h.live.close();
+  });
+
+  it('spreads the wait, so a fleet does not come back as one wall', () => {
+    // Every connection a process held drops in the same instant. Waiting
+    // exactly the same time would repeat the outage on whatever replaced it,
+    // so each client waits half the step plus up to half again — here the
+    // middle of that, because the harness fixes the roll at 0.5.
+    const h = harness();
+    open(h).onclose?.({});
+
+    vi.advanceTimersByTime(6);
+    expect(h.sockets).toHaveLength(1);
+    vi.advanceTimersByTime(2);
+    expect(h.sockets).toHaveLength(2);
+    h.live.close();
+  });
+
+  it('treats "going away" as a restart rather than an outage', () => {
+    // 1001 is the server saying it is stopping — a deploy, or a socket tier
+    // being scaled down. Nothing failed, so the backoff ladder is not climbed:
+    // a player who read OFFLINE and waited ten seconds for a server that was
+    // already back would be told something untrue about a planned restart.
+    const h = harness();
+    open(h).onclose?.({ code: 1001 });
+    vi.advanceTimersByTime(50);
+    const second = open(h);
+    second.onclose?.({ code: 1001 });
+    vi.advanceTimersByTime(50);
+    open(h);
+
+    expect(h.sockets).toHaveLength(3);
+    expect(h.connections).toEqual([
+      'CONNECTED',
+      'RECONNECTING',
+      'CONNECTED',
+      'RECONNECTING',
+      'CONNECTED',
+    ]);
+    h.live.close();
+  });
+
+  it('spreads a planned reconnect over the window rather than racing back', () => {
+    // The whole fleet is told at once, so what matters is not how fast one
+    // client returns but how far apart they all do.
+    const h = harness();
+    open(h).onclose?.({ code: 1001 });
+
+    vi.advanceTimersByTime(49);
+    expect(h.sockets).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(h.sockets).toHaveLength(2);
     h.live.close();
   });
 
