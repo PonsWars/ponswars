@@ -1641,7 +1641,7 @@ export function WorldScene(): JSX.Element {
       {/* Depth through atmosphere: the far edge of the world fades into the
           void rather than ending at a hard line (§38.10). Pulled in from 3000
           so the boundary is felt before it is reached. */}
-      <fog attach="fog" args={['#05080b', 700, 2_600]} />
+      <fog attach="fog" args={[VOID_SKY.fog, 700, 2_600]} />
       <ambientLight intensity={0.22} />
       {/* Cold sky above and the cloud's own teal below, so the rock under an
           island reads as rock lit from the weather rather than a black cut-out. */}

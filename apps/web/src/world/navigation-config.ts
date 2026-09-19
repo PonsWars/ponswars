@@ -165,4 +165,14 @@ export const VOID_SKY = {
   bottom: '#04080d',
   /** Cloud gathered at the horizon — the same weather as the sea below it. */
   wisp: '#1b3d52',
+  /**
+   * What distance fades a thing toward: the sky it stands against.
+   *
+   * This used to be the near-black clear colour, which the sky dome covers
+   * entirely. Everything far away faded to *darker* than the sky behind it,
+   * and the islets drifting past the world read as black paper cut-outs
+   * rather than rock seen through air (§38.10). Between the top of the sky and
+   * its horizon, because that band is where the far things are seen.
+   */
+  fog: '#0a1823',
 } as const;
