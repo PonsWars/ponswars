@@ -1,4 +1,5 @@
 export * from './camera.js';
+export * from './frame-health.js';
 export * from './island.js';
 export * from './lod.js';
 export * from './navigation.js';

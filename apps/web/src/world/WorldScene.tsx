@@ -63,6 +63,7 @@ import { SectorLabel } from './SectorLabel.js';
 import { Traffic } from './Traffic.js';
 import { WorldInput } from './WorldInput.js';
 import { WorldLens } from './WorldLens.js';
+import { FrameGovernor } from './FrameGovernor.js';
 import { WorldLighting } from './WorldLighting.js';
 
 /**
@@ -1674,6 +1675,9 @@ export function WorldScene(): JSX.Element {
 
       <WorldInput />
       <WorldLens />
+      {/* Drops the quality tier when the device cannot hold the frame budget,
+          and climbs back when it can (§82.2). */}
+      <FrameGovernor />
 
       <MarketCore />
       <Routes battles={battles} />
