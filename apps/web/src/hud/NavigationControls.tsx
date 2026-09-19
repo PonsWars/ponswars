@@ -30,7 +30,19 @@ export function NavigationControls(): JSX.Element {
   const setQuality = useSession((state) => state.setQuality);
 
   return (
-    <div style={{ display: 'flex', gap: 'var(--pw-space-2)', alignItems: 'stretch' }}>
+    <div
+      style={{
+        display: 'flex',
+        gap: 'var(--pw-space-2)',
+        alignItems: 'stretch',
+        // Wraps, and keeps to the right as it wraps. At phone width these five
+        // are wider than the screen, and a row that cannot fit its children
+        // puts the last of them past the edge — where the graphics control
+        // went, clipped and unreachable, the moment it was added (§42.16).
+        flexWrap: 'wrap',
+        justifyContent: 'flex-end',
+      }}
+    >
       <button
         type="button"
         style={{ ...controlStyle, fontSize: 18 }}
