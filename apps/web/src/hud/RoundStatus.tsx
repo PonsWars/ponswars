@@ -106,8 +106,18 @@ const phaseStyle = {
  *
  * Renders nothing when the phase has no deadline. §25's finalization takes as
  * long as it takes, and a timer there would be a guess presented as a promise.
+ *
+ * `namesFinalPush` is for the levels where the round panel is not shown
+ * (§37.6): inside a sector and on a battlefield the countdown is all the HUD
+ * has of the round, and those are the levels a player watching the last thirty
+ * seconds is at. §13.5 has them say `FINAL PUSH`; at the global view the round
+ * panel already does, and saying it twice side by side would be noise.
  */
-export function Countdown(): JSX.Element | null {
+export function Countdown({
+  namesFinalPush = false,
+}: {
+  readonly namesFinalPush?: boolean;
+}): JSX.Element | null {
   const round = useSession((state) => state.round);
   const clockOffsetMs = useSession((state) => state.clockOffsetMs);
   const now = useSecondTick();
@@ -122,10 +132,13 @@ export function Countdown(): JSX.Element | null {
   }
 
   const remaining = view.countdownTarget - (now + clockOffsetMs);
+  const pushing = namesFinalPush && inFinalPush(round.state, round.clock, now + clockOffsetMs);
 
   return (
     <div style={panelStyle}>
-      <div style={captionStyle}>{view.countdownCaption}</div>
+      <div style={pushing ? { ...captionStyle, color: 'var(--pw-warning)' } : captionStyle}>
+        {pushing ? 'FINAL PUSH' : view.countdownCaption}
+      </div>
       {/*
         Tabular numerals so the countdown does not jitter as digits change
         (§36.12, design tokens §5). A player has one minute to decide (§3.1); a

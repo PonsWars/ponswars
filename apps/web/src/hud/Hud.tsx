@@ -82,7 +82,7 @@ export function Hud({ onNavigate }: { readonly onNavigate: (next: Route) => void
       >
         <Live>
           {budget.roundState ? <RoundStatus /> : null}
-          {budget.countdown ? <Countdown /> : null}
+          {budget.countdown ? <Countdown namesFinalPush={!budget.roundState} /> : null}
         </Live>
         <Live>
           {/* One bar, the same one every other surface uses (§80.4). Only at
