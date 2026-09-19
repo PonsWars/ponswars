@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { sectorGlows } from './sector-glow.js';
+import {
+  afterglow,
+  RESULT_AFTERGLOW_MS,
+  sectorGlows,
+  WEATHER_CALM,
+  WEATHER_FINAL_PUSH,
+  WEATHER_RESULT,
+  weatherBurn,
+} from './sector-glow.js';
 
 /**
  * What the weather is told about the battles above it (§38.10, §36.15).
@@ -68,5 +76,66 @@ describe('the light a sector throws into the weather', () => {
     // rather than throwing one nobody chose.
     expect(sectorGlows([battle({ sectorIndex: 9 })], POSITIONS)).toEqual([]);
     expect(sectorGlows([battle({ left: 'NOPE' })], POSITIONS)).toEqual([]);
+  });
+});
+
+describe('how hard the weather burns through a round (§38.6)', () => {
+  it('is calm before the lock, full once live, and higher again in the final push', () => {
+    expect(weatherBurn('PICK_OPEN', false)).toBe(WEATHER_CALM);
+    expect(weatherBurn('BATTLE_LIVE', false)).toBe(1);
+    expect(weatherBurn('BATTLE_LIVE', true)).toBe(WEATHER_FINAL_PUSH);
+    expect(WEATHER_FINAL_PUSH).toBeGreaterThan(1);
+  });
+
+  it('does not push a round that is not live, whatever the clock says', () => {
+    expect(weatherBurn('FINALIZING', true)).toBe(WEATHER_CALM);
+    expect(weatherBurn(null, true)).toBe(WEATHER_CALM);
+  });
+});
+
+describe("the winners' afterglow (§38.6)", () => {
+  const victory = { at: 1_000_000, sectors: { 1: 'NVDA', 3: 'TSLA' } };
+
+  it("puts each winner's light on the sector it was won on", () => {
+    // Slots are sectors: the next round may put different factions on these
+    // rocks a second later, and the winner's light must not land on the wrong one.
+    const glows = afterglow(victory, POSITIONS, victory.at) ?? [];
+
+    expect(glows.map((glow) => glow.sectorIndex).sort()).toEqual([1, 3]);
+    const nvda = glows.find((glow) => glow.sectorIndex === 1);
+    expect(nvda).toMatchObject({ x: 100, z: 0, hold: 1 });
+    // Wholly the winner's colour: there is no frontline now, only a result.
+    expect(nvda?.left).toBe(nvda?.right);
+  });
+
+  it('burns brightest at the finish and fades to nothing', () => {
+    const at = (elapsed: number): number =>
+      afterglow(victory, POSITIONS, victory.at + elapsed)?.[0]?.burn ?? 0;
+
+    expect(at(0)).toBe(WEATHER_RESULT);
+    expect(at(RESULT_AFTERGLOW_MS / 2)).toBeLessThan(at(0));
+    expect(at(RESULT_AFTERGLOW_MS - 1)).toBeLessThan(at(RESULT_AFTERGLOW_MS / 2));
+    expect(afterglow(victory, POSITIONS, victory.at + RESULT_AFTERGLOW_MS)).toBeNull();
+  });
+
+  it('declares nothing before the round has finalized', () => {
+    // §13: the winner is never shown ahead of ROUND_FINALIZED, and an instant
+    // before the victory was recorded is exactly that.
+    expect(afterglow(victory, POSITIONS, victory.at - 1)).toBeNull();
+    expect(afterglow(null, POSITIONS, victory.at)).toBeNull();
+  });
+
+  it("leaves a voided sector to the next round's light", () => {
+    // A void has no winner, so it is simply absent from the victory — and a
+    // sector absent from it keeps whatever the new round gives it.
+    const glows = afterglow(victory, POSITIONS, victory.at) ?? [];
+    expect(glows.some((glow) => glow.sectorIndex === 0)).toBe(false);
+  });
+});
+
+describe("a sector's slot", () => {
+  it('is its index, not its place in the list', () => {
+    const glows = sectorGlows([battle({ sectorIndex: 4 }), battle({ sectorIndex: 2 })], POSITIONS);
+    expect(glows.map((glow) => glow.sectorIndex)).toEqual([4, 2]);
   });
 });

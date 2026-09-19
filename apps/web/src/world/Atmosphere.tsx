@@ -2,8 +2,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, type JSX } from 'react';
 import { Color, ShaderMaterial, Vector3 } from 'three';
 import { useSession } from '../state/session.js';
-import { SECTOR_POSITIONS } from './layout.js';
-import { sectorGlows } from './sector-glow.js';
+import { useSectorLight } from './useSectorLight.js';
 import { VOID_SKY } from './navigation-config.js';
 
 /**
@@ -100,19 +99,8 @@ const GLOW_REACH = 460;
 /** How much of the deck's brightness a sector at full momentum may add. */
 const GLOW_GAIN = 0.45;
 
-/**
- * How much of a sector's light reaches the deck before the fighting starts.
- *
- * §38.6 makes Pick Phase comparatively calm and the locked round the moment
- * everything comes on at once. The sectors are still lit — they are staging,
- * not dark — but the weather only burns when the battles do.
- */
-const CALM = 0.3;
-
 export function CloudSea(): JSX.Element {
   const reducedMotion = useSession((state) => state.reducedMotion);
-  const battles = useSession((state) => state.battles);
-  const roundState = useSession((state) => state.round?.state ?? null);
 
   // Paired with the layer that configures it, rather than a parallel array the
   // render then indexes into: an index lookup is optional by type, and a mesh
@@ -206,38 +194,17 @@ export function CloudSea(): JSX.Element {
     [sheets],
   );
 
-  /**
-   * The light each sector is throwing, rewritten in place.
-   *
-   * An effect rather than a frame hook: it changes when a battle's momentum or
-   * frontline changes, which is about once a second (§23.1), and writing five
-   * vectors sixty times a second to say the same thing would be work for
-   * nothing. `Vector3` and `Color` are mutated rather than replaced, because
-   * three reads the same objects it was handed at compile.
-   */
-  useEffect(() => {
-    const glows = sectorGlows(battles, SECTOR_POSITIONS);
-    const burning = roundState === 'BATTLE_LIVE' ? 1 : CALM;
-    for (const sheet of sheets) {
-      const where = sheet.material.uniforms['uSector']?.value as Vector3[] | undefined;
-      const colour = sheet.material.uniforms['uSectorColour']?.value as Color[] | undefined;
-      if (where === undefined || colour === undefined) {
-        continue;
-      }
-      for (let index = 0; index < GLOWS; index += 1) {
-        const glow = glows[index];
-        // A sector with no battle in it throws nothing, rather than throwing
-        // the last battle's colour into the next round's weather.
-        where[index]?.set(glow?.x ?? 0, glow?.z ?? 0, (glow?.strength ?? 0) * burning);
-        colour[index]?.set(glow?.left ?? '#000000');
-        if (glow !== undefined) {
-          // Mixed by the frontline: the side holding more of the field puts
-          // more of its colour in the cloud (§13.2).
-          colour[index]?.lerp(new Color(glow.right), 1 - glow.hold);
-        }
-      }
-    }
-  }, [battles, roundState, sheets]);
+  // The five sectors' light, the same rule the banks read (`useSectorLight`).
+  useSectorLight(
+    useMemo(
+      () =>
+        sheets.map(({ material }) => ({
+          where: material.uniforms['uSector']?.value as Vector3[],
+          colour: material.uniforms['uSectorColour']?.value as Color[],
+        })),
+      [sheets],
+    ),
+  );
 
   useFrame((state) => {
     if (reducedMotion) {

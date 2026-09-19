@@ -10,6 +10,7 @@ import {
   connectionBanner,
   formatCountdown,
   formatOpensAt,
+  inFinalPush,
   roundView,
   voidNotice,
 } from './round-phase.js';
@@ -154,5 +155,31 @@ describe('what a player is told when their battle voided', () => {
     expect(voidNotice({ reason: 'MARKET_HALT', cardUseRestored: false })[0]).toContain(
       'market halted',
     );
+  });
+});
+
+describe('the final push (§13.5)', () => {
+  it('is the last thirty seconds of a live battle, and not a moment more', () => {
+    const end = CLOCK.battleEndAt;
+
+    expect(inFinalPush('BATTLE_LIVE', CLOCK, end - 30_001)).toBe(false);
+    expect(inFinalPush('BATTLE_LIVE', CLOCK, end - 30_000)).toBe(true);
+    expect(inFinalPush('BATTLE_LIVE', CLOCK, end - 1)).toBe(true);
+    // At the cutoff the battle is over. A label that stayed up past it would be
+    // telling a player they could still watch something change.
+    expect(inFinalPush('BATTLE_LIVE', CLOCK, end)).toBe(false);
+  });
+
+  it('needs the round to actually be live, whatever the clock says', () => {
+    // A battle still finalizing is inside the window by time and outside it by
+    // state — and the state is what the server said.
+    for (const state of ROUND_STATES.filter((candidate) => candidate !== 'BATTLE_LIVE')) {
+      expect(inFinalPush(state, CLOCK, CLOCK.battleEndAt - 5_000)).toBe(false);
+    }
+  });
+
+  it('takes a clock offset with a fraction of a millisecond in it', () => {
+    // A measured offset is not a whole number, and a timestamp must be.
+    expect(inFinalPush('BATTLE_LIVE', CLOCK, CLOCK.battleEndAt - 10_000.4)).toBe(true);
   });
 });

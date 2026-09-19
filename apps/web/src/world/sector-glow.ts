@@ -1,5 +1,5 @@
 import { FACTION_ACCENT } from '@ponswars/ui-tokens';
-import type { MomentumState } from '@ponswars/shared-types';
+import type { MomentumState, RoundState } from '@ponswars/shared-types';
 
 /**
  * What each sector throws down into the weather (§38.10, §36.14, §36.15).
@@ -22,6 +22,12 @@ import type { MomentumState } from '@ponswars/shared-types';
  */
 
 export interface SectorGlow {
+  /**
+   * Which sector this is — and so which slot of a shader's arrays it goes in.
+   * Slots are sectors, never list positions, so a winner's afterglow and the
+   * next round's light can never land in each other's place.
+   */
+  readonly sectorIndex: number;
   /** Where the sector stands, in world units. */
   readonly x: number;
   readonly z: number;
@@ -98,6 +104,7 @@ export function sectorGlows(
     }
     return [
       {
+        sectorIndex: battle.sectorIndex,
         x: at.x,
         z: at.z,
         left,
@@ -114,4 +121,100 @@ function clamp(value: number): number {
     return 0.5;
   }
   return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+/**
+ * How hard the weather burns in each part of a round (§38.6).
+ *
+ * - **Pick Phase and anything before the lock** — calm. The sectors are
+ *   staging, not dark, but the weather only burns when the battles do.
+ * - **Live** — the full light the momentum rule gives.
+ * - **Final push** — higher again: *world lighting and intensity rise*. The
+ *   last thirty seconds are the moment worth looking up for, and §13.5 is
+ *   explicit that nothing about the battle changes with them — this is light,
+ *   and only light.
+ *
+ * One rule for every layer of weather, rather than a copy in each: the deck and
+ * the banks disagreeing about which phase it is would be a sky in two moods.
+ * `CALIBRATE` (§59.4).
+ */
+export const WEATHER_CALM = 0.3;
+export const WEATHER_FINAL_PUSH = 1.6;
+
+export function weatherBurn(state: RoundState | null, finalPush: boolean): number {
+  if (state !== 'BATTLE_LIVE') {
+    return WEATHER_CALM;
+  }
+  return finalPush ? WEATHER_FINAL_PUSH : 1;
+}
+
+/**
+ * Who won each sector of the round that just finished (§38.6).
+ *
+ * Taken the moment `ROUND_FINALIZED` arrives and never before it — the winner
+ * is never declared ahead of the backend (§13) — while the finishing round is
+ * still the one the client holds, so each result can be put back on the sector
+ * it was fought on. A voided battle has no winner and is simply absent.
+ */
+export interface Victory {
+  /** Server time the round finalized, as the client observed it. */
+  readonly at: number;
+  /** Sector index → the winning ticker. */
+  readonly sectors: Readonly<Record<number, string>>;
+}
+
+/**
+ * How long the winners' light holds after a round finalizes, fading as it goes.
+ *
+ * §38.6: *the winning faction temporarily dominates sector lighting*. §38.7
+ * starts the reshuffle with "results finalize", and the client begins tearing
+ * the field down the moment the next round arrives — so without this the result
+ * got no time at all. It lingers through the teardown instead, the victors'
+ * light fading as their field is dismantled. `CALIBRATE` (§59.4): six seconds
+ * was tried first, and on the running world it was gone before a player who
+ * glanced up at the finish could see whose light it was.
+ */
+export const RESULT_AFTERGLOW_MS = 10_000;
+export const WEATHER_RESULT = 1.5;
+
+/**
+ * The winners' light at an instant, or `null` once the afterglow has passed.
+ *
+ * Each sector a winner holds glows wholly in the winner's accent — nothing
+ * mixed by a frontline now, because there is no frontline, only a result —
+ * burning brightest at the moment of finalization and fading to nothing.
+ */
+export function afterglow(
+  victory: Victory | null,
+  positions: readonly { readonly x: number; readonly z: number }[],
+  now: number,
+): readonly (SectorGlow & { readonly burn: number })[] | null {
+  if (victory === null) {
+    return null;
+  }
+  const elapsed = now - victory.at;
+  if (elapsed < 0 || elapsed >= RESULT_AFTERGLOW_MS) {
+    return null;
+  }
+  const fade = 1 - elapsed / RESULT_AFTERGLOW_MS;
+  return Object.entries(victory.sectors).flatMap(([key, winner]) => {
+    const sectorIndex = Number(key);
+    const at = positions[sectorIndex];
+    const accent = ACCENTS[winner];
+    if (at === undefined || accent === undefined) {
+      return [];
+    }
+    return [
+      {
+        sectorIndex,
+        x: at.x,
+        z: at.z,
+        left: accent,
+        right: accent,
+        hold: 1,
+        strength: 1,
+        burn: WEATHER_RESULT * fade,
+      },
+    ];
+  });
 }

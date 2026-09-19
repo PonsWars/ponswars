@@ -13,7 +13,7 @@ import { useSession } from '../state/session.js';
 import { NOISE_GLSL } from './Atmosphere.js';
 import { cloudBanks, type CloudIsland, type CloudOptions } from './clouds.js';
 import { MARKET_CORE, SECTOR_ISLAND_RADIUS, SECTOR_POSITIONS } from './layout.js';
-import { sectorGlows } from './sector-glow.js';
+import { useSectorLight } from './useSectorLight.js';
 import { VOID_SKY } from './navigation-config.js';
 
 /**
@@ -69,14 +69,9 @@ const GLOW_REACH = 340;
 /** How much colour a sector at full momentum puts into a bank beside it. */
 const GLOW_GAIN = 0.3;
 
-/** How much of it reaches the weather before the fighting starts (§38.6). */
-const CALM = 0.3;
-
 export function CloudBanks(): JSX.Element {
   const quality = useSession((state) => state.quality);
   const reducedMotion = useSession((state) => state.reducedMotion);
-  const battles = useSession((state) => state.battles);
-  const roundState = useSession((state) => state.round?.state ?? null);
   const density = DENSITY[quality];
 
   const geometry = useMemo(() => {
@@ -218,24 +213,18 @@ export function CloudBanks(): JSX.Element {
     [material],
   );
 
-  /** The light the sectors are throwing, rewritten when a battle changes. */
-  useEffect(() => {
-    const glows = sectorGlows(battles, SECTOR_POSITIONS);
-    const burning = roundState === 'BATTLE_LIVE' ? 1 : CALM;
-    const where = material.uniforms['uSector']?.value as Vector3[] | undefined;
-    const colour = material.uniforms['uSectorColour']?.value as Color[] | undefined;
-    if (where === undefined || colour === undefined) {
-      return;
-    }
-    for (let index = 0; index < GLOWS; index += 1) {
-      const glow = glows[index];
-      where[index]?.set(glow?.x ?? 0, glow?.z ?? 0, (glow?.strength ?? 0) * burning);
-      colour[index]?.set(glow?.left ?? '#000000');
-      if (glow !== undefined) {
-        colour[index]?.lerp(new Color(glow.right), 1 - glow.hold);
-      }
-    }
-  }, [battles, roundState, material]);
+  // The five sectors' light, the same rule the deck below reads.
+  useSectorLight(
+    useMemo(
+      () => [
+        {
+          where: material.uniforms['uSector']?.value as Vector3[],
+          colour: material.uniforms['uSectorColour']?.value as Color[],
+        },
+      ],
+      [material],
+    ),
+  );
 
   useFrame((state) => {
     if (reducedMotion) {

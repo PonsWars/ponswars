@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import { useSession } from '../state/session.js';
-import { formatCountdown, roundView, voidNotice } from './round-phase.js';
+import { formatCountdown, inFinalPush, roundView, voidNotice } from './round-phase.js';
 import { useSecondTick } from './useSecondTick.js';
 import { captionStyle, panelStyle } from './styles.js';
 
@@ -14,6 +14,8 @@ import { captionStyle, panelStyle } from './styles.js';
  */
 export function RoundStatus(): JSX.Element {
   const round = useSession((state) => state.round);
+  const clockOffsetMs = useSession((state) => state.clockOffsetMs);
+  const now = useSecondTick();
   // The player's own battle, if the round that just finished voided it. A
   // spectator has no charge to get back, and §5 makes spectating the normal
   // case — so this line is for the wallet that spent one.
@@ -32,6 +34,10 @@ export function RoundStatus(): JSX.Element {
   }
 
   const view = roundView(round.state, round.clock);
+  // §13.5: the last thirty seconds say so. The same five battles and the same
+  // rules — no multiplier, nothing a pick could still change — which is why it
+  // is a label and a colour and not a new phase.
+  const pushing = inFinalPush(round.state, round.clock, now + clockOffsetMs);
 
   return (
     <div style={panelStyle}>
@@ -41,10 +47,14 @@ export function RoundStatus(): JSX.Element {
           ...phaseStyle,
           // A voided round is called out rather than blending into the phase
           // sequence. §4.4 never revives one, and nothing further is coming.
-          color: view.voided ? 'var(--pw-danger)' : 'var(--pw-text-2)',
+          color: view.voided
+            ? 'var(--pw-danger)'
+            : pushing
+              ? 'var(--pw-warning)'
+              : 'var(--pw-text-2)',
         }}
       >
-        {view.label}
+        {pushing ? 'FINAL PUSH' : view.label}
       </div>
       {notice === undefined ? null : (
         // The player's own battle, and only theirs: §110.6's sentence is about

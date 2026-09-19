@@ -50,6 +50,7 @@ import {
   WORLD_BOUNDARY_RADIUS,
 } from '../world/layout.js';
 import { NAVIGATION } from '../world/navigation-config.js';
+import type { Victory } from '../world/sector-glow.js';
 
 /**
  * What a `BATTLE_VOID` said about one battle (§48.3, §110.6).
@@ -280,6 +281,15 @@ interface SessionState {
    */
   readonly lastVoids: Readonly<Record<string, BattleVoidNotice>>;
   /**
+   * Who won each sector of the round that just finished (§38.6).
+   *
+   * Set when `ROUND_FINALIZED` arrives, while the finishing round is still the
+   * one held here, so each result can be put back on the sector it was fought
+   * on — the next round may put different factions there a second later. What
+   * the world's light reads for the afterglow; nothing else.
+   */
+  readonly lastVictory: Victory | null;
+  /**
    * Server time minus local time, in milliseconds (§23.5).
    *
    * Every countdown is projected through this. The device clock is never
@@ -427,6 +437,7 @@ export const useSession = create<SessionState>((set, get) => ({
   pickError: null,
   lastResults: {},
   lastVoids: {},
+  lastVictory: null,
   clockOffsetMs: 0,
 
   setBattles: (battles) => {
@@ -499,7 +510,17 @@ export const useSession = create<SessionState>((set, get) => ({
 
   setLastResults: (results, voided) => {
     const kept = new Set(voided ?? []);
+    const { battles, clockOffsetMs } = get();
+    const sectors: Record<number, string> = {};
+    for (const result of results) {
+      const battle = battles.find((candidate) => candidate.battleId === result.battleId);
+      if (battle !== undefined) {
+        sectors[battle.sectorIndex] = result.winner;
+      }
+    }
     set({
+      lastVictory:
+        Object.keys(sectors).length === 0 ? null : { at: Date.now() + clockOffsetMs, sectors },
       lastResults: Object.fromEntries(results.map((result) => [result.battleId, result])),
       // Only the voids this round named. A notice for a battle the round does
       // not call voided belongs to an older round, and a refund announced twice

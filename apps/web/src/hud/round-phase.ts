@@ -1,8 +1,10 @@
-import type {
-  CanonicalClock,
-  RoundState,
-  UtcTimestamp,
-  VoidReasonCategory,
+import {
+  isFinalPush,
+  utcTimestamp,
+  type CanonicalClock,
+  type RoundState,
+  type UtcTimestamp,
+  type VoidReasonCategory,
 } from '@ponswars/shared-types';
 
 /**
@@ -97,6 +99,25 @@ export function roundView(state: RoundState, clock: CanonicalClock): RoundView {
         voided: true,
       };
   }
+}
+
+/**
+ * Whether the round is in its final push (§13.5, §38.6).
+ *
+ * The last thirty seconds of a live battle, from the locked clock rather than
+ * a local timer: `isFinalPush` decides the window, and this adds the one thing
+ * it cannot know — that the round is actually live. A battle still locking, or
+ * one already finalizing, is not pushing whatever the clock says.
+ *
+ * Presentation only. §13.5 is explicit that the final push carries no gameplay
+ * multiplier, and nothing that reads this changes a number.
+ */
+export function inFinalPush(state: RoundState, clock: CanonicalClock, serverNow: number): boolean {
+  // Floored: a measured clock offset can carry a fraction of a millisecond, and
+  // a timestamp is whole milliseconds by construction.
+  return (
+    state === 'BATTLE_LIVE' && isFinalPush(clock, utcTimestamp(Math.floor(Math.max(serverNow, 0))))
+  );
 }
 
 /**

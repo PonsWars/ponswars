@@ -12,6 +12,7 @@ import {
 } from 'three';
 import { useSession } from '../state/session.js';
 import { DISTRICT_CENTRE_X, HOLO_BANDS, tapeText, type HoloBand } from './holo-ticker.js';
+import { useFinalPush } from './useFinalPush.js';
 
 /**
  * Holographic ticker tape round a district (§38.11, §36.4).
@@ -45,6 +46,8 @@ const TAPE_FONT = '600 38px "IBM Plex Mono", "JetBrains Mono", ui-monospace, mon
  */
 const OPACITY_CALM = 0.45;
 const OPACITY_LIVE = 0.8;
+/** Full, for the last thirty seconds (§38.6: intensity rises). */
+const OPACITY_FINAL_PUSH = 1;
 
 /** Only sectors near the camera draw tape; a far one is an outline (§37.6). */
 const DRAWS: Readonly<Record<DetailLevel, boolean>> = {
@@ -96,6 +99,7 @@ export function HoloTicker({
   readonly live: boolean;
 }): JSX.Element | null {
   const reducedMotion = useSession((state) => state.reducedMotion);
+  const pushing = useFinalPush();
   const draws = DRAWS[detail];
 
   const canvas = useMemo(() => {
@@ -172,10 +176,11 @@ export function HoloTicker({
   }, [canvas, bands, ticker]);
 
   useEffect(() => {
+    const level = !live ? OPACITY_CALM : pushing ? OPACITY_FINAL_PUSH : OPACITY_LIVE;
     for (const { band, material } of bands) {
-      material.opacity = (live ? OPACITY_LIVE : OPACITY_CALM) * band.strength;
+      material.opacity = level * band.strength;
     }
-  }, [bands, live]);
+  }, [bands, live, pushing]);
 
   useEffect(
     () => () => {
