@@ -205,18 +205,27 @@ export function sectorPose(index: number): CameraPose {
  */
 export function battlefieldPose(index: number): CameraPose {
   const sector = sectorAt(index);
-  // Outside the rim, not over it. At 62 units out this stood in the middle of
-  // the island — fine when a sector was a disc with four boxes on it, and a
-  // view of the inside of a tower once it had a skyline.
-  const outward = 1 + (SECTOR_ISLAND_RADIUS + 120) / SECTOR_ORBIT_RADIUS;
+  const outward = 1 + BATTLEFIELD_VIEW.out / SECTOR_ORBIT_RADIUS;
   return {
-    // Low enough to be under the skyline in feel and just above it in fact:
-    // both districts have to fit the frame, and a steeper look-down puts the
-    // far one's towers off the top of it.
-    position: vec3(sector.x * outward, sector.y + 110, sector.z * outward),
+    position: vec3(sector.x * outward, sector.y + BATTLEFIELD_VIEW.up, sector.z * outward),
     target: sector,
   };
 }
+
+/**
+ * Where the battlefield camera stands, in the sector's own frame: this far out
+ * from its centre along the sector's outward axis — local +z — and this far up.
+ *
+ * Outside the rim, not over it. At 62 units out this stood in the middle of the
+ * island — fine when a sector was a disc with four boxes on it, and a view of
+ * the inside of a tower once it had a skyline. Low enough to be under the
+ * skyline in feel and just above it in fact: both districts have to fit the
+ * frame, and a steeper look-down puts the far one's towers off the top of it.
+ *
+ * Exported because the terrain has to keep out of its sightline
+ * (`sector-identity.ts`), and two copies of where the camera is would drift.
+ */
+export const BATTLEFIELD_VIEW = { out: SECTOR_ISLAND_RADIUS + 120, up: 110 } as const;
 
 /**
  * Camera pose for a cinematic close-up (§37.2 level four).

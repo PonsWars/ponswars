@@ -1,3 +1,5 @@
+import { BATTLEFIELD_VIEW } from './layout.js';
+
 /**
  * What makes one sector a different place from the next (§38.4, §38.9).
  *
@@ -16,8 +18,8 @@
  * sector, and terrain that changed with the matchup would be a second, worse
  * readout of something §13 already says.
  *
- * Pure placement data, no three. The keep-out below is the part worth testing,
- * and a test should not need a renderer to check it.
+ * Pure placement data, no three. The keep-outs below are the part worth
+ * testing, and a test should not need a renderer to check them.
  */
 
 export const SECTOR_IDENTITY_NAMES = [
@@ -38,7 +40,11 @@ export interface TerrainBlock {
   readonly rotation: number;
   /** Across the neutral stone range: variation, never faction colour (§38.3). */
   readonly tone: number;
-  /** Whether it carries a data channel's light (§38.11). */
+  /**
+   * Whether a data channel runs along its top (§38.11).
+   *
+   * The block itself stays stone either way — see `channelStrip`.
+   */
   readonly lit: boolean;
 }
 
@@ -119,7 +125,63 @@ export function clearOfBattle(block: TerrainBlock): boolean {
 }
 
 /** The deck's surface, which blocks stand on or are cut into. */
-const DECK_Y = 11;
+export const DECK_Y = 11;
+
+/**
+ * The least a block keeps of itself when the sightline cuts it down: a kerb,
+ * still there to be seen, rather than a block that vanished.
+ */
+const MIN_BLOCK_HEIGHT = 1.5;
+
+/**
+ * How high terrain may stand at a distance `z` out along the camera's side,
+ * without standing in front of the battle (§36.15, §38.9).
+ *
+ * The battlefield camera sits outward of the sector (`BATTLEFIELD_VIEW`), so
+ * the flank nearest it — local +z — is between it and the fight. The
+ * rectangle keep-out stopped anything standing *on* the battle ground and
+ * nothing standing tall in front of it: a ridge pier thirty units high stood on
+ * that flank, square in the camera's line to the near end of the frontline.
+ *
+ * The line here runs from the camera down to the near edge of the battle
+ * ground at deck level. Anything under it leaves the whole ground in view.
+ * The far flank is behind the battle from this camera, so it keeps its height —
+ * the ridge now rises behind the fight rather than in front of it, which is
+ * also the better picture.
+ */
+export function sightlineCeiling(z: number): number {
+  const edge = BATTLE_GROUND.halfDepth;
+  const share = (z - edge) / (BATTLEFIELD_VIEW.out - edge);
+  return DECK_Y + Math.max(share, 0) * (BATTLEFIELD_VIEW.up - DECK_Y);
+}
+
+/** A block cut down, if it must be, to stand under the camera's sightline. */
+function underSightline(block: TerrainBlock): TerrainBlock {
+  const [x, y, z] = block.position;
+  if (z <= 0) {
+    return block;
+  }
+  const [width, height, length] = block.size;
+  // The block's nearest reach toward the battle along z, from its real corners:
+  // local z (its length) runs along (sin r, cos r) and local x along
+  // (cos r, −sin r).
+  const cos = Math.abs(Math.cos(block.rotation));
+  const sin = Math.abs(Math.sin(block.rotation));
+  const nearZ = z - (cos * length + sin * width) / 2;
+  const bottom = y - height / 2;
+  const top = Math.min(
+    y + height / 2,
+    Math.max(sightlineCeiling(nearZ), bottom + MIN_BLOCK_HEIGHT),
+  );
+  if (top >= y + height / 2) {
+    return block;
+  }
+  return {
+    ...block,
+    position: [x, (bottom + top) / 2, z],
+    size: [width, top - bottom, length],
+  };
+}
 
 function generator(seed: number): () => number {
   let state = (seed * 2_654_435_761) >>> 0 || 0x9e3779b9;
@@ -178,7 +240,7 @@ function ridge(random: () => number): TerrainBlock[] {
       size: [10 + random() * 6, height, 16 + random() * 10] as const,
       rotation: angle,
       tone: 0.35 + random() * 0.3,
-      lit: index % 4 === 0,
+      lit: index % 2 === 0,
     };
   });
 }
@@ -186,20 +248,29 @@ function ridge(random: () => number): TerrainBlock[] {
 /**
  * A data canyon.
  *
- * Cut into the deck rather than built on it: shallow walls set below the
- * surface and lit along their length, with a lip on the outside. §38.11 asks
- * for market data as environment — routing and energy, never charts on ground.
+ * Low: a floor of channels laid flat across the deck and lit along their
+ * length, with a lip on the outside. §38.11 asks for market data as
+ * environment — routing and energy, never charts on ground.
+ *
+ * The channels used to be sunk into the deck with their tops level with it,
+ * which the deck — solid, with no cut in it — drew straight over: half of them
+ * were invisible and the rest flickered against the paving they shared a plane
+ * with. Laid a little proud of it instead, every one reads as a line of light
+ * in the floor.
  */
+const CHANNEL_FLOOR = 0.6;
+
 function canyon(random: () => number): TerrainBlock[] {
-  return flankAngles(12, random).flatMap((angle, index) => {
-    const depth = 5 + random() * 3;
+  return flankAngles(12, random).flatMap((angle) => {
     return [
       {
-        position: onRing(angle, 0.12 + random() * 0.18, DECK_Y - depth / 2),
-        size: [7 + random() * 4, depth, 22 + random() * 12] as const,
+        // Far enough out that their length clears the battle ground: nearer
+        // in, the keep-out discarded all but two of the twelve.
+        position: onRing(angle, 0.3 + random() * 0.18, DECK_Y + CHANNEL_FLOOR / 2),
+        size: [7 + random() * 4, CHANNEL_FLOOR, 22 + random() * 12] as const,
         rotation: angle,
         tone: 0.12 + random() * 0.12,
-        lit: index % 2 === 0,
+        lit: true,
       },
       {
         position: onRing(angle, 0.62 + random() * 0.22, DECK_Y + 1.6),
@@ -288,6 +359,37 @@ const SHAPES: Readonly<
 };
 
 /**
+ * The line of light a lit block carries: a thin strip set into its top face,
+ * running its length.
+ *
+ * §36.4 asks for *glowing data channels* in dark industrial terrain — light
+ * running through the stone, not the stone made of light. The first version lit
+ * the whole block, and a ridge pier twenty-odd units tall drawn as translucent
+ * teal stood in front of the battlefield camera as a slab of coloured glass,
+ * over the near end of the frontline §36.15 puts first.
+ *
+ * Narrow and shallow on purpose, and a hair proud of the face it sits on, so it
+ * never shares a plane with the stone and flickers against it.
+ */
+export const CHANNEL_WIDTH_SHARE = 0.16;
+export const CHANNEL_LENGTH_SHARE = 0.86;
+export const CHANNEL_DEPTH = 0.35;
+
+export function channelStrip(block: TerrainBlock): {
+  readonly position: readonly [number, number, number];
+  readonly size: readonly [number, number, number];
+  readonly rotation: number;
+} {
+  const [x, y, z] = block.position;
+  const [width, height, length] = block.size;
+  return {
+    position: [x, y + height / 2 + CHANNEL_DEPTH / 2 - 0.1, z],
+    size: [width * CHANNEL_WIDTH_SHARE, CHANNEL_DEPTH, length * CHANNEL_LENGTH_SHARE],
+    rotation: block.rotation,
+  };
+}
+
+/**
  * The identity of one sector, by its index.
  *
  * Deterministic, which is the whole point of §38.4's "geometry stays stable for
@@ -300,6 +402,9 @@ export function sectorIdentity(index: number): SectorIdentity {
   return {
     name,
     label: shape.label,
-    blocks: shape.build(generator(index * 977 + 31)).filter(clearOfBattle),
+    blocks: shape
+      .build(generator(index * 977 + 31))
+      .filter(clearOfBattle)
+      .map(underSightline),
   };
 }

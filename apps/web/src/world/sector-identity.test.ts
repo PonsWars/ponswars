@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { BATTLEFIELD_VIEW } from './layout.js';
 import {
   BASE_GROUND,
   BATTLE_GROUND,
+  channelStrip,
+  CHANNEL_DEPTH,
   DECK_RADIUS,
+  DECK_Y,
   DISTRICT_GROUND,
   KEEP_OUT_RADIUS,
   SECTOR_IDENTITY_NAMES,
   sectorIdentity,
+  type TerrainBlock,
 } from './sector-identity.js';
 
 /**
@@ -115,5 +120,118 @@ describe('a sector as a place', () => {
       expect(blocks.length).toBeGreaterThan(5);
       expect(blocks.length).toBeLessThanOrEqual(32);
     }
+  });
+});
+
+describe('a data channel (§36.4, §38.11)', () => {
+  const lit = SECTORS.flatMap((index) => sectorIdentity(index).blocks.filter((block) => block.lit));
+
+  it('is carried by some of the world', () => {
+    expect(lit.length).toBeGreaterThan(0);
+  });
+
+  it('is a line of light in the stone, not the stone made of light', () => {
+    // The whole block drawn as translucent teal stood in front of the
+    // battlefield camera as a slab of coloured glass.
+    for (const block of lit) {
+      const strip = channelStrip(block);
+      expect(strip.size[0]).toBeLessThan(block.size[0] / 2);
+      expect(strip.size[1]).toBeLessThanOrEqual(CHANNEL_DEPTH);
+      expect(strip.size[2]).toBeLessThanOrEqual(block.size[2]);
+      expect(strip.rotation).toBe(block.rotation);
+    }
+  });
+
+  it('sits on the top face, proud of it, so the two never flicker', () => {
+    for (const block of lit) {
+      const strip = channelStrip(block);
+      const top = block.position[1] + block.size[1] / 2;
+      const stripBottom = strip.position[1] - strip.size[1] / 2;
+      const stripTop = strip.position[1] + strip.size[1] / 2;
+      expect(stripBottom).toBeLessThan(top);
+      expect(stripTop).toBeGreaterThan(top);
+    }
+  });
+
+  it('never lies level with the deck it is laid on', () => {
+    // The canyon's channels were sunk with their tops flush with the deck,
+    // which drew straight over them.
+    for (const block of lit) {
+      expect(block.position[1] + block.size[1] / 2).toBeGreaterThan(DECK_Y);
+    }
+  });
+});
+
+describe('the battle, seen from the battlefield camera (§36.15)', () => {
+  const camera = [0, BATTLEFIELD_VIEW.up, BATTLEFIELD_VIEW.out] as const;
+
+  /** Whether the segment from the camera to a point passes through a block. */
+  function blocks(block: TerrainBlock, to: readonly [number, number, number]): boolean {
+    // Into the block's own frame, where it is an axis-aligned box.
+    const cos = Math.cos(block.rotation);
+    const sin = Math.sin(block.rotation);
+    const local = (p: readonly [number, number, number]): [number, number, number] => {
+      const dx = p[0] - block.position[0];
+      const dz = p[2] - block.position[2];
+      return [dx * cos - dz * sin, p[1] - block.position[1], dx * sin + dz * cos];
+    };
+    const from = local(camera);
+    const end = local(to);
+    let enter = 0;
+    let exit = 1;
+    for (let axis = 0; axis < 3; axis += 1) {
+      const half = (block.size[axis] ?? 0) / 2;
+      const start = from[axis] ?? 0;
+      const step = (end[axis] ?? 0) - start;
+      if (Math.abs(step) < 1e-9) {
+        if (Math.abs(start) > half) {
+          return false;
+        }
+        continue;
+      }
+      const a = (-half - start) / step;
+      const b = (half - start) / step;
+      enter = Math.max(enter, Math.min(a, b));
+      exit = Math.min(exit, Math.max(a, b));
+      if (enter > exit) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // The near edge of the contested ground, and the front of each district —
+  // the ground the frontline and the two armies are read on.
+  const targets: [number, number, number][] = [];
+  for (let x = -BATTLE_GROUND.halfWidth; x <= BATTLE_GROUND.halfWidth; x += 4) {
+    targets.push([x, DECK_Y, BATTLE_GROUND.halfDepth]);
+  }
+  const districtSpan = DISTRICT_GROUND.outerX - DISTRICT_GROUND.innerX;
+  for (let step = 0; step <= districtSpan; step += 4) {
+    const x = DISTRICT_GROUND.innerX + step;
+    targets.push([x, DECK_Y, DISTRICT_GROUND.halfDepth], [-x, DECK_Y, DISTRICT_GROUND.halfDepth]);
+  }
+
+  it('has nothing standing between it and the ground the battle is read on', () => {
+    // The keep-out stopped terrain standing *on* the battle ground and nothing
+    // standing tall in front of it: a ridge pier thirty units high stood square
+    // in this camera's line to the near end of the frontline.
+    for (const index of SECTORS) {
+      for (const block of sectorIdentity(index).blocks) {
+        for (const target of targets) {
+          expect(blocks(block, target), `sector ${String(index)} at ${target.join(',')}`).toBe(
+            false,
+          );
+        }
+      }
+    }
+  });
+
+  it('lets the far side keep its height', () => {
+    // Behind the battle from this camera, a tall ridge is backdrop, not a wall
+    // — and the identity still has to read as a ridge.
+    const ridge = sectorIdentity(0).blocks;
+    const far = ridge.filter((block) => block.position[2] < 0);
+    expect(Math.max(...far.map((block) => block.size[1]))).toBeGreaterThan(20);
   });
 });

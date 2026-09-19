@@ -2,7 +2,7 @@ import { useMemo, type JSX } from 'react';
 import { Color, MeshStandardMaterial } from 'three';
 import type { DetailLevel } from '@ponswars/world-runtime';
 import { InstancedField, type Placement } from './InstancedField.js';
-import { sectorIdentity } from './sector-identity.js';
+import { channelStrip, sectorIdentity } from './sector-identity.js';
 import { withGround } from './ground.js';
 
 /**
@@ -25,8 +25,11 @@ import { withGround } from './ground.js';
 const STONE_DARK = new Color('#1a1f24');
 const STONE_LIGHT = new Color('#3a4149');
 
-/** A data channel's light: the world's own teal, under the bloom threshold. */
-const CHANNEL = '#2f7f8c';
+/**
+ * A data channel's light: the world's own teal, under the bloom threshold.
+ * Opaque — a thin strip of light, not a pane of tinted glass.
+ */
+const CHANNEL = '#3a9aa8';
 
 /** How much of a sector's landscape each detail level draws. */
 const SHARE: Readonly<Record<DetailLevel, number>> = {
@@ -58,9 +61,15 @@ export function SectorTerrain({
       rotation: [0, block.rotation, 0],
     });
     return {
-      stone: kept.filter((block) => !block.lit).map(place),
-      channels: kept.filter((block) => block.lit).map(place),
-      tones: kept.filter((block) => !block.lit).map((block) => block.tone),
+      // Every block is stone. A lit one carries its channel along its top.
+      stone: kept.map(place),
+      channels: kept
+        .filter((block) => block.lit)
+        .map((block): Placement => {
+          const strip = channelStrip(block);
+          return { position: strip.position, scale: strip.size, rotation: [0, strip.rotation, 0] };
+        }),
+      tones: kept.map((block) => block.tone),
     };
   }, [index, share]);
 
@@ -95,7 +104,7 @@ export function SectorTerrain({
           {/* Basic rather than standard: a channel is light, not a lit surface,
               and a material that took the key light would go dark whenever the
               camera came round to its shadow side. */}
-          <meshBasicMaterial key="channel-material" color={CHANNEL} transparent opacity={0.55} />
+          <meshBasicMaterial key="channel-material" color={CHANNEL} />
         </InstancedField>
       ) : null}
     </group>
