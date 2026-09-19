@@ -1,6 +1,9 @@
-import { useMemo, type JSX } from 'react';
-import { Color, MeshStandardMaterial } from 'three';
+import { useFrame } from '@react-three/fiber';
+import { useEffect, useMemo, type JSX } from 'react';
+import { Color, MeshBasicMaterial, MeshStandardMaterial } from 'three';
 import type { DetailLevel } from '@ponswars/world-runtime';
+import { useSession } from '../state/session.js';
+import { withDataFlow } from './data-flow.js';
 import { InstancedField, type Placement } from './InstancedField.js';
 import { channelStrip, sectorIdentity } from './sector-identity.js';
 import { withGround } from './ground.js';
@@ -10,7 +13,8 @@ import { withGround } from './ground.js';
  *
  * `sector-identity.ts` decides the shapes; this draws them. Two fields, so the
  * whole of a sector's landscape is two draw calls however much of it there is:
- * the stone it is cut from, and the data channels running through it.
+ * the stone it is cut from, and the data channels running through it — with
+ * data running down them toward the battle (`data-flow.ts`).
  *
  * The stone takes the same ground shader the plateau does, so a ridge is the
  * same paving and wear as the deck it rises out of rather than a clean box
@@ -88,6 +92,26 @@ export function SectorTerrain({
     return withGround(stoneMaterial, 7);
   }, [tones]);
 
+  // Basic rather than standard: a channel is light, not a lit surface, and a
+  // material that took the key light would go dark whenever the camera came
+  // round to its shadow side.
+  const flow = useMemo(() => withDataFlow(new MeshBasicMaterial({ color: CHANNEL })), []);
+  const reducedMotion = useSession((state) => state.reducedMotion);
+
+  useEffect(
+    () => () => {
+      flow.material.dispose();
+    },
+    [flow],
+  );
+
+  useFrame((_, delta) => {
+    // §83.3: the channels stay lit, and the data stops running.
+    if (!reducedMotion) {
+      flow.time.value += delta;
+    }
+  });
+
   if (share === 0 || (stone.length === 0 && channels.length === 0)) {
     return null;
   }
@@ -101,10 +125,7 @@ export function SectorTerrain({
       {channels.length > 0 ? (
         <InstancedField placements={channels}>
           <boxGeometry key="channel" args={[1, 1, 1]} />
-          {/* Basic rather than standard: a channel is light, not a lit surface,
-              and a material that took the key light would go dark whenever the
-              camera came round to its shadow side. */}
-          <meshBasicMaterial key="channel-material" color={CHANNEL} />
+          <primitive key="channel-material" object={flow.material} attach="material" />
         </InstancedField>
       ) : null}
     </group>
