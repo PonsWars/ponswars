@@ -1,4 +1,5 @@
 import { BATTLEFIELD_VIEW } from './layout.js';
+import { landmarkFootprints } from './sector-landmark.js';
 
 /**
  * What makes one sector a different place from the next (§38.4, §38.9).
@@ -153,6 +154,23 @@ export function sightlineCeiling(z: number): number {
   const edge = BATTLE_GROUND.halfDepth;
   const share = (z - edge) / (BATTLEFIELD_VIEW.out - edge);
   return DECK_Y + Math.max(share, 0) * (BATTLEFIELD_VIEW.up - DECK_Y);
+}
+
+/**
+ * Whether a block leaves the sector's landmarks their ground
+ * (`sector-landmark.ts`).
+ *
+ * The landmark is the one structure that tells this sector from the next at
+ * the distance a player picks a battle at, and the rim it stands on is the
+ * same rim this fills. The landmark wins: it is two places on an island, and
+ * the terrain has eight to twenty.
+ */
+function clearOfLandmark(block: TerrainBlock): boolean {
+  const reach = Math.hypot(block.size[0], block.size[2]) / 2;
+  return landmarkFootprints().every(
+    (spot) =>
+      Math.hypot(block.position[0] - spot.x, block.position[2] - spot.z) > spot.radius + reach,
+  );
 }
 
 /** A block cut down, if it must be, to stand under the camera's sightline. */
@@ -405,6 +423,7 @@ export function sectorIdentity(index: number): SectorIdentity {
     blocks: shape
       .build(generator(index * 977 + 31))
       .filter(clearOfBattle)
+      .filter(clearOfLandmark)
       .map(underSightline),
   };
 }
