@@ -73,6 +73,51 @@ export const DECK_RADIUS = 118;
  */
 export const BATTLE_GROUND = { halfWidth: 44, halfDepth: 80 } as const;
 
+/**
+ * Each side's district: the army's ground and the skyline behind it (§38.3).
+ *
+ * From the contested edge out to the back of the towers, and as deep as the
+ * skyline runs, with a margin. Terrain standing in here would be standing in a
+ * rank or growing out of a building.
+ */
+export const DISTRICT_GROUND = { innerX: 44, outerX: 88, halfDepth: 48 } as const;
+
+/**
+ * Each side's forward base (§38.5): where it stands and how far it reaches.
+ *
+ * The base lands 92 out on the battle's axis, which is exactly the rim — so
+ * the rim at the ends of the axis belongs to it, and terrain placed there would
+ * have the base landing inside a ridge.
+ */
+export const BASE_GROUND = { x: 92, radius: 24 } as const;
+
+/**
+ * Whether a block stays off everything the battle and its factions stand on.
+ *
+ * Measured from the block's own corners through its bounding circle, which is
+ * the conservative reading whatever the block is turned to. Used to discard a
+ * generated block rather than trusting the generator's ranges: the ranges are
+ * where a block *usually* lands, and this is where it may.
+ */
+export function clearOfBattle(block: TerrainBlock): boolean {
+  const [x, , z] = block.position;
+  const reach = Math.hypot(block.size[0], block.size[2]) / 2;
+  const ax = Math.abs(x);
+  const az = Math.abs(z);
+
+  const battle = Math.hypot(
+    Math.max(ax - BATTLE_GROUND.halfWidth, 0),
+    Math.max(az - BATTLE_GROUND.halfDepth, 0),
+  );
+  const district = Math.hypot(
+    Math.max(DISTRICT_GROUND.innerX - ax, ax - DISTRICT_GROUND.outerX, 0),
+    Math.max(az - DISTRICT_GROUND.halfDepth, 0),
+  );
+  const base = Math.hypot(ax - BASE_GROUND.x, z) - BASE_GROUND.radius;
+
+  return battle > reach && district > reach && base > reach && Math.hypot(x, z) <= DECK_RADIUS;
+}
+
 /** The deck's surface, which blocks stand on or are cut into. */
 const DECK_Y = 11;
 
@@ -91,16 +136,25 @@ function generator(seed: number): () => number {
 /**
  * Places round the deck's edge, gathered along the two flanks.
  *
- * The ends are where the districts and their armies stand. These spread from
- * about 35° to 145° off the battle's axis on each side — which is also where
- * they read, since the global camera looks across a sector rather than down it.
+ * The battle runs along x — left faction, contested ground, right faction —
+ * and its two ends belong to the districts and the forward bases. The flanks
+ * are the other axis: the rim in front of and behind the contested ground.
+ * Angles are measured from +z, so a flank is near 0 and near π, spread about
+ * 36° either way.
+ *
+ * This used to measure from the wrong axis. It spread blocks from 35° to 145°
+ * off +z — straight into the districts and onto the spot every forward base
+ * lands on — while the comment above it said flanks, and the only test checked
+ * the contested ground. `clearOfBattle` is the fix that does not depend on
+ * getting this arithmetic right again.
  */
+const FLANK_SPREAD = 0.63;
+
 function flankAngles(count: number, random: () => number): number[] {
   return Array.from({ length: count }, (_, index) => {
-    const half = index % 2 === 0 ? 1 : -1;
+    const flank = index % 2 === 0 ? 0 : Math.PI;
     const along = (Math.floor(index / 2) + 0.5) / Math.ceil(count / 2);
-    const spread = 0.62 + along * 1.9 + (random() - 0.5) * 0.18;
-    return half * spread;
+    return flank + (along * 2 - 1) * FLANK_SPREAD + (random() - 0.5) * 0.12;
   });
 }
 
@@ -243,5 +297,9 @@ const SHAPES: Readonly<
 export function sectorIdentity(index: number): SectorIdentity {
   const name = SECTOR_IDENTITY_NAMES[index % SECTOR_IDENTITY_NAMES.length] ?? 'TACTICAL_BASIN';
   const shape = SHAPES[name];
-  return { name, label: shape.label, blocks: shape.build(generator(index * 977 + 31)) };
+  return {
+    name,
+    label: shape.label,
+    blocks: shape.build(generator(index * 977 + 31)).filter(clearOfBattle),
+  };
 }

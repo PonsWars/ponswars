@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BASE_GROUND,
   BATTLE_GROUND,
   DECK_RADIUS,
+  DISTRICT_GROUND,
   KEEP_OUT_RADIUS,
   SECTOR_IDENTITY_NAMES,
   sectorIdentity,
@@ -55,6 +57,38 @@ describe('a sector as a place', () => {
         const clear = Math.hypot(Math.max(gapX, 0), Math.max(gapZ, 0));
         expect(clear).toBeGreaterThan(reach);
       }
+    }
+  });
+
+  it('leaves the districts and the forward bases their ground', () => {
+    // The check above only guarded the contested strip, and it passed while
+    // every identity was putting blocks into the districts and onto the spot
+    // each forward base lands on — the placement measured its angles from the
+    // wrong axis. Measured independently here, from each block's corners.
+    for (const index of SECTORS) {
+      for (const block of sectorIdentity(index).blocks) {
+        const [x, , z] = block.position;
+        const reach = Math.hypot(block.size[0], block.size[2]) / 2;
+
+        const intoDistrict = Math.hypot(
+          Math.max(DISTRICT_GROUND.innerX - Math.abs(x), Math.abs(x) - DISTRICT_GROUND.outerX, 0),
+          Math.max(Math.abs(z) - DISTRICT_GROUND.halfDepth, 0),
+        );
+        expect(intoDistrict).toBeGreaterThan(reach);
+
+        const toBase = Math.hypot(Math.abs(x) - BASE_GROUND.x, z);
+        expect(toBase).toBeGreaterThan(BASE_GROUND.radius + reach);
+      }
+    }
+  });
+
+  it('keeps enough of each identity to be recognised once the keep-outs have spoken', () => {
+    // Blocks that would land on somebody's ground are discarded rather than
+    // moved. That is only safe while an identity keeps enough of itself to
+    // still be that identity; a filter that emptied one would pass every test
+    // above and leave a sector bare.
+    for (const index of SECTORS) {
+      expect(sectorIdentity(index).blocks.length).toBeGreaterThanOrEqual(6);
     }
   });
 
