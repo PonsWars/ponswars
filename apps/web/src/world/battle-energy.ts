@@ -1,4 +1,5 @@
 import type { CardSupportTier } from '@ponswars/shared-types';
+import type { DetailLevel } from '@ponswars/world-runtime';
 
 /**
  * Two readings the engine sends with every tick, turned into how a battle looks
@@ -82,4 +83,39 @@ export const CURTAIN_MAX_HEIGHT = 16;
 /** The curtain for a tier, or `null` before the first update says one. */
 export function supportCurtain(tier: CardSupportTier | undefined): SupportCurtain | null {
   return tier === undefined ? null : CURTAIN[tier];
+}
+
+/**
+ * How much smoke hangs over the frontline (§36.10, §13).
+ *
+ * Fire flared at the line and was gone, and between two armies drawn up 76
+ * apart the contested ground read as an empty grid with a light on it. Smoke
+ * hanging where the fire meets is what gives the middle of a battle a body —
+ * and it hangs *on* the line, so it says where the frontline is rather than
+ * hiding it (§36.15).
+ *
+ * As thick as the battle is hard: the same battle-wide intensity as the fire,
+ * never below its floor while the battle is live, and none at all before it —
+ * a pick phase has had no fighting to leave smoke. Only close enough to see:
+ * at silhouette range an island is an outline (§37.6).
+ */
+const SMOKE_PUFFS: Readonly<Record<DetailLevel, number>> = {
+  FULL: 44,
+  REDUCED: 16,
+  SILHOUETTE: 0,
+  CULLED: 0,
+};
+
+/** The most puffs any battle draws, which is what the buffers are sized for. */
+export const SMOKE_MAX_PUFFS = SMOKE_PUFFS.FULL;
+
+export function smokePuffs(
+  detail: DetailLevel,
+  intensity: number | undefined,
+  live: boolean,
+): number {
+  if (!live) {
+    return 0;
+  }
+  return Math.round(SMOKE_PUFFS[detail] * fireShare(intensity));
 }

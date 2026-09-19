@@ -1,6 +1,13 @@
 import { CARD_SUPPORT_TIERS } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
-import { CURTAIN_MAX_HEIGHT, FIRE_FLOOR, fireShare, supportCurtain } from './battle-energy.js';
+import {
+  CURTAIN_MAX_HEIGHT,
+  FIRE_FLOOR,
+  fireShare,
+  SMOKE_MAX_PUFFS,
+  smokePuffs,
+  supportCurtain,
+} from './battle-energy.js';
 
 /**
  * What the engine's two presentation readings do to a battlefield (§13, §15).
@@ -54,6 +61,35 @@ describe('how card support shows (§15, §40)', () => {
   it('never stands tall enough to wall off the frontline (§36.15)', () => {
     for (const tier of CARD_SUPPORT_TIERS) {
       expect(supportCurtain(tier)?.height).toBeLessThanOrEqual(CURTAIN_MAX_HEIGHT);
+    }
+  });
+});
+
+describe('smoke over the frontline (§36.10)', () => {
+  it('thickens as the battle is fought harder', () => {
+    expect(smokePuffs('FULL', 1, true)).toBeGreaterThan(smokePuffs('FULL', 0, true));
+    expect(smokePuffs('FULL', 1, true)).toBe(SMOKE_MAX_PUFFS);
+  });
+
+  it('never clears while the battle is live', () => {
+    expect(smokePuffs('FULL', 0, true)).toBeGreaterThan(0);
+    expect(smokePuffs('FULL', undefined, true)).toBeGreaterThan(0);
+  });
+
+  it('is not there before any fighting', () => {
+    // A pick phase has had no battle to leave smoke.
+    expect(smokePuffs('FULL', 1, false)).toBe(0);
+  });
+
+  it('thins with distance and is gone at silhouette range (§37.6)', () => {
+    expect(smokePuffs('REDUCED', 1, true)).toBeLessThan(smokePuffs('FULL', 1, true));
+    expect(smokePuffs('SILHOUETTE', 1, true)).toBe(0);
+    expect(smokePuffs('CULLED', 1, true)).toBe(0);
+  });
+
+  it('never asks for more puffs than the buffers hold', () => {
+    for (const detail of ['FULL', 'REDUCED', 'SILHOUETTE', 'CULLED'] as const) {
+      expect(smokePuffs(detail, 5, true)).toBeLessThanOrEqual(SMOKE_MAX_PUFFS);
     }
   });
 });

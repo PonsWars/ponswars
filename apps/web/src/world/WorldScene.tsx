@@ -51,6 +51,7 @@ import { DeckWreckage } from './DeckWreckage.js';
 import { fobShape, type FobPart } from './fob-shape.js';
 import { HoloTicker } from './HoloTicker.js';
 import { SupportCurtain } from './SupportCurtain.js';
+import { FrontlineSmoke } from './FrontlineSmoke.js';
 import { LightPool } from './LightPool.js';
 import { Planet } from './Planet.js';
 import { islet } from './rock.js';
@@ -827,6 +828,9 @@ function Sector({
               looks down the length of the field, the sheet is edge-on and all
               but vanishes — the strip is what says where the line is from
               there. A child, so it moves and collapses with the sheet. */}
+          {/* The smoke of the fight, hanging on the line (§36.10). A child for
+              the same reason as the strip: it stands where the line stands. */}
+          <FrontlineSmoke detail={detail} intensity={battle.intensity} live={live} />
           <mesh position={[0, -7.3, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <planeGeometry args={[108, 7]} />
             <meshBasicMaterial

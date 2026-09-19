@@ -1,4 +1,5 @@
 import type { MeshBasicMaterial } from 'three';
+import { glslFloat } from './glsl.js';
 
 /**
  * Data running along a channel (§38.11, §36.4).
@@ -84,11 +85,11 @@ export function withDataFlow(material: MeshBasicMaterial): DataFlow {
           // Where along this channel the pulse is, 0 to 1. Adding time moves a
           // fixed phase toward smaller 'along': the pulse runs inward, from the
           // rim toward the battle.
-          float travel = fract(pwAlong + 0.5 + pwFlowTime * ${String(FLOW_RATE)} + pwPhase);
-          float head = ${String(FLOW_LENGTH)};
+          float travel = fract(pwAlong + 0.5 + pwFlowTime * ${glslFloat(FLOW_RATE)} + pwPhase);
+          float head = ${glslFloat(FLOW_LENGTH)};
           // A sharp front and a long tail behind it.
           float pulse = smoothstep(0.0, head * 0.25, travel) * (1.0 - smoothstep(head * 0.25, head, travel));
-          diffuseColor.rgb *= ${String(FLOW_FLOOR)} + pulse * ${String(FLOW_CREST - FLOW_FLOOR)};
+          diffuseColor.rgb *= ${glslFloat(FLOW_FLOOR)} + pulse * ${glslFloat(FLOW_CREST - FLOW_FLOOR)};
         }`,
       );
   };
