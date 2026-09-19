@@ -64,7 +64,21 @@ export const GOOD_FRAME_MS = 11;
 export const WINDOWS_TO_DROP = 2;
 export const WINDOWS_TO_RAISE = 4;
 
+/**
+ * How long the world is given before any of this counts, in milliseconds.
+ *
+ * §82.3 loads the world in stages — shell, then the global world, then the
+ * focused sector — and those stages cost frames: geometry is built, textures
+ * are uploaded, shaders compile the first time each one draws. Judging a
+ * device on that is judging it on the one part of the session that is not
+ * about what it can draw, and the first thing a player saw was a world
+ * demoting itself while it was still arriving.
+ */
+export const WARMUP_MS = 4_000;
+
 export interface FrameHealth {
+  /** How much of the warm-up is left, milliseconds. Nothing counts until it is gone. */
+  readonly warmupMs: number;
   /** Frame times in the window so far, milliseconds. */
   readonly samples: readonly number[];
   /** How long the window has been open, milliseconds. */
@@ -91,6 +105,7 @@ export interface FrameHealth {
  */
 export function initialFrameHealth(tier: QualityTier): FrameHealth {
   return {
+    warmupMs: WARMUP_MS,
     samples: [],
     elapsedMs: 0,
     poorWindows: 0,
@@ -151,6 +166,10 @@ export const IGNORE_FRAME_MS = 250;
 export function observeFrame(state: FrameHealth, frameMs: number): FrameHealth {
   if (!Number.isFinite(frameMs) || frameMs <= 0 || frameMs > IGNORE_FRAME_MS) {
     return state;
+  }
+
+  if (state.warmupMs > 0) {
+    return { ...state, warmupMs: state.warmupMs - frameMs };
   }
 
   const samples = [...state.samples, frameMs];

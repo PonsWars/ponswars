@@ -10,6 +10,7 @@ import {
   stepUp,
   WINDOW_MS,
   WINDOWS_TO_DROP,
+  WARMUP_MS,
   WINDOWS_TO_RAISE,
   slowFrameMark,
   type FrameHealth,
@@ -18,6 +19,15 @@ import {
 /**
  * Keeping the world inside its frame budget (§82.1, §82.2, §37.10).
  */
+
+/** Runs a steady frame time until the warm-up is over. */
+function warm(state: FrameHealth, frameMs = 9): FrameHealth {
+  let current = state;
+  for (let ms = 0; ms <= WARMUP_MS; ms += frameMs) {
+    current = observeFrame(current, frameMs);
+  }
+  return current;
+}
 
 /** Runs a steady frame time for a number of whole windows. */
 function run(state: FrameHealth, frameMs: number, windows: number): FrameHealth {
@@ -49,7 +59,7 @@ describe('judging a window of frames', () => {
 
 describe('a device that cannot hold the budget', () => {
   it('steps down, and keeps stepping down', () => {
-    const first = run(initialFrameHealth('BALANCED'), POOR_FRAME_MS + 8, WINDOWS_TO_DROP);
+    const first = run(warm(initialFrameHealth('BALANCED')), POOR_FRAME_MS + 8, WINDOWS_TO_DROP);
     expect(first.tier).toBe('PERFORMANCE');
 
     const next = run(first, POOR_FRAME_MS + 8, WINDOWS_TO_DROP);
@@ -58,12 +68,12 @@ describe('a device that cannot hold the budget', () => {
   });
 
   it('does not move on one bad window', () => {
-    const state = run(initialFrameHealth('BALANCED'), POOR_FRAME_MS + 8, 1);
+    const state = run(warm(initialFrameHealth('BALANCED')), POOR_FRAME_MS + 8, 1);
     expect(state.tier).toBe('BALANCED');
   });
 
   it('does not move because of one slow frame', () => {
-    let state = initialFrameHealth('BALANCED');
+    let state = warm(initialFrameHealth('BALANCED'));
     for (let window = 0; window < WINDOWS_TO_DROP + 2; window += 1) {
       state = observeFrame(state, 120);
       state = run(state, 9, 1);
@@ -74,7 +84,7 @@ describe('a device that cannot hold the budget', () => {
 
 describe('a device with room to spare', () => {
   it('climbs back, but no further than it started', () => {
-    const dropped = run(initialFrameHealth('BALANCED'), POOR_FRAME_MS + 8, WINDOWS_TO_DROP);
+    const dropped = run(warm(initialFrameHealth('BALANCED')), POOR_FRAME_MS + 8, WINDOWS_TO_DROP);
     expect(dropped.tier).toBe('PERFORMANCE');
 
     const recovered = run(dropped, GOOD_FRAME_MS - 3, WINDOWS_TO_RAISE);
@@ -91,7 +101,7 @@ describe('a device with room to spare', () => {
 
   it('holds still in the middle, where neither rule applies', () => {
     const between = (POOR_FRAME_MS + GOOD_FRAME_MS) / 2;
-    const state = run(initialFrameHealth('HIGH'), between, WINDOWS_TO_RAISE * 2);
+    const state = run(warm(initialFrameHealth('HIGH')), between, WINDOWS_TO_RAISE * 2);
     expect(state.tier).toBe('HIGH');
   });
 });
@@ -99,20 +109,24 @@ describe('a device with room to spare', () => {
 describe('what the governor may not touch', () => {
   it('leaves reduced motion alone, however the frames run (§83.3)', () => {
     // An accessibility choice about movement, not a performance tier.
-    const slow = run(initialFrameHealth('REDUCED_MOTION'), POOR_FRAME_MS + 20, WINDOWS_TO_DROP * 2);
+    const slow = run(
+      warm(initialFrameHealth('REDUCED_MOTION')),
+      POOR_FRAME_MS + 20,
+      WINDOWS_TO_DROP * 2,
+    );
     expect(slow.tier).toBe('REDUCED_MOTION');
 
-    const fast = run(initialFrameHealth('REDUCED_MOTION'), 5, WINDOWS_TO_RAISE * 2);
+    const fast = run(warm(initialFrameHealth('REDUCED_MOTION')), 5, WINDOWS_TO_RAISE * 2);
     expect(fast.tier).toBe('REDUCED_MOTION');
   });
 
   it('never climbs past the tier a player chose (§82.2)', () => {
-    const chosen = initialFrameHealth('PERFORMANCE');
+    const chosen = warm(initialFrameHealth('PERFORMANCE'));
     expect(run(chosen, 4, WINDOWS_TO_RAISE * 2).tier).toBe('PERFORMANCE');
   });
 
   it('ignores a frame no device drew — a hidden tab, a paused debugger', () => {
-    let state = initialFrameHealth('BALANCED');
+    let state = warm(initialFrameHealth('BALANCED'));
     const before = state;
     state = observeFrame(state, IGNORE_FRAME_MS + 1);
     state = observeFrame(state, 0);
@@ -132,5 +146,20 @@ describe('the ladder of tiers', () => {
     expect(stepUp('ULTRA', 'ULTRA')).toBe('ULTRA');
     expect(stepDown('REDUCED_MOTION')).toBe('REDUCED_MOTION');
     expect(stepUp('REDUCED_MOTION', 'REDUCED_MOTION')).toBe('REDUCED_MOTION');
+  });
+});
+
+describe('the world arriving', () => {
+  it('is not judged while it stages in (§82.3)', () => {
+    // Geometry built, textures uploaded, every shader compiled on its first
+    // draw. The first thing a player saw was a world demoting itself while it
+    // was still arriving.
+    const loading = run(initialFrameHealth('BALANCED'), POOR_FRAME_MS + 30, WINDOWS_TO_DROP);
+    expect(loading.tier).toBe('BALANCED');
+  });
+
+  it('judges it once it has arrived', () => {
+    const settled = warm(initialFrameHealth('BALANCED'));
+    expect(run(settled, POOR_FRAME_MS + 8, WINDOWS_TO_DROP).tier).toBe('PERFORMANCE');
   });
 });
