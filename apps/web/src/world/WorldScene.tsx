@@ -50,6 +50,7 @@ import { SectorTerrain } from './SectorTerrain.js';
 import { DeckWreckage } from './DeckWreckage.js';
 import { fobShape, type FobPart } from './fob-shape.js';
 import { HoloTicker } from './HoloTicker.js';
+import { SupportCurtain } from './SupportCurtain.js';
 import { LightPool } from './LightPool.js';
 import { Planet } from './Planet.js';
 import { islet } from './rock.js';
@@ -685,6 +686,12 @@ function Sector({
         <District side={1} accent={rightAccent} detail={detail} seed={terrainSeed(index, 2)} />
       </Suspense>
 
+      {/* Community card support, framing the contested ground (§15, §40): the
+          whole battle's tier, never a count and never one side's. */}
+      {battle !== undefined ? (
+        <SupportCurtain tier={battle.cardSupport} detail={detail} live={live} />
+      ) : null}
+
       {/* Ticker tape running through each skyline (§38.11): the market as
           environment, saying whose district it is and never a number. */}
       {battle !== undefined ? (
@@ -724,6 +731,7 @@ function Sector({
             seed={terrainSeed(index, 4)}
             momentum={battle.momentum}
             frontline={held}
+            intensity={battle.intensity}
             live={live}
           />
           <Army
@@ -733,6 +741,7 @@ function Sector({
             seed={terrainSeed(index, 5)}
             momentum={battle.momentum}
             frontline={held}
+            intensity={battle.intensity}
             live={live}
           />
         </Suspense>

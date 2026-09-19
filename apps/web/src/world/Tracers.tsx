@@ -2,6 +2,7 @@ import { useFrame } from '@react-three/fiber';
 import { useContext, useMemo, useRef, type JSX } from 'react';
 import { Color, Object3D, type InstancedMesh } from 'three';
 import type { DetailLevel } from '@ponswars/world-runtime';
+import { fireShare } from './battle-energy.js';
 import { FormationContext } from './formation-context.js';
 
 /**
@@ -84,6 +85,7 @@ export function Tracers({
   side,
   detail,
   frontline,
+  intensity,
   seed,
 }: {
   readonly accent: string;
@@ -91,6 +93,12 @@ export function Tracers({
   readonly detail: DetailLevel;
   /** Share of the field held by the LEFT faction, in `[0, 1]`. */
   readonly frontline: number;
+  /**
+   * How hard the battle is being fought, from the engine (§13), or `undefined`
+   * before the first update. Sets how many of the rounds are in the air — the
+   * same share for both sides, from one battle-wide reading.
+   */
+  readonly intensity: number | undefined;
   readonly seed: number;
 }): JSX.Element | null {
   const count = ROUNDS[detail];
@@ -135,7 +143,16 @@ export function Tracers({
     const from = side * MUZZLE;
     const flight = 1 - MUZZLE_SHARE - IMPACT_SHARE;
 
+    // How many rounds are in the air, from how hard the battle is being fought.
+    // The lanes are scattered along the line by seed, so dropping the last few
+    // thins the fire evenly rather than emptying one end of it.
+    const active = Math.max(1, Math.round(count * fireShare(intensity)));
+    field.count = active;
+
     for (const [index, lane] of lanes.entries()) {
+      if (index >= active) {
+        break;
+      }
       const cycle = (state.clock.elapsedTime / FLIGHT + lane.phase) * lane.rate;
       const along = cycle - Math.floor(cycle);
 

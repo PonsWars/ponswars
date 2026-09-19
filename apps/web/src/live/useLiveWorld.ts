@@ -298,7 +298,16 @@ function applyEvent(event: string, payload: unknown, resync: () => void): void {
   useSession.setState((state) => ({
     battles: state.battles.map((battle) =>
       battle.battleId === update.battleId
-        ? { ...battle, momentum: update.momentum, frontline: update.frontline }
+        ? {
+            ...battle,
+            momentum: update.momentum,
+            frontline: update.frontline,
+            // Both were on every update from the start and dropped here, so
+            // the fire never answered how hard a battle was being fought and
+            // card support never showed at all (§13, §15).
+            intensity: update.intensity,
+            cardSupport: update.cardSupport,
+          }
         : battle,
     ),
     // The feed health a player is shown comes from the battles they are

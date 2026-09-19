@@ -244,6 +244,7 @@ export function Army({
   seed,
   momentum,
   frontline,
+  intensity,
   live,
 }: {
   readonly side: -1 | 1;
@@ -255,6 +256,8 @@ export function Army({
   readonly momentum: MomentumState;
   /** Share of the field held by the LEFT faction, in `[0, 1]`. */
   readonly frontline: number;
+  /** The engine's reading of how hard the battle is fought (§13), when it has one. */
+  readonly intensity: number | undefined;
   /**
    * Whether the round is being fought (§22).
    *
@@ -317,6 +320,7 @@ export function Army({
           accent={accent}
           detail={detail}
           frontline={frontline}
+          intensity={intensity}
           seed={seed + 900}
         />
       ) : null}

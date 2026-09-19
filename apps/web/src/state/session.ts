@@ -2,6 +2,7 @@ import type {
   ActiveTicker,
   CanonicalClock,
   CardDecision,
+  CardSupportTier,
   ConfidenceSnapshot,
   FinalizedBattleResult,
   MomentumState,
@@ -118,6 +119,25 @@ export interface ClientBattle {
    */
   readonly momentum: MomentumState;
   readonly frontline: number;
+  /**
+   * How hard the fighting is, `0`–`1`, from the latest update (§13).
+   *
+   * The engine's own reading — from how far the frontline is from even and how
+   * fast it is moving — rather than one this client derives from the momentum
+   * label. It drives attack frequency and projectile density and nothing else:
+   * presentation, never score. Absent until the first update says it.
+   */
+  readonly intensity?: number;
+  /**
+   * How much community card support is in this battle, as a tier (§15, §40).
+   *
+   * The whole battle's, both sides together: the public update carries one
+   * tier and never a count, because *thousands of deployed cards must not
+   * equal thousands of literal extra units* — and it says nothing about which
+   * side the cards are behind, so nothing drawn from it may either. Absent
+   * until the first update says it.
+   */
+  readonly cardSupport?: CardSupportTier;
   /** The player's confirmed backing, or `null` if they have not picked. */
   readonly backing: Backing | null;
 }
