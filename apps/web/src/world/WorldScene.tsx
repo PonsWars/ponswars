@@ -48,6 +48,7 @@ import { Dropship, DROPSHIPS } from './Dropship.js';
 import { IslandMass } from './IslandMass.js';
 import { SectorTerrain } from './SectorTerrain.js';
 import { fobShape, type FobPart } from './fob-shape.js';
+import { HoloTicker } from './HoloTicker.js';
 import { LightPool } from './LightPool.js';
 import { Planet } from './Planet.js';
 import { islet } from './rock.js';
@@ -680,6 +681,27 @@ function Sector({
         <District side={-1} accent={leftAccent} detail={detail} seed={terrainSeed(index, 1)} />
         <District side={1} accent={rightAccent} detail={detail} seed={terrainSeed(index, 2)} />
       </Suspense>
+
+      {/* Ticker tape running through each skyline (§38.11): the market as
+          environment, saying whose district it is and never a number. */}
+      {battle !== undefined ? (
+        <>
+          <HoloTicker
+            side={-1}
+            ticker={battle.left}
+            accent={leftAccent}
+            detail={detail}
+            live={live}
+          />
+          <HoloTicker
+            side={1}
+            ticker={battle.right}
+            accent={rightAccent}
+            detail={detail}
+            live={live}
+          />
+        </>
+      ) : null}
 
       {/* The armies holding them (§38.3, §36.2).
           Suspended separately from the world so a sector draws the moment its
