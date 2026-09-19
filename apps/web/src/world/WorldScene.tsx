@@ -47,6 +47,7 @@ import { InstancedField, preparedGeometry, type Placement } from './InstancedFie
 import { Dropship, DROPSHIPS } from './Dropship.js';
 import { IslandMass } from './IslandMass.js';
 import { SectorTerrain } from './SectorTerrain.js';
+import { DeckWreckage } from './DeckWreckage.js';
 import { fobShape, type FobPart } from './fob-shape.js';
 import { HoloTicker } from './HoloTicker.js';
 import { LightPool } from './LightPool.js';
@@ -637,6 +638,8 @@ function Sector({
           the ground the frontline is read on, so it is a landmark the camera
           passes over and never terrain an army disappears behind (§36.15). */}
       <SectorTerrain index={index} detail={detail} />
+      {/* And what the market left broken on it (§36.4). */}
+      <DeckWreckage index={index} detail={detail} />
 
       {detail !== 'SILHOUETTE' ? (
         <>
