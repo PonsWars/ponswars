@@ -81,8 +81,25 @@ changes how it is met.
 - [ ] **Separate hot keys for the server**, one per role, none of them the
       Safe's: the distribution publisher, the Secret reserver, and the pauser.
       They can act without a hardware wallet in hand, which is the point — the
-      pauser especially has to work at three in the morning — and none of them
-      can move committed or reserved SPY, which the contracts guarantee.
+      pauser especially has to work at three in the morning.
+
+**What a stolen hot key can still reach.** The contracts guarantee that no
+operational key can touch SPY already committed to a published distribution or
+reserved for a Secret winner. They do not make the keys harmless:
+
+- a stolen **publisher** key can publish a root that pays the thief whatever the
+  distributor holds _uncommitted_;
+- a stolen **reserver** key can reserve Secrets for the thief's wallets, up to
+  whatever the vault can cover.
+
+So keep what those keys can reach small:
+
+- [ ] **Fund the distributor just in time.** Move each window's total in from the
+      Safe immediately before publishing it, so between windows the distributor
+      holds next to nothing uncommitted. The contract already requires the
+      funding to be there first.
+- [ ] **Fund the Secret vault for a few Secrets at a time**, topped up from the
+      Safe as they are claimed, rather than holding the whole budget.
 
 ## 7. Watch it without watching it — Claude, then you
 
