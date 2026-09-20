@@ -44,6 +44,10 @@ const PLACEHOLDERS = {
   VOLUME_FEED_STALE_AFTER_MS: '<calibrate per source>',
   PONS_FEED_STALE_AFTER_MS: '<calibrate per source>',
   BATTLE_ENGINE_TICK_MS: '1000',
+  // Non-functional on purpose, unlike the reserver's `disabled`: whether anyone
+  // is told when a round stops finalizing is a choice each deployment makes.
+  ALERT_WEBHOOK: '<disabled | ntfy+https://… | json+https://…>',
+  ALERT_ROUND_STUCK_AFTER_MS: '<decide per deployment>',
 };
 
 const GROUP_TITLES = {

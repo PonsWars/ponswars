@@ -205,6 +205,57 @@ function parseReserverKey(raw: string): ParseResult<SecretReserverKey> {
 }
 
 /**
+ * Where operational alerts are sent (§59.3), or a deployment's statement that
+ * they are sent nowhere.
+ *
+ * Two shapes, because the two things worth sending to are different: `ntfy`
+ * posts plain text to a topic a phone subscribes to, which is how one person
+ * running this finds out at three in the morning; `json` posts a structured
+ * body for anything else — a chat webhook behind a relay, an incident tool.
+ */
+export type AlertWebhook =
+  | { readonly kind: 'DISABLED' }
+  | { readonly kind: 'NTFY'; readonly url: string }
+  | { readonly kind: 'JSON'; readonly url: string };
+
+/**
+ * `disabled`, `ntfy+<url>` or `json+<url>`.
+ *
+ * Required either way, like the Secret reserver: a deployment with no alerts by
+ * omission and one with none by decision look the same at runtime and are not
+ * the same thing. The URL is secret — an ntfy topic is readable by anyone who
+ * knows its name, and a webhook URL usually carries its own token — so a
+ * malformed one is reported without its value.
+ *
+ * HTTPS only, except to this machine: an alert says what is wrong with the
+ * deployment, which is not something to send across a network in the clear.
+ */
+function parseAlertWebhook(raw: string): ParseResult<AlertWebhook> {
+  const trimmed = raw.trim();
+  if (trimmed === 'disabled') {
+    return { ok: true, value: { kind: 'DISABLED' } };
+  }
+  const shape = /^(ntfy|json)\+(.+)$/.exec(trimmed);
+  if (shape === null) {
+    return { ok: false, error: 'expected "disabled", "ntfy+<https url>" or "json+<https url>"' };
+  }
+  let url: URL;
+  try {
+    url = new URL(shape[2] ?? '');
+  } catch {
+    return { ok: false, error: 'expected an absolute URL after the "ntfy+" or "json+" prefix' };
+  }
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  if (url.protocol !== 'https:' && !(local && url.protocol === 'http:')) {
+    return { ok: false, error: 'expected an https URL (http only to localhost)' };
+  }
+  return {
+    ok: true,
+    value: { kind: shape[1] === 'ntfy' ? 'NTFY' : 'JSON', url: url.toString() },
+  };
+}
+
+/**
  * A Robinhood Chain network id.
  *
  * The masterplan fixes the network — *Network: Robinhood Chain* — so which of
@@ -485,6 +536,21 @@ export const PARAMETERS = {
       'Which market to score battles from (§59.3, §23.6): `onchain` reads Stock Token trading on Robinhood Chain mainnet, checked against Chainlink; `synthetic` generates prices and says so. No default — a deployment that scored real battles from made-up prices must not be one typo away.',
     parse: (raw) => parseEnum(raw, MARKET_DATA_PROVIDERS),
   } satisfies ParameterSpec<MarketDataProvider>,
+
+  ALERT_WEBHOOK: {
+    group: 'serving',
+    description:
+      'Where operational alerts go (§59.3): "ntfy+<url>" to a topic a phone subscribes to, "json+<url>" to any webhook, or "disabled". No default — a deployment nobody is told about when a round stops finalizing must be one somebody chose.',
+    parse: parseAlertWebhook,
+    secret: true,
+  } satisfies ParameterSpec<AlertWebhook>,
+
+  ALERT_ROUND_STUCK_AFTER_MS: {
+    group: 'serving',
+    description:
+      'How long past its battle end a round may go unfinalized before it is reported stuck (§25, §59.3). OPEN: finalization can legitimately wait on a chain-derived tiebreak (§12.7), so the figure is a judgement about this deployment and not a constant.',
+    parse: parseDurationMs,
+  } satisfies ParameterSpec<number>,
 
   // -- Wallet authentication (docs/OPEN_PARAMETERS.md §4) --------------------
   AUTH_ORIGIN: {

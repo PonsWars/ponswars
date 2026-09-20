@@ -100,10 +100,18 @@ market and replays it under candidate values.
 | Managed Redis provider                             | `OPEN`                                                             |
 | CDN / object storage                               | `OPEN`                                                             |
 | Observability platform                             | `OPEN`                                                             |
-| Alert thresholds                                   | `OPEN`                                                             |
+| Alert thresholds                                   | `OPEN` — the stuck-round threshold is now configuration; see below |
 | Asset and log retention durations                  | `OPEN`                                                             |
 | Launch concurrency target                          | `OPEN`                                                             |
 | WebSocket connection and rate limits               | `OPEN` — the API's sign-in limit is now configuration; see §4      |
+
+Alerting is configuration rather than code, because where alerts go and when a
+round counts as stuck are both judgements about a deployment:
+
+| Variable                     | Status | Meaning                                                                                                                                                                |
+| ---------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ALERT_WEBHOOK`              | `OPEN` | `ntfy+<url>` for a phone, `json+<url>` for any webhook, or `disabled`. Required either way: no alerts must be a decision, not an omission. Secret.                     |
+| `ALERT_ROUND_STUCK_AFTER_MS` | `OPEN` | How long past its battle end a round may go unfinalized before it is reported. Finalization can legitimately wait on a chain-derived tiebreak (§12.7), so no constant. |
 
 ## 4. Wallet authentication (§45.2, §102)
 

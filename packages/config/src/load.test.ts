@@ -46,11 +46,74 @@ const VALID: Readonly<Record<string, string>> = {
   AUTH_SESSION_TTL_MS: '86400000',
   AUTH_RATE_LIMIT_REQUESTS: '30',
   AUTH_RATE_LIMIT_WINDOW_MS: '60000',
+  ALERT_WEBHOOK: 'disabled',
+  ALERT_ROUND_STUCK_AFTER_MS: '600000',
 };
 
 const withOverride = (
   patch: Readonly<Record<string, string | undefined>>,
 ): Record<string, string | undefined> => ({ ...VALID, ...patch });
+
+describe('the alert webhook', () => {
+  it('is "disabled" by decision, never by omission', () => {
+    expect(loadConfig(VALID).ALERT_WEBHOOK).toEqual({ kind: 'DISABLED' });
+    expect(() => loadConfig(withOverride({ ALERT_WEBHOOK: undefined }))).toThrow(ConfigError);
+  });
+
+  it('takes an ntfy topic or a JSON webhook, each over https', () => {
+    expect(
+      loadConfig(withOverride({ ALERT_WEBHOOK: 'ntfy+https://ntfy.sh/ponswars-ops' }))
+        .ALERT_WEBHOOK,
+    ).toEqual({ kind: 'NTFY', url: 'https://ntfy.sh/ponswars-ops' });
+    expect(
+      loadConfig(withOverride({ ALERT_WEBHOOK: 'json+https://hooks.example.invalid/x' }))
+        .ALERT_WEBHOOK,
+    ).toEqual({ kind: 'JSON', url: 'https://hooks.example.invalid/x' });
+  });
+
+  it('refuses plain http, except to this machine', () => {
+    // An alert says what is wrong with the deployment. Not in the clear.
+    expect(() =>
+      loadConfig(withOverride({ ALERT_WEBHOOK: 'ntfy+http://ntfy.example.invalid/t' })),
+    ).toThrow(ConfigError);
+    expect(
+      loadConfig(withOverride({ ALERT_WEBHOOK: 'json+http://localhost:8080/hook' })).ALERT_WEBHOOK,
+    ).toEqual({ kind: 'JSON', url: 'http://localhost:8080/hook' });
+  });
+
+  it('refuses a shape it does not know', () => {
+    for (const raw of ['https://ntfy.sh/topic', 'slack+https://x.invalid', 'ntfy+', 'off']) {
+      expect(() => loadConfig(withOverride({ ALERT_WEBHOOK: raw }))).toThrow(ConfigError);
+    }
+  });
+
+  it('never repeats the URL in the error that reports it (§87)', () => {
+    // An ntfy topic is readable by anyone who knows its name.
+    const raw = 'ntfy+http://secret-topic-name.example.invalid/t';
+    try {
+      loadConfig(withOverride({ ALERT_WEBHOOK: raw }));
+      expect.unreachable();
+    } catch (error) {
+      expect(String(error)).not.toContain('secret-topic-name');
+    }
+  });
+
+  it('marks it secret', () => {
+    const secrets = describeParameters()
+      .filter((entry) => entry.secret)
+      .map((entry) => entry.name);
+    expect(secrets).toContain('ALERT_WEBHOOK');
+  });
+});
+
+describe('the stuck-round threshold', () => {
+  it('is a duration the deployment decides, with no default (§102)', () => {
+    expect(loadConfig(VALID).ALERT_ROUND_STUCK_AFTER_MS).toBe(600_000);
+    expect(() => loadConfig(withOverride({ ALERT_ROUND_STUCK_AFTER_MS: undefined }))).toThrow(
+      ConfigError,
+    );
+  });
+});
 
 describe('the trusted proxy list', () => {
   it('takes addresses, blocks and shorthands, and empty as no proxy at all', () => {
