@@ -196,7 +196,8 @@ cp .env.example .env
 `.env.example` is generated from the parameter table and every value in it is a
 deliberately non-functional placeholder. See
 [`docs/OPEN_PARAMETERS.md`](docs/OPEN_PARAMETERS.md) for what each still needs
-decided.
+decided, and [`docs/LAUNCH.md`](docs/LAUNCH.md) for the order it has to happen in
+between here and mainnet.
 
 ## Verification
 
