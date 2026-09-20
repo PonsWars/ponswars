@@ -13,8 +13,14 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
-/** The parts of `RewardsDistributor`'s ABI this reads and sends. */
-const DISTRIBUTOR_ABI = [
+/**
+ * The parts of `RewardsDistributor`'s ABI this reads, sends and decodes.
+ *
+ * Written by hand, so held to the compiled contract by `abi-conformance.test.ts`:
+ * an entry here that the contract does not have is a call that fails at runtime,
+ * or a revert this client cannot put a name to.
+ */
+export const DISTRIBUTOR_ABI = [
   {
     type: 'function',
     name: 'distributions',
@@ -78,6 +84,16 @@ const DISTRIBUTOR_ABI = [
     type: 'error',
     name: 'DistributionAlreadyPublished',
     inputs: [{ name: 'distributionId', type: 'uint256' }],
+  },
+  {
+    // The contract's own funding guard: a total the uncommitted balance cannot
+    // cover is refused on chain, whoever publishes and whenever.
+    type: 'error',
+    name: 'InsufficientUncommittedBalance',
+    inputs: [
+      { name: 'requested', type: 'uint256' },
+      { name: 'available', type: 'uint256' },
+    ],
   },
 ] as const;
 
@@ -185,13 +201,23 @@ export function rpcDistributorContract(options: {
           error instanceof BaseError
             ? error.walk((cause) => cause instanceof ContractFunctionRevertedError)
             : null;
-        if (
-          reverted instanceof ContractFunctionRevertedError &&
-          reverted.data?.errorName === 'DistributionAlreadyPublished'
-        ) {
+        const name =
+          reverted instanceof ContractFunctionRevertedError ? reverted.data?.errorName : undefined;
+        if (name === 'DistributionAlreadyPublished') {
           throw new Error(`Distribution ${distributionId.toString()} is already published`, {
             cause: error,
           });
+        }
+        if (name === 'InsufficientUncommittedBalance') {
+          // The job checked the balance before simulating, so this is the SPY
+          // having moved in between — committed to another window, or
+          // withdrawn. Said in the job's own terms, because the remedy is the
+          // same: fund it and run again.
+          throw new Error(
+            `The distributor no longer holds ${total.toString()} uncommitted for distribution ${distributionId.toString()}. ` +
+              'Fund it first: a root the distributor cannot pay is refused on chain. Nothing was sent.',
+            { cause: error },
+          );
         }
         throw error;
       }

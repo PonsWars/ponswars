@@ -22,8 +22,12 @@ import type {
   VaultContract,
 } from './secret-vault.js';
 
-/** The parts of `SecretStockVault`'s ABI this reads, sends and decodes. */
-const VAULT_ABI = [
+/**
+ * The parts of `SecretStockVault`'s ABI this reads, sends and decodes.
+ *
+ * Written by hand, so held to the compiled contract by `abi-conformance.test.ts`.
+ */
+export const VAULT_ABI = [
   {
     type: 'function',
     name: 'isCovered',
