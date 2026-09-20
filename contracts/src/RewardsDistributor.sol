@@ -27,6 +27,10 @@ import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProo
 ///   pause or no pause.
 /// - Pausing stops claims. It does not delete an entitlement — the proof stays
 ///   valid and the claim succeeds once unpaused.
+/// - A published distribution is **fully backed** from the moment it lands.
+///   Publication reverts unless the uncommitted balance covers its total, so
+///   what the contract owes never exceeds what it holds, and one window's
+///   claims can never be paid out of SPY committed to another.
 ///
 /// Non-upgradeable by design (§19). If the logic must change, a new contract is
 /// deployed and the old one keeps paying out what it already owes.
@@ -105,6 +109,13 @@ contract RewardsDistributor is AccessControl, Pausable {
     /// The total is committed immediately, so from this moment the SPY backing
     /// it is outside the treasury's reach.
     ///
+    /// And it must already be here. The publish job checks the same thing
+    /// offchain, but a check offchain is advice: on the multisig path (§20) the
+    /// job only prints a proposal, and it executes whenever the signers sign —
+    /// by which time the SPY it saw may have been committed to another window.
+    /// Enforced here, the guarantee holds whoever publishes and whenever, the
+    /// same way `SecretStockVault.reserve` refuses a Secret it cannot pay.
+    ///
     /// Publication is deliberately **not** pausable. Pausing exists to stop
     /// claims during an incident; blocking publication as well would strand a
     /// finalized window that the offchain record already considers settled.
@@ -117,6 +128,9 @@ contract RewardsDistributor is AccessControl, Pausable {
 
         Distribution storage distribution = distributions[distributionId];
         if (distribution.root != bytes32(0)) revert DistributionAlreadyPublished(distributionId);
+
+        uint256 available = uncommittedBalance();
+        if (total > available) revert InsufficientUncommittedBalance(total, available);
 
         distribution.root = root;
         distribution.total = total;
@@ -165,7 +179,9 @@ contract RewardsDistributor is AccessControl, Pausable {
         if (!MerkleProof.verifyCalldata(proof, distribution.root, leaf)) revert InvalidProof();
 
         // A correct tree can never exceed its own total. This catches a
-        // malformed root before it drains SPY committed to another window.
+        // malformed root before it drains SPY committed to another window —
+        // which, with every window fully backed at publication, is the only
+        // way one could.
         uint256 claimedAfter = distribution.claimed + amount;
         if (claimedAfter > distribution.total) revert ClaimExceedsDistribution(distributionId);
 

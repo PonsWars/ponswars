@@ -162,6 +162,14 @@ also refuses when:
 - the distributor's **uncommitted** SPY is less than the root's total — a root
   the distributor cannot pay is one whose claims revert. Fund it first.
 
+The contract enforces that last rule too, so it holds on every path: a
+`publishDistribution` whose total the uncommitted balance cannot cover reverts
+with `InsufficientUncommittedBalance`. The job's own check is early warning. The
+contract's check is the guarantee — on the multisig path the job only prints a
+proposal, and by the time the signers execute it the SPY it saw may already be
+committed to another window. **Fund before proposing, and expect the
+transaction to revert if it is no longer there.**
+
 It reads the root and total back from the contract and records those. If the id
 is already on chain with this root — a publication that landed before the
 database heard of it — it records that instead of publishing twice. If the id is

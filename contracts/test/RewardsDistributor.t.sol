@@ -128,6 +128,54 @@ contract RewardsDistributorTest is Test {
         vm.stopPrank();
     }
 
+    function test_publish_refusesATotalItCannotPay() public {
+        // setUp funds 1,000 SPY. A root for more than that is a root whose
+        // claims revert: published, shown to players as theirs, and unpayable.
+        bytes32 root = keccak256("unfunded");
+
+        vm.prank(publisher);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RewardsDistributor.InsufficientUncommittedBalance.selector,
+                1_001 * ONE_SPY,
+                1_000 * ONE_SPY
+            )
+        );
+        distributor.publishDistribution(2, root, 1_001 * ONE_SPY);
+    }
+
+    function test_publish_cannotCommitAnotherWindowsFunds() public {
+        // The hazard the check exists for. With the guard only offchain, a
+        // multisig proposal checked while the SPY was there could execute after
+        // it had been committed elsewhere — and the new window's claims would
+        // then be paid out of the SPY owed to the first window's claimants.
+        vm.prank(publisher);
+        distributor.publishDistribution(1, keccak256("first"), 900 * ONE_SPY);
+
+        vm.prank(publisher);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RewardsDistributor.InsufficientUncommittedBalance.selector,
+                200 * ONE_SPY,
+                100 * ONE_SPY
+            )
+        );
+        distributor.publishDistribution(2, keccak256("second"), 200 * ONE_SPY);
+
+        // Funded, it goes through, and both windows are fully backed.
+        spy.mint(address(distributor), 100 * ONE_SPY);
+        vm.prank(publisher);
+        distributor.publishDistribution(2, keccak256("second"), 200 * ONE_SPY);
+        assertEq(distributor.outstandingCommitment(), spy.balanceOf(address(distributor)));
+    }
+
+    function test_publish_acceptsATotalFundedExactly() public {
+        vm.prank(publisher);
+        distributor.publishDistribution(2, keccak256("exact"), 1_000 * ONE_SPY);
+
+        assertEq(distributor.uncommittedBalance(), 0);
+    }
+
     function test_publish_worksWhilePaused() public {
         // Pausing protects claimants during an incident. Blocking publication
         // too would strand a window the offchain record already settled.
@@ -389,6 +437,27 @@ contract RewardsDistributorTest is Test {
 
         assertEq(distributor.uncommittedBalance(), balance - total);
         assertLe(distributor.uncommittedBalance() + distributor.outstandingCommitment(), balance);
+    }
+
+    function testFuzz_everyPublishedWindowIsFullyBacked(uint96 funding, uint96 first, uint96 second)
+        public
+    {
+        // Whatever is published, in whatever order, what the distributor owes
+        // never exceeds what it holds. A publication that would break that
+        // reverts instead of landing.
+        spy.mint(address(distributor), funding);
+        uint256 balance = spy.balanceOf(address(distributor));
+
+        _tryPublish(11, first);
+        _tryPublish(12, second);
+
+        assertLe(distributor.outstandingCommitment(), balance);
+    }
+
+    function _tryPublish(uint256 id, uint256 total) internal {
+        if (total == 0) return;
+        vm.prank(publisher);
+        try distributor.publishDistribution(id, keccak256(abi.encode(id)), total) {} catch {}
     }
 
     function testFuzz_claimingRequiresAMatchingLeaf(uint256 amount, address account) public {
