@@ -11,6 +11,7 @@ import {
 } from '@ponswars/shared-types';
 import { FACTION_ART } from '../art/manifest.js';
 import { GenesisCardFace } from '../art/GenesisCardFace.js';
+import { CardLadder } from '../genesis/CardLadder.js';
 import { GenesisClaim, type GenesisPageData } from '../genesis/GenesisClaim.js';
 import { WarRoom, type ProfileData } from '../profile/WarRoom.js';
 import { RewardClaims, type RewardClaimsData } from '../rewards/RewardClaims.js';
@@ -229,6 +230,10 @@ export function Presentations({
           {personal('GENESIS', genesis, (value) => (
             <GenesisClaim page={value} onDone={close} />
           ))}
+          {/* What a card can be, under whatever the page is saying — except
+              during the reveal itself, which keeps the screen to itself
+              (§40.6). Read from the locked catalog (§7.2). */}
+          {genesis.status === 'READY' && genesis.value.view.kind === 'CARD' ? null : <CardLadder />}
         </Overlay>
       );
   }
