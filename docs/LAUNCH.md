@@ -76,30 +76,35 @@ changes how it is met.
 - [ ] **A 2-of-3 Safe**, owned by three keys you control on separate devices —
       for example two hardware wallets from different makers, and a third kept
       sealed offline as the backup. Any two can act, so losing one device loses
-      nothing, and no single compromised machine can move funds. This Safe
-      holds `DEFAULT_ADMIN_ROLE` and `TREASURY_ROLE` on both contracts.
-- [ ] **Separate hot keys for the server**, one per role, none of them the
-      Safe's: the distribution publisher, the Secret reserver, and the pauser.
-      They can act without a hardware wallet in hand, which is the point — the
-      pauser especially has to work at three in the morning.
+      nothing, and no single compromised machine can move funds.
+- [ ] **The Safe holds `DEFAULT_ADMIN_ROLE`, `TREASURY_ROLE` and
+      `DISTRIBUTION_PUBLISHER_ROLE`** on the contracts. Publishing is once a day
+      and is already a human step, after the snapshot and the root have been
+      verified; the publish job supports it directly — leave
+      `DISTRIBUTION_PUBLISHER_KEY` unset and it prints the transaction to
+      propose ([`operations/rewards-distribution.md`](operations/rewards-distribution.md#publishing)).
+- [ ] **Hot keys only where the server has to act alone**, one per role, none of
+      them the Safe's: the **Secret reserver**, because a Genesis reveal has to
+      reserve its reward automatically before it is shown (§8.4); and the
+      **pauser**, because it has to work at three in the morning.
 
-**What a stolen hot key can still reach.** The contracts guarantee that no
+**Why the publisher belongs on the Safe.** The rewards pool has to live in the
+distributor: the rewards worker reads it from the distributor's uncommitted
+balance at the snapshot (§16.3), and the Rewards page shows it to players from
+there (§35.3). A stolen publisher key could publish a root paying that whole
+uncommitted balance to the thief. With the role on the Safe there is no such
+key to steal, and the pool can sit where the game needs it.
+
+**What the remaining hot keys can reach.** The contracts guarantee that no
 operational key can touch SPY already committed to a published distribution or
-reserved for a Secret winner. They do not make the keys harmless:
+reserved for a Secret winner. Beyond that:
 
-- a stolen **publisher** key can publish a root that pays the thief whatever the
-  distributor holds _uncommitted_;
 - a stolen **reserver** key can reserve Secrets for the thief's wallets, up to
-  whatever the vault can cover.
-
-So keep what those keys can reach small:
-
-- [ ] **Fund the distributor just in time.** Move each window's total in from the
-      Safe immediately before publishing it, so between windows the distributor
-      holds next to nothing uncommitted. The contract already requires the
-      funding to be there first.
+  whatever the vault can cover — so:
 - [ ] **Fund the Secret vault for a few Secrets at a time**, topped up from the
       Safe as they are claimed, rather than holding the whole budget.
+- a stolen **pauser** key can pause claims. It cannot move anything, and the
+  Safe, as admin, can revoke it.
 
 ## 7. Watch it without watching it — built; the rest is yours
 
