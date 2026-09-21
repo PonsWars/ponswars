@@ -229,8 +229,11 @@ export type AlertWebhook =
  *
  * HTTPS only, except to this machine: an alert says what is wrong with the
  * deployment, which is not something to send across a network in the clear.
+ *
+ * Exported for the jobs that read their environment directly, like the rewards
+ * worker, so an alert target means the same thing in every process.
  */
-function parseAlertWebhook(raw: string): ParseResult<AlertWebhook> {
+export function parseAlertWebhook(raw: string): ParseResult<AlertWebhook> {
   const trimmed = raw.trim();
   if (trimmed === 'disabled') {
     return { ok: true, value: { kind: 'DISABLED' } };

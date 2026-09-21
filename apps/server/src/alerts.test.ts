@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { utcTimestamp, type RoundState } from '@ponswars/shared-types';
 import { describe, expect, it } from 'vitest';
 import {
+  lateSnapshot,
   lifecycle,
   reconcile,
   stuckRound,
@@ -89,11 +90,31 @@ describe('voided battles', () => {
   });
 });
 
-describe('the server itself', () => {
-  it('says it started, quietly, and that it failed, loudly', () => {
+describe('the processes themselves', () => {
+  it('say they started, quietly, and that they failed, loudly', () => {
     // A run of starts is a crash loop; a failure is somebody's night.
     expect(lifecycle('STARTED', 'chain 46630').severity).toBe('INFO');
     expect(lifecycle('FAILED', 'store unreachable').severity).toBe('CRITICAL');
+  });
+
+  it('say which process they are, so two never read as one', () => {
+    const server = lifecycle('FAILED', 'x');
+    const worker = lifecycle('FAILED', 'x', 'Rewards worker');
+
+    expect(worker.title).toBe('Rewards worker stopped on an error');
+    expect(worker.key).not.toBe(server.key);
+  });
+});
+
+describe('a late rewards snapshot', () => {
+  it('names the distribution and points at its runbook', () => {
+    const condition = lateSnapshot(42n);
+
+    expect(condition.key).toBe('snapshot-late:42');
+    expect(condition.title).toContain('42');
+    // Late, not lost: a warning, not a page.
+    expect(condition.severity).toBe('WARNING');
+    expect(existsSync(new URL(`../../../${condition.runbook ?? ''}`, import.meta.url))).toBe(true);
   });
 });
 

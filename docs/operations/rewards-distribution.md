@@ -30,8 +30,15 @@ node apps/server/dist/rewards-worker.js --snapshots /var/lib/ponswars/snapshots
 
 It reads `DATABASE_URL`, `RPC_URL`, `CHAIN_ID`, `REWARDS_DISTRIBUTOR_ADDRESS`
 and `REWARDS_MINIMUM_CLAIM` (base units, §16.7 — it records the number in every
-snapshot and never invents one). The pool is the distributor's uncommitted
-balance, read at the snapshot.
+snapshot and never invents one), and `ALERT_WEBHOOK` by the same rule as the
+server. The pool is the distributor's uncommitted balance, read at the
+snapshot — so **fund it before the window closes**; a snapshot is taken once.
+
+It alerts when it starts, when it stops on an error, and when a window has
+ended and its snapshot cannot be taken — the worker keeps retrying and the page
+clears on the pass that succeeds. A late snapshot loses nothing: §16.2 counts a
+window's War Points from the previous snapshot, so points earned while it waits
+count toward this window, and the pool is read when the snapshot lands.
 
 **It stops at the snapshot file, deliberately.** Calculating and publishing
 each have a check in front of them below, and a scheduler that ran ahead would

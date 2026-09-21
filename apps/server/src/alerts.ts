@@ -19,6 +19,8 @@ import type { CanonicalClock, RoundState, UtcTimestamp } from '@ponswars/shared-
  *   refunded (§8.3) — not an outage, and not something to discover a week later.
  * - **The server starting and stopping.** A restart that nobody asked for, and
  *   a crash loop, are both visible as a run of these.
+ * - **A rewards snapshot that is due and failing.** The one moment in the
+ *   rewards worker's day that cannot quietly wait.
  *
  * Market data degrading and then recovering is deliberately *not* here. It
  * heals itself, and when it does not, the harm it does is a void — which is.
@@ -155,22 +157,54 @@ export function voidedBattles(roundId: string, voided: readonly string[]): Alert
   };
 }
 
-/** The server coming up, or going down on an error. */
-export function lifecycle(kind: 'STARTED' | 'FAILED', detail: string): AlertMessage {
+/**
+ * A distribution window whose snapshot is due and could not be taken
+ * (§16.2, §16.3).
+ *
+ * Only then, not on every failed pass of the rewards worker: opening a window
+ * late or waiting longer costs nothing, but a window past its end with no
+ * snapshot is rewards that are not happening.
+ *
+ * Late rather than lost, so a warning and not a page. §16.2 counts a window's
+ * War Points from the previous snapshot to this one — the snapshot claims
+ * every unclaimed point, not the points inside the window's 24 hours — so
+ * points earned while it waits are taken into this window instead of the next,
+ * and none are dropped. What does move is the pool, which is read when the
+ * snapshot is finally taken.
+ */
+export function lateSnapshot(distributionId: bigint): Condition {
+  return {
+    key: `snapshot-late:${distributionId.toString()}`,
+    severity: 'WARNING',
+    title: `Distribution ${distributionId.toString()} could not be snapshotted`,
+    detail:
+      'Its window has ended and the rewards worker is failing to take the snapshot. It keeps retrying; the worker log has the reason. ' +
+      'Nothing is lost while it waits: points earned meanwhile count toward this window (§16.2), and the pool is read when the snapshot lands.',
+    runbook: 'docs/operations/rewards-distribution.md',
+  };
+}
+
+/** A process coming up, or going down on an error. */
+export function lifecycle(
+  kind: 'STARTED' | 'FAILED',
+  detail: string,
+  name = 'PonsWars server',
+): AlertMessage {
+  const slug = name.toLowerCase().replaceAll(' ', '-');
   return kind === 'STARTED'
     ? {
         status: 'NOTICE',
-        key: 'server-started',
+        key: `${slug}-started`,
         severity: 'INFO',
-        title: 'PonsWars server started',
+        title: `${name} started`,
         detail,
         runbook: null,
       }
     : {
         status: 'NOTICE',
-        key: 'server-failed',
+        key: `${slug}-failed`,
         severity: 'CRITICAL',
-        title: 'PonsWars server stopped on an error',
+        title: `${name} stopped on an error`,
         detail,
         runbook: 'docs/operations/README.md',
       };

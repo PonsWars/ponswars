@@ -4,6 +4,9 @@ import { DistributionError, PostgresDistributionStore } from '@ponswars/store-po
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { connectPostgres } from '@ponswars/postgres';
+import { parseAlertWebhook } from '@ponswars/config';
+import { alertSink, type AlertSink } from './alert-sink.js';
+import { lateSnapshot, lifecycle, reconcile, type Condition } from './alerts.js';
 import { nextWindowStep } from './rewards-window.js';
 
 /**
@@ -33,6 +36,10 @@ import { nextWindowStep } from './rewards-window.js';
  * the snapshot file so the operator calculates with the number the snapshot
  * was written under (§16.7). It is `OPEN`: this job records it, never invents
  * it, and refuses to start without it.
+ *
+ * And `ALERT_WEBHOOK`, read by the same rule as the server's (§59.3). The
+ * worker alerts when it starts, when it fails, and when a snapshot is due and
+ * cannot be taken — the one moment in its day that cannot quietly wait.
  */
 
 /** How often the schedule is re-read when nothing is due sooner. */
@@ -41,9 +48,31 @@ const HEARTBEAT_MS = 60_000;
 /** How long to wait before trying again after a failure. */
 const RETRY_MS = 30_000;
 
+/** How long a failing worker waits for its last alert to go out. */
+const FINAL_ALERT_WAIT_MS = 12_000;
+
+/** What this process is called in an alert, so it never reads as the server. */
+const NAME = 'Rewards worker';
+
+/** The alert sink, module-level so the worker's own failure can be reported. */
+let alerting: AlertSink | null = null;
+
 async function main(): Promise<void> {
   const snapshots = snapshotDirectory();
   const settings = chainSettings();
+  const webhook = parseAlertWebhook(process.env['ALERT_WEBHOOK'] ?? '');
+  if (!webhook.ok) {
+    // The parser's reason, never the value: the URL is the secret.
+    throw new DistributionError(`ALERT_WEBHOOK: ${webhook.error}.`);
+  }
+  // The sink writes whole lines; this log adds its own timestamp and newline.
+  const alerts = alertSink(webhook.value, {
+    say: (line) => {
+      say(line.trimEnd());
+    },
+    now: () => Date.now(),
+  });
+  alerting = alerts;
   const url = process.env['DATABASE_URL'];
   if (url === undefined || url === '') {
     throw new DistributionError('DATABASE_URL is not set.');
@@ -69,12 +98,20 @@ async function main(): Promise<void> {
   }
 
   say(`keeping rewards windows on time; snapshots to ${snapshots}`);
+  alerts.send(lifecycle('STARTED', `Snapshots to ${snapshots}.`, NAME));
+
+  // The window whose snapshot is due and has not been taken, if there is one.
+  // Kept across passes, so a pass that fails before it can even read the
+  // schedule still knows a snapshot was already late.
+  let due: bigint | null = null;
+  let reported: ReadonlyMap<string, Condition> = new Map();
   try {
     while (!stopping.signal.aborted) {
       let sleepFor = HEARTBEAT_MS;
       try {
         const now = utcTimestamp(Date.now());
         const step = nextWindowStep(now, await store.latestWindow());
+        due = step.kind === 'SNAPSHOT' ? step.distributionId : null;
         if (step.kind === 'OPEN') {
           const { windowEnd } = await store.openWindow({
             distributionId: step.distributionId,
@@ -86,6 +123,7 @@ async function main(): Promise<void> {
           );
         } else if (step.kind === 'SNAPSHOT') {
           await snapshot(store, distributor, step.distributionId, snapshots, settings.minimumClaim);
+          due = null;
         } else {
           sleepFor = Math.min(HEARTBEAT_MS, Math.max(1_000, step.until - now));
         }
@@ -95,10 +133,18 @@ async function main(): Promise<void> {
         say(`step failed, retrying: ${error instanceof Error ? error.message : String(error)}`);
         sleepFor = RETRY_MS;
       }
+      // Late only while a snapshot is due and still not taken; it clears the
+      // pass that takes it.
+      const next = reconcile(reported, due === null ? [] : [lateSnapshot(due)]);
+      reported = next.active;
+      for (const message of next.messages) {
+        alerts.send(message);
+      }
       await wait(sleepFor, stopping.signal);
     }
   } finally {
     await database.close();
+    await alerts.drained();
   }
   say('stopped');
 }
@@ -213,9 +259,20 @@ function wait(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-main().catch((error: unknown) => {
+main().catch(async (error: unknown) => {
   const refused = error instanceof DistributionError;
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`${refused ? 'refused' : 'rewards worker failed'}: ${message}\n`);
   process.exitCode = 1;
+
+  // Its kind and nothing else: an RPC error can carry the endpoint URL, which
+  // is a secret (§87). The log has the rest.
+  if (alerting !== null) {
+    const kind = error instanceof Error ? error.name : 'unknown error';
+    alerting.send(lifecycle('FAILED', `${kind}. The worker log has the detail.`, NAME));
+    await Promise.race([
+      alerting.drained(),
+      new Promise((resolve) => setTimeout(resolve, FINAL_ALERT_WAIT_MS).unref()),
+    ]);
+  }
 });

@@ -323,13 +323,19 @@ variable as the secret it is marked as.
 
 What is sent, and why only this: a round not finalized past the threshold
 (critical, and again when it clears), battles voided in a round, the Secret
-vault out of cover, and the server starting or stopping on an error. Every
-alert is also a line in the log, sent or not.
+vault out of cover, and the server starting or stopping on an error. The
+rewards worker adds its own start and failure, and a snapshot that is due and
+cannot be taken. Every alert is also a line in the log, sent or not.
 
 **What it cannot report is its own machine going away.** A process that has
 lost its host, its network or its power sends nothing — which is exactly when
 someone should hear about it. Point an uptime monitor outside the deployment at
 `/v1/ready`. That, and not this, is what notices a server that is simply gone.
+
+The rewards worker has no endpoint for a monitor to reach. A worker that fails
+says so, but one killed outright — out of memory, `SIGKILL` — says nothing, and
+shows only as a snapshot that never comes. Run it with a restart policy, so a
+killed worker comes back and announces its start.
 
 ## What the images will not do
 
