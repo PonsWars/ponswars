@@ -27,16 +27,19 @@ command line: a `--private-key` argument lands in shell history.
 
 ## Deploy
 
-From the repository root, testnet first:
+From the repository root. PonsWars launches on mainnet with no testnet stage
+([`LAUNCH.md`](../LAUNCH.md#straight-to-mainnet)), so run it **without
+`--broadcast` first** — that simulates every check and both deployments against
+the live network and sends nothing:
 
 ```bash
 DEPLOY_ADMIN=0x… SPY_TOKEN_ADDRESS=0x… SPY_TOKEN_DECIMALS=18 \
-  forge script contracts/script/Deploy.s.sol \
-  --rpc-url robinhood_testnet --broadcast --account deployer
+  forge script contracts/script/Deploy.s.sol --rpc-url robinhood
 ```
 
-Run it once without `--broadcast` first. That simulates every check and both
-deployments against the live network and sends nothing.
+Then the same command with `--broadcast --account deployer`. On mainnet the SPY
+token is `0x117cc2133c37B721F49dE2A7a74833232B3B4C0C` with 18 decimals — read
+both from the chain again before broadcasting rather than trusting this page.
 
 The script stops before sending anything when:
 
@@ -54,9 +57,10 @@ it, and it is the record of which contracts a network runs.
 ## Check what landed
 
 ```bash
-cast call <vault> 'REWARD_AMOUNT()(uint256)' --rpc-url robinhood_testnet
-cast call <distributor> 'REWARD_TOKEN()(address)' --rpc-url robinhood_testnet
-cast call <distributor> 'hasRole(bytes32,address)(bool)' \n  0x0000000000000000000000000000000000000000000000000000000000000000 <admin> --rpc-url robinhood_testnet
+cast call <vault> 'REWARD_AMOUNT()(uint256)' --rpc-url robinhood
+cast call <distributor> 'REWARD_TOKEN()(address)' --rpc-url robinhood
+cast call <distributor> 'hasRole(bytes32,address)(bool)' \
+  0x0000000000000000000000000000000000000000000000000000000000000000 <admin> --rpc-url robinhood
 ```
 
 `REWARD_AMOUNT` is `0.2 × 10^decimals`. The admin holds the all-zero admin role;

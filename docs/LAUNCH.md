@@ -1,73 +1,88 @@
 # The road to launch
 
 What stands between this repository and PonsWars live on Robinhood Chain
-mainnet, in the order it has to happen — written for one person running it.
+mainnet (`4663`), in the order it has to happen — written for one person running
+it.
 
 The game itself is built and tested. What remains is mostly **not code**: it is
-decisions, money, keys, data that has to accumulate, and review by people
-outside the project. [`OPEN_PARAMETERS.md`](OPEN_PARAMETERS.md) is the full
-registry of every value still to be decided; this page is the path through it.
+decisions, money, keys, and review by people outside the project.
+[`OPEN_PARAMETERS.md`](OPEN_PARAMETERS.md) is the full registry of every value
+still to be decided; this page is the path through it.
 
 Each step says who moves it. **You** is the founder. **Claude** is work that can
 be done in the repository without waiting on anyone.
 
+## Straight to mainnet
+
+There is no testnet stage. The launch goes to mainnet directly, and what a
+testnet run would have caught is caught three other ways instead:
+
+1. **The game loop, locally** — `apps/local-stack` runs rounds, picks, results
+   and War Points end to end on this machine, against a synthetic market. It
+   reads no chain, so Genesis cards, `$WAR` balances and SPY payouts are not
+   exercised there; the soft launch is where they are.
+2. **The deployment, simulated against mainnet** — `forge script` without
+   `--broadcast` runs every check of `Deploy.s.sol` and both deployments against
+   the live chain and the real SPY token, and sends nothing (step 7).
+3. **A private soft launch** — the real contracts and the real server on
+   mainnet, lightly funded, played only by your own wallets until every flow has
+   been through once (step 9).
+
+**Not a local fork of mainnet.** `anvil --fork-url` cannot fork Robinhood Chain
+today: its blocks carry no blob-gas fields, which anvil (1.8.1) requires from
+Cancun on, and on an older hardfork the SPY token's own calls revert. Checked on
+2026-09-21. Revisit when Foundry supports Arbitrum chains' headers.
+
 ## 1. Choose the infrastructure — you
 
-Nothing past this step can start until these exist.
+Nothing past step 7 can start until these exist.
 
-- [ ] **An RPC provider for Robinhood Chain** (`4663` mainnet, `46630` testnet).
-      Needed for the market recorder, the chain reads and every contract call.
-      One with a WebSocket endpoint and archive reads; ask for its rate limits
-      in writing, because §23's feed-integrity rules void battles when data is
-      late.
-- [ ] **Hosting** for the server, PostgreSQL and Redis. [`operations/deployment.md`](operations/deployment.md)
-      lists what a deployment consists of.
-- [ ] **A funded deployer key on testnet.** Testnet gas only; it deploys and
-      then holds nothing.
+- [ ] **An RPC provider for Robinhood Chain mainnet.** Needed for the market
+      recorder, the chain reads and every contract call. One with a WebSocket
+      endpoint and archive reads; ask for its rate limits in writing, because
+      §23's feed-integrity rules void battles when data is late. The public
+      endpoint throttles hard and is not for production.
+- [ ] **Hosting** for the server, the rewards worker, PostgreSQL, Redis and the
+      web client. [`operations/deployment.md`](operations/deployment.md) lists
+      what a deployment consists of.
+- [ ] **A domain**, and the web origin it serves from (`WEB_ORIGINS`).
+- [ ] **A deploying key with a little mainnet ETH.** The simulation on
+      2026-09-21 estimated **0.000213 ETH** for both contracts; hold a few times
+      that. The key is given no role, and holds nothing once deployed.
 
-## 2. Deploy to testnet and run the whole thing — Claude, with your keys
+## 2. Calibrate the market — Claude
 
-[`operations/contract-deployment.md`](operations/contract-deployment.md) is the
-procedure. This is the step most likely to surface real problems, because it is
-the first time the pieces meet a real chain.
+- [ ] **Replay the recorded tapes** and choose the values marked `CALIBRATE`.
+      [`operations/market-calibration.md`](operations/market-calibration.md).
+      A week of tapes (from 2026-09-15) was recorded through the public
+      endpoint; record again through the chosen vendor before launch, because a
+      throttled endpoint's lag is part of what the tapes measure.
 
-- [ ] Deploy `RewardsDistributor` and `SecretStockVault`; grant the roles.
-- [ ] Run the full stack against testnet end to end: rounds, picks, a Genesis
-      claim, a distribution published and claimed, a Secret reserved and
-      claimed.
-- [ ] Fix what it finds.
-
-## 3. Let the market data accumulate — time
-
-- [ ] **A week of recorded market tapes**, then calibrate the scoring values
-      marked `CALIBRATE` against them. [`operations/market-calibration.md`](operations/market-calibration.md).
-      This cannot be hurried: it is a week of the market being the market.
-
-## 4. Have the contracts reviewed — you, with outside help
+## 3. Have the contracts reviewed — you, with outside help
 
 The two contracts hold real SPY and cannot be changed once deployed (§19).
 Review before mainnet found one real flaw already: the distributor would
 publish a distribution it could not pay, so one window's claims could be paid
 from another's SPY. It is fixed, and it is the reason this step is not
-optional.
+optional — and without a testnet stage it matters more, not less.
 
 - [ ] **An independent review.** A paid audit firm is the strongest option. A
       competitive audit contest is cheaper for a codebase this size (about 420
       lines of Solidity). At the very least, automated analysis (Slither,
       Aderyn) run and every finding answered in writing.
 
-## 5. Decide the money and the law — you
+## 4. Decide the money and the law — you
 
 - [ ] **Treasury values** in [`OPEN_PARAMETERS.md` §1](OPEN_PARAMETERS.md#1-launch-and-treasury-591-102):
       the creator-tax rate, the initial Rewards pool and Secret vault funding,
-      the minimum claim threshold, the token addresses.
+      the minimum claim threshold.
 - [ ] **Compliance** in [`OPEN_PARAMETERS.md` §6](OPEN_PARAMETERS.md#6-compliance-595):
       permitted jurisdictions, terms and privacy text, geofencing and age
       controls, and how the Secret Stock Drop is treated. The rewards are
       tokenized stock, which is exactly the kind of thing a lawyer should see
       before players do.
 
-## 6. Set up keys for one person — you
+## 5. Set up keys for one person — you
 
 §20 requires a multisig for anything that touches the treasury, so that no
 single hot key can move it. Running alone does not change that requirement; it
@@ -106,7 +121,54 @@ reserved for a Secret winner. Beyond that:
 - a stolen **pauser** key can pause claims. It cannot move anything, and the
   Safe, as admin, can revoke it.
 
-## 7. Watch it without watching it — built; the rest is yours
+## 6. Launch $WAR on Pons — you
+
+The server cannot start without it: `WAR_TOKEN_ADDRESS` and
+`WAR_TOKEN_DECIMALS` are required configuration, and Genesis eligibility reads a
+wallet's `$WAR` balance against the 1,000,000 threshold (§6). So the token comes
+**before** the server goes live, not after.
+
+- [ ] Launch `$WAR` on the Pons launchpad.
+- [ ] Record its address and decimals — read the decimals from the token, never
+      assume 18 — in the deployment's configuration.
+
+The contracts do not depend on `$WAR` (they pay SPY), so steps 7 and 8 can run
+before it exists; only the server waits for it.
+
+## 7. Simulate the deployment against mainnet — Claude, with your addresses
+
+[`operations/contract-deployment.md`](operations/contract-deployment.md) is the
+procedure. Run it without `--broadcast` first, with the Safe as `DEPLOY_ADMIN`:
+that runs every check against the live chain and the real SPY token and sends
+nothing.
+
+- [x] Dry run on 2026-09-21 against the public endpoint, with a placeholder
+      admin: the chain check, the SPY token and its 18 decimals, and both
+      deployments passed; the Secret reward came out as `2e17` base units (0.2
+      SPY); estimated cost 0.000213 ETH.
+- [ ] The same dry run with the real Safe address as admin.
+
+## 8. Deploy — you, with the Safe
+
+- [ ] Deploy with the Safe as admin; commit `contracts/deployments/4663.json`.
+- [ ] Propose the role grants from the Safe (step 5).
+- [ ] Fund the Secret vault for a few Secrets; fund the distributor with the
+      first pool.
+
+## 9. Soft launch in private — you, with Claude
+
+The mainnet stand-in for a testnet run: real contracts, real server, real
+market, before anybody is told.
+
+- [ ] Start the server and the rewards worker against mainnet with the chosen
+      vendor, the deployed addresses and `$WAR`.
+- [ ] With your own wallets, go through every flow once: rounds finalize, a pick
+      and a card use, a Genesis claim, a distribution snapshotted, published
+      from the Safe and claimed, a Secret reserved and claimed.
+- [ ] Fix what it finds. Anything wrong in the contracts means new contracts at
+      new addresses (§19) — which is why the funding stays small until here.
+
+## 10. Watch it without watching it — built; the rest is yours
 
 A round opens every ten minutes, around the clock, and one person cannot watch
 that. The system is built to fail safe on its own: a battle whose data fails the
@@ -115,8 +177,9 @@ paused without erasing anyone's entitlement. What it needs is to **tell you**
 when something happened.
 
 - [x] **Alerts from the server** — a round that will not finalize, battles
-      voided, the Secret vault out of cover, and the server starting or
-      stopping on an error. Each points at its runbook in [`operations/`](operations/).
+      voided, the Secret vault out of cover, a rewards snapshot that is due and
+      failing, and either process stopping on an error. Each points at its
+      runbook in [`operations/`](operations/).
 - [ ] **Subscribe your phone.** Set `ALERT_WEBHOOK` to an ntfy topic with a long
       random name and subscribe to it in the ntfy app; choose
       `ALERT_ROUND_STUCK_AFTER_MS`. [`operations/deployment.md`](operations/deployment.md#alerts).
@@ -124,8 +187,6 @@ when something happened.
       server whose machine has gone away cannot say so; something elsewhere has
       to notice the silence.
 
-## 8. Mainnet — you, with the Safe
+## 11. Open to players — you
 
-- [ ] Deploy with the Safe as admin; propose the role grants from it.
-- [ ] Fund the Secret vault, then the distributor.
-- [ ] Open the first round.
+- [ ] Announce, and let the first public round open.
