@@ -77,14 +77,16 @@ const KEEP_CLIPS = [
 
 /** What is built, and what each one is for in the world. */
 const UNITS = [
-  { from: 'quaternius-ultimate-space-kit/mech-a.glb', to: 'units/mech-a.glb' },
-  { from: 'quaternius-ultimate-space-kit/mech-b.glb', to: 'units/mech-b.glb' },
-  { from: 'quaternius-ultimate-space-kit/mech-c.glb', to: 'units/mech-c.glb' },
-  { from: 'quaternius-ultimate-space-kit/mech-d.glb', to: 'units/mech-d.glb' },
-  { from: 'quaternius-ultimate-space-kit/trooper-a.glb', to: 'units/trooper-a.glb' },
-  { from: 'quaternius-ultimate-space-kit/trooper-b.glb', to: 'units/trooper-b.glb' },
-  { from: 'quaternius-ultimate-space-kit/trooper-c.glb', to: 'units/trooper-c.glb' },
-  { from: 'quaternius-ultimate-space-kit/walker-large.glb', to: 'units/walker-large.glb' },
+  // Troopers and mechs come from `tools/blender/armor-units.py`, which takes the
+  // pack's cartoon heads and pilots off them (§36.16). Run it first.
+  { from: 'ponswars-armored/mech-a.glb', to: 'units/mech-a.glb' },
+  { from: 'ponswars-armored/mech-b.glb', to: 'units/mech-b.glb' },
+  { from: 'ponswars-armored/mech-c.glb', to: 'units/mech-c.glb' },
+  { from: 'ponswars-armored/mech-d.glb', to: 'units/mech-d.glb' },
+  { from: 'ponswars-armored/trooper-a.glb', to: 'units/trooper-a.glb' },
+  { from: 'ponswars-armored/trooper-b.glb', to: 'units/trooper-b.glb' },
+  { from: 'ponswars-armored/trooper-c.glb', to: 'units/trooper-c.glb' },
+  { from: 'ponswars-armored/walker-heavy.glb', to: 'units/walker-heavy.glb' },
   { from: 'quaternius-ultimate-space-kit/drone-flying.glb', to: 'units/drone-flying.glb' },
   { from: 'quaternius-ultimate-space-kit/dropship-a.glb', to: 'units/dropship-a.glb' },
   { from: 'quaternius-ultimate-space-kit/dropship-c.glb', to: 'units/dropship-c.glb' },

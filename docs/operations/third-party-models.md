@@ -27,15 +27,15 @@ gave the work away and are named anyway.
 
 ## What is used
 
-| Model                                  | Pack                  | Author     | Licence | Source                                                                |
-| -------------------------------------- | --------------------- | ---------- | ------- | --------------------------------------------------------------------- |
-| `mech-a`, `mech-b`, `mech-c`, `mech-d` | Ultimate Space Kit    | Quaternius | CC0     | [poly.pizza](https://poly.pizza/bundle/Ultimate-Space-Kit-YWh743lqGX) |
-| `trooper-a`, `trooper-b`, `trooper-c`  | Ultimate Space Kit    | Quaternius | CC0     | same                                                                  |
-| `walker-large`, `drone-flying`         | Ultimate Space Kit    | Quaternius | CC0     | same                                                                  |
-| `dropship-a`, `dropship-c`             | Ultimate Space Kit    | Quaternius | CC0     | same                                                                  |
-| `container-a`, `container-b`           | City Kit (Industrial) | Kenney     | CC0     | [kenney.nl](https://kenney.nl/assets/city-kit-industrial)             |
-| `tank`, `tank-large`                   | City Kit (Industrial) | Kenney     | CC0     | same                                                                  |
-| `chimney`, `water-tower`               | City Kit (Industrial) | Kenney     | CC0     | same                                                                  |
+| Model                                          | Pack                  | Author     | Licence | Source                                                                |
+| ---------------------------------------------- | --------------------- | ---------- | ------- | --------------------------------------------------------------------- |
+| `mech-a`, `mech-b`, `mech-c`, `mech-d`         | Ultimate Space Kit    | Quaternius | CC0     | [poly.pizza](https://poly.pizza/bundle/Ultimate-Space-Kit-YWh743lqGX) |
+| `trooper-a`, `trooper-b`, `trooper-c`          | Ultimate Space Kit    | Quaternius | CC0     | same                                                                  |
+| `walker-heavy` (from `mech-c`), `drone-flying` | Ultimate Space Kit    | Quaternius | CC0     | same                                                                  |
+| `dropship-a`, `dropship-c`                     | Ultimate Space Kit    | Quaternius | CC0     | same                                                                  |
+| `container-a`, `container-b`                   | City Kit (Industrial) | Kenney     | CC0     | [kenney.nl](https://kenney.nl/assets/city-kit-industrial)             |
+| `tank`, `tank-large`                           | City Kit (Industrial) | Kenney     | CC0     | same                                                                  |
+| `chimney`, `water-tower`                       | City Kit (Industrial) | Kenney     | CC0     | same                                                                  |
 
 Quaternius publishes at [quaternius.com](https://quaternius.com/) under CC0 —
 "free to use in personal, educational and commercial projects". Kenney's kits
@@ -51,6 +51,28 @@ offices and warehouses, which is further from the delivered concept art than the
 procedural towers already were — so the districts are modelled instead, by
 `tools/blender/build-district-kit.py`, and the kits contribute the scenery
 standing between them.
+
+## The cartoon taken off
+
+The Ultimate Space Kit's soldiers are a flamingo, a bee and a frog in
+spacesuits, its mechs are driven by a flamingo, a red panda, a frog and a bee,
+and its big walker is a green alien with eyes. Close up that is a cute cartoon
+army, which §36.16 rejects on sight — and the bodies are good: suits, armour,
+walking chassis and a full set of animations.
+
+`tools/blender/armor-units.py` keeps the bodies and replaces the cartoon, in
+headless Blender, before `build-models.mjs` runs:
+
+- troopers lose the animal head for a closed helmet with a visor slit, bound to
+  the same `Head` bone, so every clip moves it as it moved the head;
+- mechs lose the pilot for an armoured hood over the cockpit;
+- the alien walker is not used at all. The heavy (`walker-heavy`) is the widest
+  mech chassis, hooded, with shoulder cannons and a missile pod — a mech rig, so
+  it has the mech's firing clip.
+
+New parts are coloured from texels of the pack's own atlas, so a unit stays one
+material and one draw call. The script writes `ponswars-armored/` beside the
+packs, and that is what the model build reads for these units.
 
 ## What is modelled here instead
 
@@ -80,7 +102,8 @@ Sources are **not** in the repository, exactly like the art masters:
 | `C:/Users/W/PonsWars_assets/vendor/` (override with `PONSWARS_MODEL_SOURCES`) | The packs as downloaded. Large, unchanging. |
 | `apps/web/public/models/`                                                     | What the client serves. Committed.          |
 
-`node tools/build-models.mjs` turns the first into the second: it drops the
+`tools/blender/armor-units.py` writes `ponswars-armored/` into the first (see
+above). `node tools/build-models.mjs` turns the first into the second: it drops the
 animation clips nobody plays, quantizes vertex data, and prunes what the
 exporter left behind — about 40% smaller, and most of that is keyframes for
 `Dance` and `Hello`.

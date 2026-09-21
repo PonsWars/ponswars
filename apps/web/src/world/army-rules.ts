@@ -26,7 +26,7 @@ export const MODELS = {
     '/models/units/mech-c.glb',
     '/models/units/mech-d.glb',
   ],
-  walker: ['/models/units/walker-large.glb'],
+  walker: ['/models/units/walker-heavy.glb'],
   drone: ['/models/units/drone-flying.glb'],
 } as const;
 
@@ -123,10 +123,11 @@ export function marching(wasMarching: boolean, speed: number): boolean {
  * The clips each kind of unit plays for a stance, in order of preference.
  *
  * Lists rather than single names, and each rig is asked only for clips it has:
- * the walker has no firing clip and the drone no walk, and the first version of
- * this table gave the walker the mech's `Shoot_Big` — which it does not have —
- * and fell back to whatever the file listed first. That was `Death`. In every
- * contested battle the walker died on a loop.
+ * the drone has no walk, and the first version of this table gave the pack's
+ * old walker the mech's `Shoot_Big` — which its rig did not have — and fell
+ * back to whatever the file listed first. That was `Death`. In every contested
+ * battle the walker died on a loop. The heavy is a mech rig now
+ * (`tools/blender/armor-units.py`), so it fires like one.
  *
  * Nobody is asked to fire in place who cannot: the troopers' rigs have no
  * standing shot, only a running one, and a trooper running on the spot is a
@@ -149,7 +150,7 @@ export const CLIPS: Readonly<Record<UnitKind, Readonly<Record<Stance, readonly s
   walker: {
     HOLDING: ['Idle'],
     MARCHING: ['Walk'],
-    ASSAULTING: ['Idle'],
+    ASSAULTING: ['Shoot_Big', 'Idle'],
   },
   drone: {
     HOLDING: ['Flying_Idle'],
