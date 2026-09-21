@@ -42,6 +42,20 @@ const SPREAD = 96;
 const RISE = 13;
 
 /**
+ * The contested ground's top, in the marker's frame: the floor's top face is
+ * at 11.5 in the sector and the marker stands at 19.
+ */
+const DECK = -7.5;
+
+/**
+ * How far above the deck a puff reaches full strength. A puff is a quad turned
+ * to the camera, and the camera looks down on it, so a young puff's lower half
+ * leans into the floor: without this, the floor cut each one off along a hard
+ * straight edge and the smoke read as a stack of glowing boxes.
+ */
+const GROUND_FADE = 3;
+
+/**
  * Grey, cold, and a little blue. Lighter than the floor under it: smoke the
  * colour of the ground it hangs over was simply not there.
  */
@@ -55,6 +69,7 @@ const VERTEX = /* glsl */ `
   varying vec2 vUv;
   varying float vAge;
   varying float vFlicker;
+  varying float vAboveDeck;
 
   void main() {
     // aSeed: x is where along the line, y the puff's own phase, z which way
@@ -70,6 +85,10 @@ const VERTEX = /* glsl */ `
     vec4 view = modelViewMatrix * vec4(centre, 1.0);
     view.xy += position.xy * size;
     gl_Position = projectionMatrix * view;
+    // Height over the deck of this corner of the quad, in the world, where the
+    // floor is. Linear across a flat quad, so interpolating it is exact.
+    float deck = (modelMatrix * vec4(0.0, ${glslFloat(DECK)}, 0.0, 1.0)).y;
+    vAboveDeck = (inverse(viewMatrix) * view).y - deck;
     vUv = uv;
     vAge = age;
     // A flicker of its own, so the fire under the smoke never pulses in step.
@@ -84,6 +103,7 @@ const FRAGMENT = /* glsl */ `
   varying vec2 vUv;
   varying float vAge;
   varying float vFlicker;
+  varying float vAboveDeck;
 
   void main() {
     vec2 p = vUv - 0.5;
@@ -98,7 +118,9 @@ const FRAGMENT = /* glsl */ `
     // Young smoke is lit from under by the fire it came from.
     float fire = (1.0 - smoothstep(0.0, 0.35, vAge)) * (0.55 + 0.45 * vFlicker);
     vec3 colour = mix(uSmoke, uFire, fire * 0.85);
-    gl_FragColor = vec4(colour, body * life * uOpacity);
+    // Thin to nothing where the quad meets the floor, so no puff is cut off.
+    float ground = smoothstep(0.0, ${glslFloat(GROUND_FADE)}, vAboveDeck);
+    gl_FragColor = vec4(colour, body * life * ground * uOpacity);
   }
 `;
 
