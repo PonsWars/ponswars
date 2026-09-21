@@ -22,6 +22,11 @@ import { captionStyle, humanize, panelStyle } from './styles.js';
 export function MatchupBanner({ battle }: { readonly battle: ClientBattle }): JSX.Element {
   const round = useSession((state) => state.round);
   const live = round?.state === 'BATTLE_LIVE';
+  // Picks closed and this wallet in none of it: the player is watching. Said
+  // here, under the state of the battle, rather than in a panel of its own
+  // that held nothing else (`PickControls`).
+  const spectating =
+    round !== null && !roundView(round.state, round.clock).picksAllowed && battle.backing === null;
 
   const status = live
     ? momentumLine(battle)
@@ -88,6 +93,9 @@ export function MatchupBanner({ battle }: { readonly battle: ClientBattle }): JS
         >
           {status.text}
         </div>
+        {spectating ? (
+          <div style={{ ...captionStyle, fontSize: 9, color: 'var(--pw-text-3)' }}>SPECTATING</div>
+        ) : null}
       </div>
 
       <Side ticker={battle.right} align="right" />

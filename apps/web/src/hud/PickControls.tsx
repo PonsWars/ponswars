@@ -21,7 +21,7 @@ import { captionStyle, controlStyle, panelStyle, readoutStyle } from './styles.j
  * optimistic guess as final is how a player believes they are in a war they
  * never entered, or that they spent a card use they still hold.
  */
-export function PickControls({ battle }: { readonly battle: ClientBattle }): JSX.Element {
+export function PickControls({ battle }: { readonly battle: ClientBattle }): JSX.Element | null {
   const pendingPick = useSession((state) => state.pendingPick);
   const proposePick = useSession((state) => state.proposePick);
   const cardDecision = useSession((state) => state.cardDecision);
@@ -60,6 +60,14 @@ export function PickControls({ battle }: { readonly battle: ClientBattle }): JSX
     card,
     decision: cardDecision,
   });
+
+  // A spectator after lock has nothing to do here, and a panel holding the one
+  // word SPECTATING floated beside the intel with nothing in it (§42.1). The
+  // banner over the battle says it instead (`MatchupBanner`). Still drawn
+  // while a refusal needs reading: that is the one thing left to show.
+  if (flow.stage === 'SPECTATING' && pickError === null) {
+    return null;
+  }
 
   return (
     <div style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-3)', minWidth: 190 }}>

@@ -92,12 +92,23 @@ describe('choosing a side', () => {
     expect(screen.getByRole('button', { name: 'BACK AAPL' })).toBeDefined();
   });
 
-  it('offers nothing to press once picks are closed (§42.1)', () => {
-    // §42.1 would rather show less UI than a control that cannot be used.
+  it('shows nothing to a spectator once picks are closed (§42.1)', () => {
+    // §42.1 would rather show less UI than a control that cannot be used; the
+    // banner over the battle says SPECTATING instead.
     useSession.setState({ round: { ...PICK_OPEN, state: 'BATTLE_LIVE' } });
+    const { container } = render(<PickControls battle={BATTLE} />);
+
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('still shows a refusal to a spectator, which is the one thing left to read', () => {
+    useSession.setState({
+      round: { ...PICK_OPEN, state: 'BATTLE_LIVE' },
+      pickError: { message: REFUSED.message, nextStep: REFUSED.nextStep },
+    });
     render(<PickControls battle={BATTLE} />);
 
-    expect(screen.getByText('SPECTATING')).toBeDefined();
+    expect(screen.getByText('Pick refused.')).toBeDefined();
     expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 
