@@ -114,8 +114,22 @@ as a labelled preview: it shows placeholder battles under a
 `PREVIEW — NOT A LIVE ROUND` banner rather than presenting invented rounds as
 real ones.
 
-The stack allows the two spellings of the Vite dev origin by default and takes
-`WEB_ORIGINS` as a comma-separated override. There is no wildcard: `*` would
+**To judge how the world feels, use the production build, not the dev
+server:**
+
+```bash
+pnpm run preview:web
+```
+
+then open `http://localhost:4173`. The dev server runs React in development mode
+and serves unminified modules through hot reload; on the same machine it
+stalled for over 120 ms at a time where the production bundle held 140–168
+frames a second and never went past 34 ms. What looks like lag on `:5173` is
+mostly the dev server.
+
+The stack allows both spellings of the Vite dev origin (`:5173`) and of its
+production preview (`:4173`) by default, and takes `WEB_ORIGINS` as a
+comma-separated override. There is no wildcard: `*` would
 also hand any page on the internet the ability to make authenticated requests
 on a visitor's behalf the moment credentials are enabled.
 

@@ -36,7 +36,8 @@
     "calibrate:market": "node tools/calibrate-market.mjs",
     "load-test": "node tools/load-test.mjs",
     "record:market": "node tools/record-market.mjs",
-    "local": "pnpm run build && node apps/local-stack/dist/main.js"
+    "local": "pnpm run build && node apps/local-stack/dist/main.js",
+    "preview:web": "pnpm --filter @ponswars/web build && pnpm --filter @ponswars/web preview"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

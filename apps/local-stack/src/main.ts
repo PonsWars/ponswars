@@ -143,8 +143,18 @@ const CONFIDENCE_CALIBRATION: ConfidenceCalibration = {
  *
  * Development only, like everything else here. A deployment names its own, and
  * `packages/config` is where that belongs once there is one.
+ *
+ * The Vite dev server (`:5173`) and Vite's production preview (`:4173`), each
+ * in both spellings. The preview matters as much as the dev server: the dev
+ * build runs React in development mode, and measured on the same machine it
+ * stalled for over 120 ms at a time where the production bundle never went
+ * past 34 — so the dev server is the wrong place to judge how the world feels,
+ * and the right one has to be able to reach the stack.
  */
-const WEB_ORIGINS = (process.env['WEB_ORIGINS'] ?? 'http://localhost:5173,http://127.0.0.1:5173')
+const WEB_ORIGINS = (
+  process.env['WEB_ORIGINS'] ??
+  'http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173'
+)
   .split(',')
   .map((origin) => origin.trim())
   .filter((origin) => origin !== '');
