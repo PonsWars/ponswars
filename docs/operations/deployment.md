@@ -309,6 +309,28 @@ deliberate and was a bug first: the API kept the event loop alive, so a service
 whose round loop had died went on answering `/v1/ready` with `200` and serving
 the last round it saw, forever.
 
+## Alerts
+
+`ALERT_WEBHOOK` says where the server reports what is wrong, and
+`ALERT_ROUND_STUCK_AFTER_MS` when a round counts as stuck. Both are required;
+`disabled` is a valid answer to the first and has to be written down.
+
+For one person, `ntfy+https://ntfy.sh/<topic>` is the short path: install the
+ntfy app, subscribe to the same topic, and critical alerts arrive as urgent
+notifications. **The topic name is the password** — anyone who knows it can
+read the alerts and post to it — so make it long and random, and treat the
+variable as the secret it is marked as.
+
+What is sent, and why only this: a round not finalized past the threshold
+(critical, and again when it clears), battles voided in a round, the Secret
+vault out of cover, and the server starting or stopping on an error. Every
+alert is also a line in the log, sent or not.
+
+**What it cannot report is its own machine going away.** A process that has
+lost its host, its network or its power sends nothing — which is exactly when
+someone should hear about it. Point an uptime monitor outside the deployment at
+`/v1/ready`. That, and not this, is what notices a server that is simply gone.
+
 ## What the images will not do
 
 - **Run as root.** The service runs as `node`, and it writes nothing.

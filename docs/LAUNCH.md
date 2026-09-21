@@ -101,7 +101,7 @@ So keep what those keys can reach small:
 - [ ] **Fund the Secret vault for a few Secrets at a time**, topped up from the
       Safe as they are claimed, rather than holding the whole budget.
 
-## 7. Watch it without watching it — Claude, then you
+## 7. Watch it without watching it — built; the rest is yours
 
 A round opens every ten minutes, around the clock, and one person cannot watch
 that. The system is built to fail safe on its own: a battle whose data fails the
@@ -109,9 +109,15 @@ integrity rules is voided and card uses are restored (§4.4, §110.6), and claim
 paused without erasing anyone's entitlement. What it needs is to **tell you**
 when something happened.
 
-- [ ] Alerts to your phone for a round that will not finalize, market data that
-      is degraded, a failed publication, and the Secret vault running out of
-      cover. Each has a runbook in [`operations/`](operations/).
+- [x] **Alerts from the server** — a round that will not finalize, battles
+      voided, the Secret vault out of cover, and the server starting or
+      stopping on an error. Each points at its runbook in [`operations/`](operations/).
+- [ ] **Subscribe your phone.** Set `ALERT_WEBHOOK` to an ntfy topic with a long
+      random name and subscribe to it in the ntfy app; choose
+      `ALERT_ROUND_STUCK_AFTER_MS`. [`operations/deployment.md`](operations/deployment.md#alerts).
+- [ ] **An uptime monitor outside the deployment**, pointed at `/v1/ready`. A
+      server whose machine has gone away cannot say so; something elsewhere has
+      to notice the silence.
 
 ## 8. Mainnet — you, with the Safe
 

@@ -40,6 +40,15 @@ import {
   readFinalizedResult,
 } from '@ponswars/store-postgres';
 import { parseServerArgs } from './server-args.js';
+import { alertSink, type AlertSink } from './alert-sink.js';
+import {
+  lifecycle,
+  reconcile,
+  stuckRound,
+  uncoveredVault,
+  voidedBattles,
+  type Condition,
+} from './alerts.js';
 import { loadEngineCalibration } from './calibration.js';
 import { followClaims } from './claims.js';
 import { redisEventBus, redisRateLimit, takeLease, type Lease } from '@ponswars/redis';
@@ -100,6 +109,31 @@ const ROUNDS_LEASE_TTL_MS = 10_000;
  */
 const TIEBREAK_POLL_MS = 15_000;
 
+/**
+ * How often what is wrong is checked for alerting (§59.3).
+ *
+ * A constant with a reason rather than an `OPEN` value, like the housekeeping
+ * interval: it only decides how soon after a threshold is crossed the page
+ * goes out, and a quarter of a minute is well inside any threshold worth
+ * setting. The thresholds themselves are configuration.
+ */
+const ALERT_WATCH_MS = 15_000;
+
+/**
+ * How long a failing process waits for its last alert to go out. Longer than
+ * one delivery's own timeout, so the page about the failure is not the thing
+ * cut short by it.
+ */
+const FINAL_ALERT_WAIT_MS = 12_000;
+
+/**
+ * The alert sink, once there is a configuration to build it from.
+ *
+ * Module-level for one reason: the process's own failure is caught outside
+ * `main`, and that failure is the alert that matters most.
+ */
+let alerting: AlertSink | null = null;
+
 async function main(): Promise<void> {
   // Before the configuration, and long before anything connects: a mistyped
   // argument should be a process that will not start rather than one that
@@ -110,6 +144,11 @@ async function main(): Promise<void> {
   }
 
   const config = loadConfig(process.env);
+
+  // Where alerts go (§59.3). Built first, so everything after — including the
+  // process failing — can say so.
+  const alerts = alertSink(config.ALERT_WEBHOOK, { say, now: () => Date.now() });
+  alerting = alerts;
 
   // How battles score and read, as one file (§59.4). Read before anything
   // binds: a service that started and then found it had no calibration would
@@ -467,6 +506,13 @@ async function main(): Promise<void> {
       config.MARKET_DATA_PROVIDER,
     ),
   );
+  // A restart nobody asked for, and a crash loop, show as a run of these.
+  alerts.send(
+    lifecycle(
+      'STARTED',
+      `${config.NODE_ENV} on chain ${String(config.CHAIN_ID)}, process ${String(process.pid)}.`,
+    ),
+  );
 
   /**
    * Housekeeping for the auth tables.
@@ -487,6 +533,46 @@ async function main(): Promise<void> {
     60 * 60 * 1_000,
   );
   housekeeping.unref();
+
+  /**
+   * What is wrong right now, for alerting (§59.3).
+   *
+   * Every instance watches, not only the one driving: a round stops finalizing
+   * most often because the driver has stopped, and a driver cannot report its
+   * own absence. On a deployment of several instances that means one page per
+   * instance, which is the right way round to be wrong.
+   *
+   * The vault's cover is read when a round opens rather than on every check —
+   * it only changes when a Secret is reserved or the vault is refunded, and a
+   * chain read every fifteen seconds would spend the RPC budget on nothing.
+   */
+  let reported: ReadonlyMap<string, Condition> = new Map();
+  let vaultCovered: boolean | null = null;
+  const readCover = (): void => {
+    if (secretVault === null) {
+      return;
+    }
+    void secretVault
+      .isCovered()
+      .then((covered) => {
+        vaultCovered = covered;
+      })
+      // An unreadable vault is not an uncovered one: keep what was last known.
+      .catch(() => undefined);
+  };
+  readCover();
+  const watch = setInterval(() => {
+    const current = [
+      stuckRound(round, now(), config.ALERT_ROUND_STUCK_AFTER_MS),
+      uncoveredVault(vaultCovered),
+    ].filter((condition): condition is Condition => condition !== null);
+    const next = reconcile(reported, current);
+    reported = next.active;
+    for (const message of next.messages) {
+      alerts.send(message);
+    }
+  }, ALERT_WATCH_MS);
+  watch.unref();
 
   let shuttingDown = false;
   const shutdown = (signal: string): void => {
@@ -562,6 +648,15 @@ async function main(): Promise<void> {
         },
         onEvent: (event) => {
           say(describe(event));
+          if (event.kind === 'FINALIZED') {
+            const notice = voidedBattles(event.round.roundId, event.finalization.voided);
+            if (notice !== null) {
+              alerts.send(notice);
+            }
+          }
+          if (event.kind === 'OPENED') {
+            readCover();
+          }
         },
         ...(market.roundsOpenAt === undefined ? {} : { roundsOpenAt: market.roundsOpenAt }),
         signal: stopping.signal,
@@ -569,6 +664,7 @@ async function main(): Promise<void> {
     }
   } finally {
     clearInterval(housekeeping);
+    clearInterval(watch);
     clearInterval(followStore);
     await lease?.release();
     await bus.close();
@@ -588,6 +684,8 @@ async function main(): Promise<void> {
     await sockets?.close();
     await recovery?.close();
     await database.close();
+    // Whatever was queued before stopping still goes out.
+    await alerts.drained();
   }
 
   say('stopped cleanly\n');
@@ -645,7 +743,7 @@ function say(line: string): void {
   process.stdout.write(line);
 }
 
-main().catch((error: unknown) => {
+main().catch(async (error: unknown) => {
   // A configuration failure is the expected way to get this wrong and deserves
   // its own message: it already names every parameter that is missing or
   // invalid, and a stack trace on top of that buries the part worth reading.
@@ -653,4 +751,16 @@ main().catch((error: unknown) => {
     error instanceof ConfigError ? `${error.message}\n` : `server failed: ${String(error)}\n`,
   );
   process.exitCode = 1;
+
+  // The page that matters most. Its kind and nothing else: an error from an RPC
+  // client can carry the endpoint's URL, which is a secret (§87), and this goes
+  // to a service outside the deployment. The log has the rest.
+  if (alerting !== null) {
+    const kind = error instanceof Error ? error.name : 'unknown error';
+    alerting.send(lifecycle('FAILED', `${kind}. The server log has the detail.`));
+    await Promise.race([
+      alerting.drained(),
+      new Promise((resolve) => setTimeout(resolve, FINAL_ALERT_WAIT_MS).unref()),
+    ]);
+  }
 });

@@ -1,3 +1,5 @@
+import { createServer, type IncomingMessage } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import { alertSink, jsonRequest, ntfyRequest } from './alert-sink.js';
 import type { AlertMessage } from './alerts.js';
@@ -138,5 +140,53 @@ describe('the sink', () => {
 
     expect(post).not.toHaveBeenCalled();
     expect(lines.join('')).toContain('alert [FIRING] Round r1 is not finalizing');
+  });
+});
+
+describe('delivery over a real socket', () => {
+  it('posts to an ntfy topic exactly what a phone would be sent', async () => {
+    // Not a stubbed fetch: a real HTTP server on this machine, so the request
+    // the platform actually builds — method, query, body, encoding — is what is
+    // checked.
+    const received: { method: string; url: string; body: string }[] = [];
+    const server = createServer((request: IncomingMessage, response) => {
+      let body = '';
+      request.setEncoding('utf8');
+      request.on('data', (chunk: string) => {
+        body += chunk;
+      });
+      request.on('end', () => {
+        received.push({ method: request.method ?? '', url: request.url ?? '', body });
+        response.writeHead(200).end();
+      });
+    });
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    const { port } = server.address() as AddressInfo;
+
+    const lines: string[] = [];
+    const sink = alertSink(
+      { kind: 'NTFY', url: `http://127.0.0.1:${String(port)}/ponswars-ops` },
+      { say: (line) => lines.push(line), now: () => 0 },
+    );
+    sink.send(FIRING);
+    await sink.drained();
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+
+    expect(received).toHaveLength(1);
+    const [only] = received;
+    const url = new URL(only?.url ?? '', 'http://127.0.0.1');
+    expect(only?.method).toBe('POST');
+    expect(url.pathname).toBe('/ponswars-ops');
+    // The em dash and the section sign arrive intact, which a header could not
+    // have carried.
+    expect(url.searchParams.get('title')).toBe('[FIRING] Round r1 is not finalizing — §25');
+    expect(only?.body).toContain('Runbook: docs/operations/round-stuck.md');
+    expect(lines.join('')).not.toContain('not delivered');
   });
 });
