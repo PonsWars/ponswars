@@ -52,7 +52,8 @@ import { Sample, tally, type Distribution } from './distribution.js';
  * Plays a recorded market through the real market adapter and the real engine.
  *
  * Every ten-minute slot the tape covers, while the market was open, becomes a
- * round, and every pair of tickers a battle in it — forty-five a round rather
+ * round — covers meaning the recorder was running through it and through the
+ * history its first readings look back over (`TapeSource.records`), and every pair of tickers a battle in it — forty-five a round rather
  * than the five matchmaking would pick, because the point is how the market
  * behaves under the bounds, not which five happened to be drawn. Each battle is
  * ticked at the service's cadence from what the tape shows had been read by
@@ -122,6 +123,12 @@ export interface CalibrationReport {
     readonly played: number;
     /** Slots skipped because no whole round fit in the session (§23.8). */
     readonly marketClosed: number;
+    /**
+     * Slots skipped because the recorder was not running through them, or
+     * through the history they look back over. Replayed, they would be a
+     * market in which nothing traded.
+     */
+    readonly unrecorded: number;
     /**
      * Rounds whose comparable earlier sessions start before the tape does.
      * Their relative volume leans on the expected-volume floor rather than on
@@ -243,6 +250,7 @@ export async function calibrate(
   };
   let played = 0;
   let marketClosed = 0;
+  let unrecorded = 0;
   let withoutVolumeHistory = 0;
 
   const pairs: [ActiveTicker, ActiveTicker][] = [];
@@ -254,6 +262,11 @@ export async function calibrate(
 
   for (const [slotIndex, slot] of slots.entries()) {
     const pickOpenAt = utcTimestamp(slot);
+    if (!source.records(slot - warmup, slot + ROUND_DURATION)) {
+      unrecorded += 1;
+      options.onRound?.(slotIndex + 1, slots.length);
+      continue;
+    }
     if (nextOpenWindow(pickOpenAt, ROUND_DURATION, policy.calendar) !== pickOpenAt) {
       marketClosed += 1;
       options.onRound?.(slotIndex + 1, slots.length);
@@ -423,7 +436,7 @@ export async function calibrate(
 
   return {
     clock: options.clock,
-    rounds: { played, marketClosed, withoutVolumeHistory },
+    rounds: { played, marketClosed, unrecorded, withoutVolumeHistory },
     tickers: Object.fromEntries(
       ACTIVE_TICKERS.map((ticker) => [ticker, tickerReport(sampleOf(ticker))]),
     ) as Record<ActiveTicker, TickerReport>,

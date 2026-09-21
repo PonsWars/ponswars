@@ -167,6 +167,9 @@ const lines = [
   '',
   `Clock: ${report.clock === 'chain' ? 'chain (the market alone, without the recorder’s lag)' : 'wall (as the recorder’s endpoint delivered it)'}`,
   `Rounds: ${String(report.rounds.played)} played, ${String(report.rounds.marketClosed)} skipped with the market shut` +
+    (report.rounds.unrecorded > 0
+      ? `, ${String(report.rounds.unrecorded)} skipped where the recorder was not running`
+      : '') +
     (report.rounds.withoutVolumeHistory > 0
       ? `, ${String(report.rounds.withoutVolumeHistory)} without enough earlier sessions for relative volume`
       : ''),

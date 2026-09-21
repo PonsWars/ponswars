@@ -137,6 +137,30 @@ describe('TapeSource', () => {
     expect(source.notional('NVDA', all)).toBe(10n * DOLLAR);
   });
 
+  it('says a stretch was recorded only when one run of the recorder read all of it', () => {
+    const source = new TapeSource(
+      [
+        covered(T0, T0 + 1_000),
+        // One read can take in minutes of chain at once; the run is unbroken.
+        covered(T0 + 8 * 60_000, T0 + 8 * 60_000 + 1_000),
+        // Stopped, and started again an hour later: nothing between was read.
+        { kind: 'START', version: 1, chainId: 4663, wallAt: T0 + 68 * 60_000 },
+        covered(T0 + 68 * 60_000, T0 + 68 * 60_000 + 1_000),
+        covered(T0 + 70 * 60_000, T0 + 70 * 60_000 + 1_000),
+      ],
+      DOLLAR,
+      'chain',
+    );
+
+    expect(source.records(T0, T0 + 8 * 60_000)).toBe(true);
+    expect(source.records(T0 + 68 * 60_000, T0 + 70 * 60_000)).toBe(true);
+    // Across the restart, and past either end.
+    expect(source.records(T0 + 5 * 60_000, T0 + 69 * 60_000)).toBe(false);
+    expect(source.records(T0 + 30 * 60_000, T0 + 40 * 60_000)).toBe(false);
+    expect(source.records(T0 - 1, T0 + 60_000)).toBe(false);
+    expect(source.records(T0 + 69 * 60_000, T0 + 71 * 60_000)).toBe(false);
+  });
+
   it('counts volume by whole minutes, above the minimum it is given', () => {
     const source = new TapeSource(
       [

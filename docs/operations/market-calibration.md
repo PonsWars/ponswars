@@ -27,8 +27,12 @@ with its wallet, every Chainlink reference, and a coverage mark after each read
 timed by the wall clock. The directory is ignored by git: tapes are data, and a
 day of them is tens of megabytes.
 
-It runs until stopped, and a restart is safe: the tape marks it, trades read
-twice count once, and the gap replays as the lag it was.
+It runs until stopped, and a restart is safe: the tape marks it, and trades
+read twice count once. What happened while it was stopped was never read, so a
+replay plays no round over it — or over any round whose history reaches back
+into it — and says how many it skipped. Keep it running: a recorder on a laptop
+that sleeps records the hours the laptop is awake, and the week of tapes from
+2026-09-15 lost more than half its hours that way.
 
 How much to record:
 

@@ -87,7 +87,12 @@ describe('calibrate', { timeout: 60_000 }, () => {
   it('voids the battles of a ticker that never trades and finalizes the rest', () => {
     // 25 minutes of volatility lookback and a 2-minute window leave room for
     // the rounds at 14:30, 14:40 and 14:50.
-    expect(report.rounds).toEqual({ played: 3, marketClosed: 0, withoutVolumeHistory: 3 });
+    expect(report.rounds).toEqual({
+      played: 3,
+      marketClosed: 0,
+      unrecorded: 0,
+      withoutVolumeHistory: 3,
+    });
     // Nine of the forty-five pairs a round include AMZN.
     expect(report.battles.voided).toBe(3 * 9);
     expect(report.battles.finalized).toBe(3 * 36);
@@ -124,6 +129,29 @@ describe('calibrate', { timeout: 60_000 }, () => {
     const closed = await calibrate(tape, candidate, OPTIONS);
     expect(closed.rounds).toMatchObject({ played: 0, marketClosed: 3 });
     expect(closed.battles.finalized + closed.battles.voided).toBe(0);
+  });
+
+  it('plays no round over a stretch the recorder was not running for', async () => {
+    // The recorder stops at 14:35 and starts again at 14:45: nothing between
+    // was read. Replayed as read, it would be a market in which nothing traded.
+    const tape = hourOfMarket().flatMap((entry): TapeEntry[] => {
+      const at = entry.kind === 'COVERED' || entry.kind === 'TRADE' ? entry.at : null;
+      if (at === null) {
+        return [entry];
+      }
+      if (at > START + 35 * 60_000 && at < START + 45 * 60_000) {
+        return [];
+      }
+      if (entry.kind === 'COVERED' && at === START + 45 * 60_000) {
+        return [{ kind: 'START', version: 1, chainId: 4663, wallAt: at }, entry];
+      }
+      return [entry];
+    });
+    const holed = await calibrate(tape, candidate, OPTIONS);
+
+    // 14:30 runs into the hole and 14:40 is inside it; 14:50 looks back into it.
+    expect(holed.rounds).toMatchObject({ played: 0, unrecorded: 3 });
+    expect(holed.battles.finalized + holed.battles.voided).toBe(0);
   });
 
   it('reads starting values off the report, and names what it could not', () => {

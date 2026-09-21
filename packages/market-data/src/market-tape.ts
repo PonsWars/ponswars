@@ -173,7 +173,8 @@ const MINUTE = 60_000;
  *   as current throughout the tape. It measures the market alone, which is
  *   what the market's bounds are for; a recorder that fell behind on a
  *   throttled endpoint still yields a usable tape. A stretch the recorder
- *   never read shows as no trades, not as lag.
+ *   never read shows as no trades, not as lag — so a replay asks
+ *   {@link TapeSource.records} before reading a stretch at all.
  */
 export type TapeClock = 'wall' | 'chain';
 
@@ -194,6 +195,8 @@ export class TapeSource implements MarketSource {
   private next = 0;
   private readonly firstCovered: number | null = null;
   private readonly lastCovered: number | null = null;
+  /** The stretches read without a break, on the replay's clock (see {@link records}). */
+  private readonly runs: { readonly from: number; readonly to: number }[] = [];
   private covered = utcTimestamp(0);
   private readonly seen = new Set<string>();
   private readonly dexTrades = new Map<ActiveTicker, DexTrade[]>();
@@ -216,6 +219,7 @@ export class TapeSource implements MarketSource {
     let pending: TapeEntry[] = [];
     let firstCovered: number | null = null;
     let lastCovered: number | null = null;
+    let run: { from: number; to: number } | null = null;
     for (const entry of entries) {
       if (entry.kind === 'UNITS') {
         this.unitsOf.set(entry.ticker, {
@@ -225,10 +229,20 @@ export class TapeSource implements MarketSource {
       } else if (entry.kind === 'START') {
         // Whatever was read but never marked covered is not known to be complete.
         pending = [];
+        // And the recorder was not running: what happened between its last
+        // mark and its next was never read (see `records`).
+        if (run !== null) {
+          this.runs.push(run);
+        }
+        run = null;
       } else if (entry.kind === 'COVERED') {
         const markAt = clock === 'wall' ? entry.wallAt : entry.at;
         firstCovered ??= markAt;
         lastCovered = Math.max(lastCovered ?? markAt, markAt);
+        run =
+          run === null
+            ? { from: markAt, to: markAt }
+            : { from: run.from, to: Math.max(run.to, markAt) };
         for (const read of [...pending, entry]) {
           this.timeline.push({
             at: clock === 'wall' ? entry.wallAt : chainInstant(read),
@@ -239,6 +253,9 @@ export class TapeSource implements MarketSource {
       } else {
         pending.push(entry);
       }
+    }
+    if (run !== null) {
+      this.runs.push(run);
     }
     if (clock === 'chain') {
       // Stable: entries at one instant keep the order they were read in.
@@ -253,6 +270,26 @@ export class TapeSource implements MarketSource {
     return this.firstCovered === null || this.lastCovered === null
       ? null
       : { from: this.firstCovered, to: this.lastCovered };
+  }
+
+  /**
+   * Whether the recorder read the whole of `from`…`to` without a break, on the
+   * replay's clock.
+   *
+   * Between two coverage marks of one run, the read in between took in every
+   * block, however long it was. Across a restart it did not: the recorder was
+   * not running, and what happened meanwhile is simply absent from the tape.
+   * Replayed as if it were read, that absence is a market in which nothing
+   * traded — every battle over it void, and the void rate a measurement of the
+   * machine that ran the recorder rather than of the market. A week recorded
+   * on a laptop was more than half such holes.
+   *
+   * Conservative about restarts: a recorder re-reads a little history when it
+   * starts, and that is not counted, because the tape does not say how far
+   * back it reached.
+   */
+  records(from: number, to: number): boolean {
+    return this.runs.some((run) => run.from <= from && to <= run.to);
   }
 
   /** Reveals everything visible by `instant`, on the replay's clock. */
