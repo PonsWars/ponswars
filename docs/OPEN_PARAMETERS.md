@@ -89,6 +89,34 @@ market and replays it under candidate values.
 | `PONS_MAX_IDENTICAL_PER_WALLET`    | `CALIBRATE` | Same-sized Pons trades from one wallet that count before the rest are a loop (§75.3).                      |
 | `RPC_MIN_INTERVAL_MS`              | `OPEN`      | Least time between indexer calls. Depends on the RPC vendor's rate; the public endpoint needs it generous. |
 
+### First measurement — 2026-09-21
+
+Nothing above is chosen yet; this is what the first tapes say, so the choice
+can be traced to them.
+
+**Tapes.** 2026-09-15 to 2026-09-21, through the public endpoint, on a machine
+that slept: 87 recorded hours out of 157, and 246 rounds that could be replayed
+with the market open. Too little to launch on — record again, around the clock,
+through the chosen vendor (`LAUNCH.md` step 2).
+
+**Void rates** (`tools/calibration/initial-candidate.json`, chain clock, all 45
+pairs a round):
+
+| `PRICE_FEED_STALE_AFTER_MS` | Battles voided | GME | AMZN | AMD | MSFT | NVDA, SPY, META, GOOGL, TSLA, AAPL  |
+| --------------------------- | -------------- | --- | ---- | --- | ---- | ----------------------------------- |
+| 15 minutes                  | 34.1%          | 72% | 59%  | 49% | 36%  | 21% — none caused by their own data |
+| 30 minutes                  | 16.3%          | 41% | 31%  | 22% | 13%  | 9% — none caused by their own data  |
+
+Almost every void comes from four tickers whose Robinhood Chain market is thin,
+not from the bounds being wrong for the rest. Trades an hour over the recorded
+hours: META 1,281, SPY 359, NVDA 341, GOOGL 168, AAPL 93, TSLA 68, AMD 51, MSFT
+32, GME 15 (about $640 an hour, median trade $10), AMZN 9 (about $620 an hour).
+
+A longer stale bound halves the voids by deciding more battles on a price
+carried from an older trade (`DEGRADED`). On GME and AMZN, a few dollars of
+trading move the price a battle is decided by — which is a question about
+manipulation (§75) as much as about voids, and a product decision (§102).
+
 ## 3. Infrastructure (§59.3)
 
 | Parameter                                          | Status                                                             |
