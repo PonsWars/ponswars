@@ -52,6 +52,8 @@ import { DeckWreckage } from './DeckWreckage.js';
 import { fobShape, type FobPart } from './fob-shape.js';
 import { HoloTicker } from './HoloTicker.js';
 import { SupportCurtain } from './SupportCurtain.js';
+import { battleGround } from './battle-ground.js';
+import { groundHeat } from './battle-energy.js';
 import { FrontlineSmoke } from './FrontlineSmoke.js';
 import { LightPool } from './LightPool.js';
 import { Planet } from './Planet.js';
@@ -491,6 +493,16 @@ function Sector({
   const bases = useRef<(Group | null)[]>([]);
   const frontline = useRef<Mesh | null>(null);
   const readReshuffle = useReshuffleReader();
+  // The contested ground as a lit, scorched surface (§36.10). One per sector,
+  // because its frontline and its heat are this battle's.
+  const ground = useMemo(() => battleGround(), []);
+  const reducedMotion = useSession((state) => state.reducedMotion);
+  useEffect(
+    () => () => {
+      ground.material.dispose();
+    },
+    [ground],
+  );
   const [hovered, setHovered] = useState(false);
   const gl = useThree((state) => state.gl);
   const position = SECTOR_POSITIONS[index];
@@ -549,6 +561,18 @@ function Sector({
       if (!Array.isArray(material) && 'opacity' in material) {
         material.opacity = FRONTLINE_OPACITY * frame.frontline;
       }
+    }
+
+    // The scorch follows the line the marker is actually drawn at — eased,
+    // never ahead of the server — and burns as hard as the battle is fought.
+    // Eased too, so a battle heating up reads as the ground catching rather
+    // than switching on, and it comes apart with the frontline at a reshuffle.
+    ground.front.value = marker?.position.x ?? 0;
+    const target = groundHeat(live, battle?.intensity) * frame.frontline;
+    ground.heat.value += (target - ground.heat.value) * Math.min(1, delta * 1.5);
+    // §83.3: the embers stay lit, and stop.
+    if (!reducedMotion) {
+      ground.time.value = (ground.time.value + delta) % 3_600;
     }
   });
 
@@ -662,9 +686,8 @@ function Sector({
               inset rather than raised — it is the ground the frontline moves
               across, and anything standing on it would be in the way of the one
               reading §36.15 asks a player to take in instantly. */}
-          <mesh position={[0, 11.2, 0]}>
+          <mesh position={[0, 11.2, 0]} material={ground.material}>
             <boxGeometry args={[CONTESTED_WIDTH, 0.6, 150]} />
-            <meshBasicMaterial color="#0b1a22" transparent opacity={0.85} />
           </mesh>
 
           {/* Lit paving across it. Every delivered frame has a floor that

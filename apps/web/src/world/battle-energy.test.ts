@@ -4,6 +4,8 @@ import {
   CURTAIN_MAX_HEIGHT,
   FIRE_FLOOR,
   fireShare,
+  GROUND_HEAT_MAX,
+  groundHeat,
   SMOKE_MAX_PUFFS,
   smokePuffs,
   supportCurtain,
@@ -91,5 +93,21 @@ describe('smoke over the frontline (§36.10)', () => {
     for (const detail of ['FULL', 'REDUCED', 'SILHOUETTE', 'CULLED'] as const) {
       expect(smokePuffs(detail, 5, true)).toBeLessThanOrEqual(SMOKE_MAX_PUFFS);
     }
+  });
+});
+
+describe('the ground under the frontline (§36.10)', () => {
+  it('does not burn before any fighting', () => {
+    expect(groundHeat(false, 1)).toBe(0);
+  });
+
+  it('burns while the battle is live, hotter as it is fought harder', () => {
+    expect(groundHeat(true, 0)).toBeGreaterThan(0);
+    expect(groundHeat(true, 1)).toBeGreaterThan(groundHeat(true, 0));
+  });
+
+  it('never burns past its ceiling, whatever it is told', () => {
+    expect(groundHeat(true, 50)).toBeLessThanOrEqual(GROUND_HEAT_MAX);
+    expect(groundHeat(true, Number.NaN)).toBeLessThanOrEqual(GROUND_HEAT_MAX);
   });
 });

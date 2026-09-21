@@ -119,3 +119,25 @@ export function smokePuffs(
   }
   return Math.round(SMOKE_PUFFS[detail] * fireShare(intensity));
 }
+
+/**
+ * How hot the ground under the frontline burns (§36.10, §13).
+ *
+ * The contested ground was a flat unlit plate, the same whether the battle on
+ * it was level or a rout. Where the two sides' fire meets, the ground is
+ * scorched and glowing, and this is how much — from the same battle-wide
+ * intensity the fire and the smoke read, so the three never disagree.
+ *
+ * Nothing before the battle is live: a pick phase has had no fighting to burn
+ * anything. Never above `GROUND_HEAT_MAX`, which is what keeps the glow under
+ * the bloom threshold — the ground is lit by the fight, it is not a light of
+ * its own (§36.5).
+ */
+export const GROUND_HEAT_MAX = 1;
+
+export function groundHeat(live: boolean, intensity: number | undefined): number {
+  if (!live) {
+    return 0;
+  }
+  return Math.min(fireShare(intensity), GROUND_HEAT_MAX);
+}
