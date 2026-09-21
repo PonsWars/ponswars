@@ -130,6 +130,10 @@ export function Hud({ onNavigate }: { readonly onNavigate: (next: Route) => void
             justifyContent: 'space-between',
             alignItems: 'flex-end',
             gap: 'var(--pw-space-3)',
+            // Down against the bottom row. The column spaces its children
+            // evenly, which left this at mid-height — over the label of the
+            // sector on the left of the world.
+            marginTop: 'auto',
           }}
         >
           <Live>
