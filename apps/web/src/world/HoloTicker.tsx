@@ -12,6 +12,7 @@ import {
 } from 'three';
 import { useSession } from '../state/session.js';
 import { DISTRICT_CENTRE_X, HOLO_BANDS, tapeText, type HoloBand } from './holo-ticker.js';
+import { readableBothSides } from './readable-both-sides.js';
 import { useFinalPush } from './useFinalPush.js';
 
 /**
@@ -128,18 +129,22 @@ export function HoloTicker({
         1,
         Math.round(bandLength(band) / ((TAPE_WIDTH / TAPE_HEIGHT) * band.height)),
       );
-      const material = new MeshBasicMaterial({
-        map: texture,
-        color: accent,
-        transparent: true,
-        opacity: OPACITY_CALM * band.strength,
-        blending: AdditiveBlending,
-        depthWrite: false,
-        side: DoubleSide,
-        // A hologram, not a lit surface: the world's fog would grey it into
-        // the weather it is meant to stand out from.
-        fog: false,
-      });
+      // Double-sided, so the far half of the ring shows; read the right way
+      // round from inside it rather than mirrored.
+      const material = readableBothSides(
+        new MeshBasicMaterial({
+          map: texture,
+          color: accent,
+          transparent: true,
+          opacity: OPACITY_CALM * band.strength,
+          blending: AdditiveBlending,
+          depthWrite: false,
+          side: DoubleSide,
+          // A hologram, not a lit surface: the world's fog would grey it into
+          // the weather it is meant to stand out from.
+          fog: false,
+        }),
+      );
       // Facing out over the deck's edge, away from the contested ground, when
       // it covers only part of a turn.
       const facing = side === 1 ? Math.PI / 2 : -Math.PI / 2;
