@@ -1262,8 +1262,15 @@ function Debris(): JSX.Element {
     () =>
       new MeshStandardMaterial({
         vertexColors: true,
-        roughness: 0.94,
-        metalness: 0.08,
+        // The same tone the crags on an island's rim are held to, for the same
+        // reason: a flat top turned to the key light at the rock's own colours
+        // reads as a pale grey polygon. Once the fog stopped fading distance to
+        // black, the islets drifting past the world were exactly that — the
+        // palest, flattest thing in the frame, and nothing like the stone the
+        // islands are made of.
+        color: '#6b6e72',
+        roughness: 0.95,
+        metalness: 0.05,
         flatShading: true,
       }),
     [],
