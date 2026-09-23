@@ -57,10 +57,30 @@ running beside it:
 | 200        | 1,000     | 4 ms / 19 ms           | 9 ms / 18 ms     | none   |
 | 1,000      | 5,000     | 15 ms / 46 ms          | 36 ms / 74 ms    | none   |
 | 2,500      | 12,500    | 15 ms / 134 ms         | 80 ms / 182 ms   | none   |
+| 3,965      | 12,061    | 170 ms / 853 ms        | 164 ms / 364 ms  | none   |
+| 4,911      | 11,220    | 24 ms / 894 ms         | 163 ms / 440 ms  | none   |
 
 Delivery is measured from the `serverTime` the engine stamped on the tick to
 the instant the client parsed it, so on one machine it is a real figure and
 across a network it is a lower bound.
+
+### What broke first was arriving, not watching
+
+Asked for 5,000 spectators over 25 seconds — 200 connections a second — this
+machine refused 1,042 of them (`ECONNREFUSED`) and served the 3,958 that
+landed with nothing lost. The same 5,000 over a minute — 83 a second — cost 89.
+So the ceiling measured here is the rate connections are _accepted_ at, not
+the number the gateway then carries.
+
+It is not the socket server's queue. Raising `ws`'s listen backlog from Node's
+default of 511 to 4,096 and running the identical test again gave 3,965
+connected and 1,035 refused: the same numbers. The limit is this machine —
+one laptop running the load generator, the server and the market recorder at
+once, while delivering twelve thousand updates a second.
+
+**So re-measure it on the deployment, from somewhere else.** A launch is
+exactly a burst of arrivals, and the figure that matters is that machine's,
+generated from a client that is not competing with it for CPU.
 
 The write path, on the same process:
 
