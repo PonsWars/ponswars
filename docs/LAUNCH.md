@@ -66,10 +66,14 @@ publish a distribution it could not pay, so one window's claims could be paid
 from another's SPY. It is fixed, and it is the reason this step is not
 optional — and without a testnet stage it matters more, not less.
 
+- [x] **Automated analysis run**, and what it found written down:
+      [`security/contract-analysis.md`](security/contract-analysis.md). Slither
+      reports three naming conventions and nothing else; `forge lint` reports
+      nothing. That is a floor, not a review — the one real flaw these contracts
+      had was found by reading them, and no tool reports it even now.
 - [ ] **An independent review.** A paid audit firm is the strongest option. A
-      competitive audit contest is cheaper for a codebase this size (about 420
-      lines of Solidity). At the very least, automated analysis (Slither,
-      Aderyn) run and every finding answered in writing.
+      competitive audit contest is cheaper for a codebase this size (440 lines
+      of Solidity).
 
 ## 4. Decide the money and the law — you
 
