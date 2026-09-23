@@ -1,13 +1,13 @@
 import { assertChain, robinhoodChainRpc, rpcDistributorContract } from '@ponswars/chain';
 import { baseUnits, robinhoodChainNetwork, utcTimestamp } from '@ponswars/shared-types';
 import { DistributionError, PostgresDistributionStore } from '@ponswars/store-postgres';
-import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { connectPostgres } from '@ponswars/postgres';
 import { parseAlertWebhook } from '@ponswars/config';
 import { alertSink, type AlertSink } from './alert-sink.js';
 import { lateSnapshot, lifecycle, reconcile, type Condition } from './alerts.js';
 import { nextWindowStep } from './rewards-window.js';
+import { writeSnapshot, type SnapshotStore } from './snapshot-file.js';
 
 /**
  * Keeps the rewards windows running on time (§16.2, §16.3).
@@ -122,7 +122,13 @@ async function main(): Promise<void> {
               `${new Date(step.windowStart).toISOString()} → ${new Date(windowEnd).toISOString()}`,
           );
         } else if (step.kind === 'SNAPSHOT') {
-          await snapshot(store, distributor, step.distributionId, snapshots, settings.minimumClaim);
+          await takeSnapshot(
+            store,
+            distributor,
+            step.distributionId,
+            snapshots,
+            settings.minimumClaim,
+          );
           due = null;
         } else {
           sleepFor = Math.min(HEARTBEAT_MS, Math.max(1_000, step.until - now));
@@ -152,12 +158,11 @@ async function main(): Promise<void> {
 /**
  * Snapshots one window and writes the file the runbook verifies.
  *
- * The file is claimed before the snapshot is taken, as the operator command
- * does it: a snapshot commits and cannot be taken twice, so a file that could
- * not be opened afterwards would leave the standings on no disk.
+ * The file and the order it is written in are `snapshot-file.ts`'s, shared
+ * with the operator command so the two cannot drift again.
  */
-async function snapshot(
-  store: PostgresDistributionStore,
+async function takeSnapshot(
+  store: SnapshotStore,
   distributor: { uncommittedBalance(): Promise<bigint> },
   distributionId: bigint,
   directory: string,
@@ -165,29 +170,18 @@ async function snapshot(
 ): Promise<void> {
   const poolBalance = await distributor.uncommittedBalance();
   const path = join(directory, `snapshot-${distributionId.toString()}.json`);
-  const handle = await open(path, 'wx');
-  try {
-    const taken = await store.snapshot({ distributionId, poolBalance: baseUnits(poolBalance) });
-    await handle.writeFile(
-      `${JSON.stringify(
-        {
-          distributionId: taken.distributionId.toString(),
-          poolBalance: taken.poolBalance.toString(),
-          minimumClaim: minimumClaim.toString(),
-          standings: taken.standings,
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    say(
-      `snapshotted distribution ${distributionId.toString()}: ` +
-        `${String(taken.standings.length)} wallet(s), pool ${poolBalance.toString()}`,
-    );
-    say(`wrote ${path} — verify it, then calculate and publish (rewards-distribution.md)`);
-  } finally {
-    await handle.close();
-  }
+  const taken = await writeSnapshot({
+    store,
+    distributionId,
+    poolBalance: baseUnits(poolBalance),
+    minimumClaim,
+    path,
+  });
+  say(
+    `snapshotted distribution ${distributionId.toString()}: ` +
+      `${String(taken.standings.length)} wallet(s), pool ${poolBalance.toString()}`,
+  );
+  say(`wrote ${path} — verify it, then calculate and publish (rewards-distribution.md)`);
 }
 
 function snapshotDirectory(): string {

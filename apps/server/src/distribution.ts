@@ -1,4 +1,3 @@
-import { open, unlink } from 'node:fs/promises';
 import { assertChain, robinhoodChainRpc, rpcDistributorContract } from '@ponswars/chain';
 import { baseUnits, robinhoodChainNetwork, utcTimestamp } from '@ponswars/shared-types';
 import { DistributionError, PostgresDistributionStore } from '@ponswars/store-postgres';
@@ -6,6 +5,7 @@ import { DISTRIBUTION_USAGE, parseDistributionArgs } from './distribution-args.j
 import { privateKeyToAccount } from 'viem/accounts';
 import { connectPostgres } from '@ponswars/postgres';
 import { publishDistribution } from './publication.js';
+import { writeSnapshot } from './snapshot-file.js';
 
 /**
  * Opens, snapshots, calculates and publishes distribution windows (§16, §17).
@@ -107,38 +107,20 @@ async function main(): Promise<void> {
       return;
     }
 
-    // The file is claimed before the snapshot is taken, not after. A snapshot
-    // commits and cannot be taken twice, so a file that failed to open
-    // afterwards would leave the window snapshotted and its standings on no
-    // disk. `wx` also refuses an existing file: two snapshot files under one
-    // name is how the wrong one gets verified.
-    const handle = await open(command.out, 'wx');
-    let wallets: number;
-    try {
-      const snapshot = await store.snapshot({
-        distributionId: command.distributionId,
-        poolBalance: baseUnits(command.poolBalance),
-      });
-      wallets = snapshot.standings.length;
-      const file = {
-        distributionId: snapshot.distributionId.toString(),
-        poolBalance: snapshot.poolBalance.toString(),
-        minimumClaim: command.minimumClaim.toString(),
-        standings: snapshot.standings,
-      };
-      await handle.writeFile(`${JSON.stringify(file, null, 2)}\n`);
-    } catch (error: unknown) {
-      await handle.close();
-      // The file is ours and empty: the snapshot was refused before anything
-      // was written to it.
-      await unlink(command.out);
-      throw error;
-    }
-    await handle.close();
+    // The order — claim the file, then take the snapshot, and leave no empty
+    // file behind if it is refused — is `snapshot-file.ts`'s, shared with the
+    // worker that does this on a schedule so the two cannot drift.
+    const snapshot = await writeSnapshot({
+      store,
+      distributionId: command.distributionId,
+      poolBalance: baseUnits(command.poolBalance),
+      minimumClaim: command.minimumClaim,
+      path: command.out,
+    });
 
     process.stdout.write(
       `snapshotted distribution ${command.distributionId.toString()}: ` +
-        `${String(wallets)} wallet(s), pool ${command.poolBalance.toString()}\n` +
+        `${String(snapshot.standings.length)} wallet(s), pool ${command.poolBalance.toString()}\n` +
         `wrote ${command.out} — verify it before calculating:\n` +
         `  node tools/verify-distribution.mjs ${command.out}\n`,
     );
