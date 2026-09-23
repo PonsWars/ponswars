@@ -12,6 +12,7 @@ import {
 import { FACTION_ART } from '../art/manifest.js';
 import { GenesisCardFace } from '../art/GenesisCardFace.js';
 import { CardLadder } from '../genesis/CardLadder.js';
+import { RewardsPrimer } from '../rewards/RewardsPrimer.js';
 import { GenesisClaim, type GenesisPageData } from '../genesis/GenesisClaim.js';
 import { WarRoom, type ProfileData } from '../profile/WarRoom.js';
 import { RewardClaims, type RewardClaimsData } from '../rewards/RewardClaims.js';
@@ -154,6 +155,11 @@ export function Presentations({
               {claims === null ? null : <RewardClaims data={claims} />}
             </>
           ))}
+          {/* The arithmetic, under whatever the page is saying. It is the same
+              for every wallet and for none, so it is here for a visitor who
+              has connected nothing as well — which is the page that had a
+              panel and then half a screen of nothing (§16, §35). */}
+          <RewardsPrimer />
         </Overlay>
       );
     case 'ABOUT':
