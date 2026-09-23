@@ -13,6 +13,7 @@ import { FACTION_ART } from '../art/manifest.js';
 import { GenesisCardFace } from '../art/GenesisCardFace.js';
 import { CardLadder } from '../genesis/CardLadder.js';
 import { RewardsPrimer } from '../rewards/RewardsPrimer.js';
+import { LiveRoundStrip } from '../hud/RoundStrip.js';
 import { GenesisClaim, type GenesisPageData } from '../genesis/GenesisClaim.js';
 import { WarRoom, type ProfileData } from '../profile/WarRoom.js';
 import { RewardClaims, type RewardClaimsData } from '../rewards/RewardClaims.js';
@@ -138,6 +139,11 @@ export function Presentations({
           {personal('PROFILE', profile, (value) => (
             <WarRoom profile={value} />
           ))}
+          {/* The round itself, under the record. A war room with no wallet
+              connected was one panel and then nothing; what belongs there is
+              not more words about a record that does not exist yet, but the
+              war going on while it is read (§5). */}
+          <LiveRoundStrip />
         </Overlay>
       );
     case 'REWARDS':

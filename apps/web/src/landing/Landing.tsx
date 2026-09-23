@@ -6,10 +6,10 @@ import { GenesisCardFace } from '../art/GenesisCardFace.js';
 import { FACTION_ART } from '../art/manifest.js';
 import { WorldRing } from '../art/WorldRing.js';
 import { NavBar } from '../hud/NavBar.js';
-import { formatCountdown, roundView } from '../hud/round-phase.js';
+import { RoundStrip } from '../hud/RoundStrip.js';
 import { captionStyle, controlStyle, panelStyle, readoutStyle } from '../hud/styles.js';
 import type { Route } from '../routing/route.js';
-import { useSession, type ClientBattle } from '../state/session.js';
+import { useSession } from '../state/session.js';
 
 /**
  * The way in (§37.1, and the delivered landing mockup).
@@ -316,65 +316,6 @@ function HeroIcon({ device }: { readonly device: string }): JSX.Element {
  * fighting, how they were rated before the bell, and how long is left. `null`
  * before a round arrives, rather than a row of dashes pretending to be one.
  */
-function RoundStrip({
-  battles,
-  round,
-  clockOffsetMs,
-}: {
-  readonly battles: readonly ClientBattle[];
-  readonly round: ReturnType<typeof useSession.getState>['round'];
-  readonly clockOffsetMs: number;
-}): JSX.Element | null {
-  if (round === null || battles.length === 0) {
-    return null;
-  }
-
-  const view = roundView(round.state, round.clock);
-  const remaining =
-    view.countdownTarget === null ? null : view.countdownTarget - (Date.now() + clockOffsetMs);
-
-  return (
-    <section style={{ display: 'grid', gap: 'var(--pw-space-3)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <div style={captionStyle}>{view.label}</div>
-        {remaining === null ? null : (
-          <div className="pw-tabular" style={{ ...captionStyle, color: 'var(--pw-text-2)' }}>
-            {view.countdownCaption} {formatCountdown(Math.max(0, remaining))}
-          </div>
-        )}
-      </div>
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(auto-fit, minmax(190px, 1fr))`,
-          gap: 'var(--pw-space-3)',
-        }}
-      >
-        {battles.map((battle, index) => (
-          <div
-            key={battle.battleId}
-            style={{ ...panelStyle, display: 'grid', gap: 'var(--pw-space-2)' }}
-          >
-            <div style={{ ...captionStyle, fontSize: 9 }}>BATTLE {index + 1}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--pw-space-2)' }}>
-              <FactionEmblem ticker={battle.left} size={18} />
-              <span style={{ ...readoutStyle, fontSize: 13 }}>{battle.left}</span>
-              <span style={{ ...captionStyle, fontSize: 10 }}>vs</span>
-              <span style={{ ...readoutStyle, fontSize: 13 }}>{battle.right}</span>
-              <FactionEmblem ticker={battle.right} size={18} />
-            </div>
-            <div style={{ ...captionStyle, fontSize: 9, color: 'var(--pw-text-3)' }}>
-              {battle.leftIntel.label.replaceAll('_', ' ')} ·{' '}
-              {battle.rightIntel.label.replaceAll('_', ' ')}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 /** The three things the mockup puts below the fold, in its own words. */
 function Pillars({ onNavigate }: { readonly onNavigate: (next: Route) => void }): JSX.Element {
   return (
