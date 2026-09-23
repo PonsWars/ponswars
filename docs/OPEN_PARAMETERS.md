@@ -22,7 +22,8 @@ test fixtures — never in `packages/config` itself.
 
 Status legend: `OPEN` — no decision yet. `BASELINE` — the masterplan names an
 example value that still needs confirmation before launch. `CALIBRATE` — the
-formula is locked, the constants inside it are not.
+formula is locked, the constants inside it are not. `DECIDED` — chosen, with
+the record that chose it linked in the row.
 
 ---
 
@@ -55,6 +56,7 @@ Only the constants inside them are open.
 | Relative Volume historical baseline implementation | `CALIBRATE` | Must be ticker-specific and time-of-day aware (§12.2).                                                                               |
 | Battle Confidence label-gap thresholds             | `CALIBRATE` | Which score gap becomes `FAVORED` vs `DOMINANT`. The label set itself is locked (§10.2).                                             |
 | Feed freshness thresholds per source               | `OPEN`      | Source- and data-type-specific (§23.6). These decide when a battle VOIDs, so they are a product decision, not a tuning knob.         |
+| `PRICE_FEED_STALE_AFTER_MS`                        | `DECIDED`   | 15 minutes for launch, 2026-09-24 ([ADR 0008](adr/0008-fifteen-minute-price-staleness-at-launch.md)). About a third of battles void. |
 | Qualified Pons activity thresholds                 | `CALIBRATE` | Anti-abuse qualification before scoring (§12.3).                                                                                     |
 | Anti-wash filters                                  | `CALIBRATE` | Suspicious-pattern filtering in the indexer (§21.2).                                                                                 |
 | Card-support diminishing-return curve constants    | `CALIBRATE` | The 10-point cap and sqrt/log shape are locked (§12.4); the exact curve is not.                                                      |
