@@ -53,6 +53,21 @@ market. Record through the vendor endpoint production will use:
 node tools/record-market.mjs --rpc https://your-vendor-endpoint --min-interval-ms 50
 ```
 
+**Check the endpoint's `eth_getLogs` limits before recording through it.** The
+indexer discovers pools by reading the whole chain's history, and an endpoint
+that caps the block range of one query turns that into a request per few
+blocks. On a chain 70 million blocks long that is not slow, it is impossible:
+
+| Endpoint                       | `eth_getLogs` range     | Usable for recording |
+| ------------------------------ | ----------------------- | -------------------- |
+| Robinhood's public mainnet RPC | wide; caps matched logs | yes, throttled       |
+| Alchemy free tier              | **10 blocks**           | no                   |
+| Alchemy paid                   | larger; check the plan  | expected             |
+
+Measured on 2026-09-23. The free tier's refusal is worded as a limit, so the
+progress line prints the endpoint's own sentence when it throttles — read it
+before concluding the recorder is merely slow.
+
 ## 2. Replay a candidate
 
 ```bash
