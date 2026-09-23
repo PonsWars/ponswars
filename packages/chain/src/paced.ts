@@ -90,13 +90,27 @@ export class PacingStopped extends Error {
   }
 }
 
-/** Whether an error is the endpoint throttling rather than refusing. */
+/**
+ * Whether an error is the endpoint throttling rather than refusing.
+ *
+ * Each vendor says it its own way, and saying it a way this does not know is
+ * expensive: the call fails, the indexer stops, and the recorder or the server
+ * starts over — which is a hole in a tape or a gap in a market. Alchemy's
+ * wording is a whole sentence with no status in it, and error `-32005` is the
+ * JSON-RPC code several vendors return for a limit.
+ */
 export function isThrottled(error: unknown): boolean {
   const text = describe(error).toLowerCase();
   return (
     text.includes('429') ||
     text.includes('too many requests') ||
     text.includes('rate limit') ||
+    text.includes('ratelimit') ||
+    text.includes('compute units per second') ||
+    text.includes('capacity') ||
+    text.includes('quota') ||
+    text.includes('throughput') ||
+    text.includes('-32005') ||
     text.includes('just a moment') ||
     text.includes('cf_chl') ||
     text.includes('status: 403') ||

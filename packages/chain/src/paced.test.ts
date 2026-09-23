@@ -287,6 +287,18 @@ describe('a stopped pacer', () => {
 });
 
 describe('isThrottled', () => {
+  it("recognises a vendor's own words for a limit, not only a 429", () => {
+    // Alchemy's, verbatim: no status, no "rate limit", a whole sentence. Read
+    // as a refusal it stops the indexer, and a restart is a hole in the tape.
+    const alchemy = Object.assign(new Error('RPC Request failed.'), {
+      details:
+        'Your app has exceeded its compute units per second capacity. If you have retries enabled, you can safely ignore this message.',
+    });
+    expect(isThrottled(alchemy)).toBe(true);
+    expect(isThrottled(new Error('daily quota exceeded'))).toBe(true);
+    expect(isThrottled(Object.assign(new Error('x'), { details: 'code: -32005' }))).toBe(true);
+  });
+
   it('recognises a Cloudflare challenge page and a 429', () => {
     const challenge = Object.assign(new Error('HTTP request failed.'), {
       details: '<!DOCTYPE html><html><head><title>Just a moment...</title>',
