@@ -1,4 +1,4 @@
-import { createClient, type RedisClientType } from 'redis';
+import { createClient } from 'redis';
 
 /**
  * One instance drives the rounds, and the others wait (§21.3, §25).
@@ -37,6 +37,26 @@ const RELEASE = `
   return 0
 `;
 
+/**
+ * The little of a Redis client a lease uses.
+ *
+ * Named so the lease can be driven by something other than a live server: the
+ * code that decides whether this instance may drive the rounds was the one
+ * piece of §21.3 with no test at all, because reaching it meant reaching
+ * Redis. The default is still a real client — `connect` below.
+ */
+export interface LeaseClient {
+  on(event: 'error', listener: (error: unknown) => void): unknown;
+  connect(): Promise<unknown>;
+  set(
+    key: string,
+    value: string,
+    options: { condition: 'NX'; expiration: { type: 'PX'; value: number } },
+  ): Promise<string | null>;
+  eval(script: string, options: { keys: string[]; arguments: string[] }): Promise<unknown>;
+  quit(): Promise<unknown>;
+}
+
 export interface Lease {
   /** Whether this instance holds it right now. */
   readonly held: boolean;
@@ -57,6 +77,8 @@ export interface LeaseOptions {
   /** Stopped when this fires. */
   readonly signal: AbortSignal;
   readonly onProblem?: (problem: string) => void;
+  /** How to reach Redis. A test passes its own; everything else takes this one. */
+  readonly connect?: (url: string) => LeaseClient;
 }
 
 /**
@@ -69,7 +91,7 @@ export interface LeaseOptions {
 export async function takeLease(options: LeaseOptions): Promise<Lease | null> {
   const say = options.onProblem ?? ((): void => undefined);
   const key = `ponswars:leader:${options.name}`;
-  const client: RedisClientType = createClient({ url: options.url });
+  const client: LeaseClient = (options.connect ?? liveClient)(options.url);
   client.on('error', (error: unknown) => {
     say(`redis lease: ${String(error)}`);
   });
@@ -98,9 +120,14 @@ export async function takeLease(options: LeaseOptions): Promise<Lease | null> {
   return null;
 }
 
+/** A real Redis client, which is what every caller but a test uses. */
+function liveClient(url: string): LeaseClient {
+  return createClient({ url });
+}
+
 /** Keeps a held lease alive, and says when it is not held any more. */
 function hold(
-  client: RedisClientType,
+  client: LeaseClient,
   key: string,
   options: LeaseOptions,
   interval: number,
