@@ -431,6 +431,12 @@ const SIGNED_OUT_ART = {
  * which is how `GenesisCardFace` draws a class rather than a card (§7.6). One of
  * each of three rarities, so the fan says the pool has range without saying
  * what this visitor will draw.
+ *
+ * Spread wide enough that the card in front clears the name plates behind it.
+ * At a narrower spread it cut both of them in half — REINFORCEM, AR MACHINE —
+ * which reads as a stacking mistake rather than as a hand of cards. The cards
+ * are a little smaller for it, so the whole fan still sits inside its panel on
+ * a 1280-wide window.
  */
 const SHOWCASE: readonly CardType[] = ['REINFORCEMENT', 'GOLDEN_ARMY', 'WAR_MACHINE'];
 
@@ -453,13 +459,13 @@ function GenesisShowcase(): JSX.Element {
             key={type}
             style={{
               position: 'absolute',
-              transform: `translateX(${String(offset * 120)}px) translateY(${String(Math.abs(offset) * 18)}px) rotate(${String(offset * 9)}deg) scale(${offset === 0 ? '1' : '0.86'})`,
+              transform: `translateX(${String(offset * 138)}px) translateY(${String(Math.abs(offset) * 20)}px) rotate(${String(offset * 11)}deg) scale(${offset === 0 ? '1' : '0.8'})`,
               zIndex: offset === 0 ? 2 : 1,
               filter: offset === 0 ? 'none' : 'brightness(0.72)',
               boxShadow: '0 18px 40px rgba(0, 0, 0, 0.55)',
             }}
           >
-            <GenesisCardFace cardType={type} rarity={CARD_CATALOG[type].rarity} width={190} />
+            <GenesisCardFace cardType={type} rarity={CARD_CATALOG[type].rarity} width={170} />
           </div>
         );
       })}
