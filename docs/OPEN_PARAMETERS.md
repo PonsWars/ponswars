@@ -117,6 +117,30 @@ carried from an older trade (`DEGRADED`). On GME and AMZN, a few dollars of
 trading move the price a battle is decided by — which is a question about
 manipulation (§75) as much as about voids, and a product decision (§102).
 
+**The suggested engine values, replayed.** `suggest` reads starting values off
+the spreads; replaying them over the same tapes (475 and 473 rounds, 21,000
+battles each) says what they would do:
+
+|                       | Initial candidate | Its own suggestion |
+| --------------------- | ----------------- | ------------------ |
+| Battles voided        | 35.2%             | 35.2%              |
+| Momentum `CONTESTED`  | 27.7%             | 45.1%              |
+| Momentum `DOMINATING` | 16.3%             | 8.2%               |
+| `NARROW_VICTORY`      | 4.5%              | 12.7%              |
+| `DECISIVE_VICTORY`    | 25.1%             | 13.3%              |
+| `UPSET_VICTORY`       | 24.8%             | 35.2%              |
+
+The void rate does not move, because the market bounds are the same in both:
+the engine's tuning decides what a battle _looks_ like, not whether its data
+was trusted.
+
+Neither is chosen. The suggestion flattens the world — nearly half of all ticks
+`CONTESTED`, a dominant push in one battle of twelve — and it makes the
+pre-battle label wrong more often: better than a third of finalized battles
+would be upsets, against a quarter under the initial values, which is a lot to
+ask of a `FAVORED` label a player reads before picking (§10). Measure again on
+a full week of uninterrupted tapes before choosing.
+
 ## 3. Infrastructure (§59.3)
 
 | Parameter                                          | Status                                                             |
