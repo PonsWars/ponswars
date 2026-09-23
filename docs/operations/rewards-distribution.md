@@ -29,9 +29,11 @@ node apps/server/dist/rewards-worker.js --snapshots /var/lib/ponswars/snapshots
 ```
 
 It reads `DATABASE_URL`, `RPC_URL`, `CHAIN_ID`, `REWARDS_DISTRIBUTOR_ADDRESS`
-and `REWARDS_MINIMUM_CLAIM` (base units, §16.7 — it records the number in every
-snapshot and never invents one), and `ALERT_WEBHOOK` by the same rule as the
-server. The pool is the distributor's uncommitted balance, read at the
+and `ALERT_WEBHOOK` by the same rules as the server, and the minimum claim from
+the server's own `MIN_CLAIM_THRESHOLD_SPY` (§16.7) — a decimal SPY amount,
+converted to base units with `SPY_TOKEN_DECIMALS` after checking those against
+`SPY_TOKEN_ADDRESS` on chain. It records the converted number in every snapshot
+and never invents one. The deployment's one `.env` gives it all of these. The pool is the distributor's uncommitted balance, read at the
 snapshot — so **fund it before the window closes**; a snapshot is taken once.
 
 It alerts when it starts, when it stops on an error, and when a window has

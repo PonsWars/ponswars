@@ -1,4 +1,9 @@
-import { assertChain, robinhoodChainRpc, rpcDistributorContract } from '@ponswars/chain';
+import {
+  assertChain,
+  assertTokenDecimals,
+  robinhoodChainRpc,
+  rpcDistributorContract,
+} from '@ponswars/chain';
 import { baseUnits, utcTimestamp } from '@ponswars/shared-types';
 import { DistributionError, PostgresDistributionStore } from '@ponswars/store-postgres';
 import { join } from 'node:path';
@@ -8,7 +13,7 @@ import { alertSink, type AlertSink } from './alert-sink.js';
 import { lateSnapshot, lifecycle, reconcile, type Condition } from './alerts.js';
 import { nextWindowStep } from './rewards-window.js';
 import { writeSnapshot, type SnapshotStore } from './snapshot-file.js';
-import { chainSettings, minimumClaim } from './chain-settings.js';
+import { chainSettings, minimumClaim, spyToken } from './chain-settings.js';
 
 /**
  * Keeps the rewards windows running on time (§16.2, §16.3).
@@ -32,11 +37,13 @@ import { chainSettings, minimumClaim } from './chain-settings.js';
  *
  * ## Configuration
  *
- * `DATABASE_URL`, `RPC_URL`, `CHAIN_ID`, `REWARDS_DISTRIBUTOR_ADDRESS`, and
- * `REWARDS_MINIMUM_CLAIM` — the minimum claim in base units, which goes into
- * the snapshot file so the operator calculates with the number the snapshot
- * was written under (§16.7). It is `OPEN`: this job records it, never invents
- * it, and refuses to start without it.
+ * `DATABASE_URL`, `RPC_URL`, `CHAIN_ID`, `REWARDS_DISTRIBUTOR_ADDRESS`, and the
+ * minimum claim: `MIN_CLAIM_THRESHOLD_SPY`, the server's own setting, converted
+ * to base units with `SPY_TOKEN_DECIMALS` once those are checked against
+ * `SPY_TOKEN_ADDRESS` on chain. The result goes into the snapshot file so the
+ * operator calculates with the number the snapshot was written under (§16.7).
+ * It is `BASELINE`: this job records it, never invents it, and refuses to start
+ * without it.
  *
  * And `ALERT_WEBHOOK`, read by the same rule as the server's (§59.3). The
  * worker alerts when it starts, when it fails, and when a snapshot is due and
@@ -60,7 +67,7 @@ let alerting: AlertSink | null = null;
 
 async function main(): Promise<void> {
   const snapshots = snapshotDirectory();
-  const settings = { ...chainSettings(), minimumClaim: minimumClaim() };
+  const settings = { ...chainSettings(), spy: spyToken(), minimumClaim: minimumClaim() };
   const webhook = parseAlertWebhook(process.env['ALERT_WEBHOOK'] ?? '');
   if (!webhook.ok) {
     // The parser's reason, never the value: the URL is the secret.
@@ -81,6 +88,14 @@ async function main(): Promise<void> {
 
   const rpc = robinhoodChainRpc(settings.url);
   await assertChain(rpc.chain, settings.chainId);
+  // The minimum claim was converted with these decimals. One off by a power of
+  // ten would pay a threshold ten times the one configured, and every snapshot
+  // would record it faithfully — the server refuses to start on the same check.
+  await assertTokenDecimals(rpc.token(settings.spy.address), {
+    parameter: 'SPY_TOKEN_DECIMALS',
+    decimals: settings.spy.decimals,
+    chainId: settings.chainId,
+  });
   const distributor = rpcDistributorContract({
     url: settings.url,
     chainId: settings.chainId,

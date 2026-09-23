@@ -41,7 +41,7 @@ export interface SnapshotRequest {
   readonly distributionId: bigint;
   /** The distributor's uncommitted balance at this instant (§16.3). */
   readonly poolBalance: BaseUnits;
-  /** `REWARDS_MINIMUM_CLAIM`, recorded so the calculation uses the snapshot's own (§16.7). */
+  /** The minimum claim in base units, recorded so the calculation uses the snapshot's own (§16.7). */
   readonly minimumClaim: bigint;
   /** Where the file goes. */
   readonly path: string;

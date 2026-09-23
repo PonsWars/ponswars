@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chainSettings, minimumClaim, publisherKey } from './chain-settings.js';
+import { chainSettings, minimumClaim, publisherKey, spyToken } from './chain-settings.js';
 
 /**
  * What the rewards jobs accept from the environment (§16.7, §20, §102).
@@ -77,18 +77,69 @@ describe('the publisher key', () => {
   });
 });
 
-describe('the minimum claim', () => {
-  it('is whatever base units it was given, including none at all', () => {
-    expect(minimumClaim({ REWARDS_MINIMUM_CLAIM: '1000000' })).toBe(1_000_000n);
-    expect(minimumClaim({ REWARDS_MINIMUM_CLAIM: '0' })).toBe(0n);
+const SPY = {
+  SPY_TOKEN_ADDRESS: '0xBBBBbbbbBBBBbbbbBBBBbbbbBBBBbbbbBBBBbbbb',
+  SPY_TOKEN_DECIMALS: '18',
+} satisfies NodeJS.ProcessEnv;
+
+describe('the SPY token', () => {
+  it('is the address and decimals the server is configured with, lowercased', () => {
+    expect(spyToken(SPY)).toEqual({
+      address: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      decimals: 18,
+    });
   });
 
-  it('is never invented, and says so when it is missing (§16.7)', () => {
-    for (const value of [undefined, '', '0.001', '1e6', '-1', '007']) {
-      const env = value === undefined ? {} : { REWARDS_MINIMUM_CLAIM: value };
-      expect(() => minimumClaim(env)).toThrow('REWARDS_MINIMUM_CLAIM');
+  it('refuses what the server would refuse, naming it', () => {
+    expect(() => spyToken({ ...SPY, SPY_TOKEN_ADDRESS: '0x1234' })).toThrow('SPY_TOKEN_ADDRESS');
+    for (const decimals of [undefined, '', '-1', '37', '6.5', 'eighteen']) {
+      const env = { ...SPY, SPY_TOKEN_DECIMALS: decimals };
+      expect(() => spyToken(env)).toThrow('SPY_TOKEN_DECIMALS');
     }
-    // Decimal SPY is the mistake worth naming: the file wants base units.
-    expect(() => minimumClaim({ REWARDS_MINIMUM_CLAIM: '0.001' })).toThrow('base units');
+  });
+});
+
+describe('the minimum claim', () => {
+  it('is the configured SPY amount, in SPY base units', () => {
+    // The masterplan's baseline (§16.7), at SPY's 18 decimals and at 6.
+    expect(minimumClaim({ ...SPY, MIN_CLAIM_THRESHOLD_SPY: '0.001' })).toBe(10n ** 15n);
+    expect(
+      minimumClaim({ ...SPY, SPY_TOKEN_DECIMALS: '6', MIN_CLAIM_THRESHOLD_SPY: '0.001' }),
+    ).toBe(1_000n);
+    // None at all is a real answer: every qualifying allocation is claimable.
+    expect(minimumClaim({ ...SPY, MIN_CLAIM_THRESHOLD_SPY: '0' })).toBe(0n);
+  });
+
+  it('is read from the one variable the server reads, not a second one', () => {
+    // A base-unit copy used to live beside it, and nothing kept the two in
+    // step. Setting only the old one must not be enough to run.
+    expect(() => minimumClaim({ ...SPY, REWARDS_MINIMUM_CLAIM: '1000000000000000' })).toThrow(
+      'MIN_CLAIM_THRESHOLD_SPY',
+    );
+  });
+
+  it('is never invented, and says so when it is missing or malformed (§16.7)', () => {
+    // The same shapes the server's configuration refuses.
+    for (const value of [undefined, '', '1e-3', '.001', '-0.001', '0.001 SPY']) {
+      const env = { ...SPY, MIN_CLAIM_THRESHOLD_SPY: value };
+      expect(() => minimumClaim(env)).toThrow('MIN_CLAIM_THRESHOLD_SPY');
+    }
+  });
+
+  it('refuses more decimal places than SPY has, rather than rounding', () => {
+    // Rounding would be choosing a threshold nobody configured.
+    expect(() =>
+      minimumClaim({ ...SPY, SPY_TOKEN_DECIMALS: '6', MIN_CLAIM_THRESHOLD_SPY: '0.0000001' }),
+    ).toThrow('more decimal places');
+    // Trailing zeros past SPY's precision change nothing and are accepted.
+    expect(
+      minimumClaim({ ...SPY, SPY_TOKEN_DECIMALS: '6', MIN_CLAIM_THRESHOLD_SPY: '0.00100000' }),
+    ).toBe(1_000n);
+  });
+
+  it('cannot be converted without SPY decimals to convert it with', () => {
+    expect(() =>
+      minimumClaim({ SPY_TOKEN_ADDRESS: SPY.SPY_TOKEN_ADDRESS, MIN_CLAIM_THRESHOLD_SPY: '0.001' }),
+    ).toThrow('SPY_TOKEN_DECIMALS');
   });
 });

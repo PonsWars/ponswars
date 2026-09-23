@@ -368,7 +368,7 @@ export const PARAMETERS = {
   MIN_CLAIM_THRESHOLD_SPY: {
     group: 'rewards',
     description:
-      'Minimum claimable allocation as a decimal SPY amount. BASELINE in the masterplan (0.001, §16.7) and still to be confirmed — amounts below it carry forward, so the figure decides who gets paid this window.',
+      'Minimum claimable allocation as a decimal SPY amount. BASELINE in the masterplan (0.001, §16.7) and still to be confirmed — amounts below it carry forward, so the figure decides who gets paid this window. The rewards worker converts it with SPY_TOKEN_DECIMALS and records it in every snapshot.',
     parse: parseDecimalString,
   } satisfies ParameterSpec<string>,
 
