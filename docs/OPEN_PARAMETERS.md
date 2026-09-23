@@ -97,7 +97,9 @@ can be traced to them.
 **Tapes.** 2026-09-15 to 2026-09-21, through the public endpoint, on a machine
 that slept: 87 recorded hours out of 157, and 246 rounds that could be replayed
 with the market open. Too little to launch on — record again, around the clock,
-through the chosen vendor (`LAUNCH.md` step 2).
+through the chosen vendor (`LAUNCH.md` step 2). `tools/tape-coverage.mjs` is
+what those hours were counted with; run it before trusting a later measurement
+more than this one.
 
 **Void rates** (`tools/calibration/initial-candidate.json`, chain clock, all 45
 pairs a round):

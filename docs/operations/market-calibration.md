@@ -34,6 +34,19 @@ into it — and says how many it skipped. Keep it running: a recorder on a lapto
 that sleeps records the hours the laptop is awake, and the week of tapes from
 2026-09-15 lost more than half its hours that way.
 
+Which is why the tapes are checked before they are replayed:
+
+```bash
+node tools/tape-coverage.mjs
+```
+
+It reads the coverage marks alone and prints, per day, how much of it the
+recorder was running. A skipped round costs nothing — calibration refuses to
+play one it has no tape for — but a half-recorded week answers a smaller
+question than the one being asked, in the same shape as a whole one. Below 95%
+a day is worth reading for shape and not for values; a week wants seven days
+above it. The first nine days here averaged 43%.
+
 How much to record:
 
 - **At least one full US trading day** before any number means anything — the

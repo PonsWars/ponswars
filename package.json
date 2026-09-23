@@ -36,6 +36,7 @@
     "calibrate:market": "node tools/calibrate-market.mjs",
     "load-test": "node tools/load-test.mjs",
     "record:market": "node tools/record-market.mjs",
+    "tape:coverage": "node tools/tape-coverage.mjs",
     "local": "pnpm run build && node apps/local-stack/dist/main.js",
     "preview:web": "pnpm --filter @ponswars/web build && pnpm --filter @ponswars/web preview"
   },
