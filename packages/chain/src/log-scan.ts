@@ -43,7 +43,11 @@ export function isTooManyLogs(error: unknown): boolean {
   return (
     text.includes('exceeds limit') ||
     text.includes('query returned more than') ||
-    text.includes('too many') ||
+    // "too many logs" and "too many results", never a bare "too many": "too
+    // many requests" is the endpoint asking for a slower caller, which is
+    // `isThrottled`'s, and reading it here would split a range for ever.
+    text.includes('too many logs') ||
+    text.includes('too many results') ||
     text.includes('response size exceeded') ||
     // viem's own limit on how large a response it will read.
     text.includes('exceeded the size limit') ||

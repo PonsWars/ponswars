@@ -155,11 +155,16 @@ function endpointName(url) {
 /** Throttles since the last line about them: said at most every ten seconds. */
 let throttled = 0;
 let throttleSaidAt = 0;
-function noteThrottle({ pauseMs, intervalMs }) {
+function noteThrottle({ pauseMs, intervalMs, error }) {
   throttled += 1;
   if (Date.now() - throttleSaidAt >= 10_000) {
+    // With the endpoint's own words: "slow down" and "that block is gone" are
+    // both retried here, and only one of them is a reason to pace differently.
+    const said = String(error?.details ?? error?.message ?? error)
+      .replace(/\s+/g, ' ')
+      .slice(0, 160);
     say(
-      `endpoint throttled ${String(throttled)} call(s); pausing ${String(pauseMs / 1_000)} s, then one call every ${String(Math.round(intervalMs))} ms`,
+      `endpoint throttled ${String(throttled)} call(s); pausing ${String(pauseMs / 1_000)} s, then one call every ${String(Math.round(intervalMs))} ms — ${said}`,
     );
     throttled = 0;
     throttleSaidAt = Date.now();

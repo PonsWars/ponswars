@@ -299,6 +299,20 @@ describe('isThrottled', () => {
     expect(isThrottled(Object.assign(new Error('x'), { details: 'code: -32005' }))).toBe(true);
   });
 
+  it('does not read a block-range limit as a rate, however it is worded', () => {
+    // Alchemy's free tier, verbatim. `scanLogs` answers this by splitting the
+    // range; retrying it as throttling asks the same impossible question for
+    // ever, which is what a recorder spent an afternoon doing.
+    const range = Object.assign(new Error('RPC Request failed.'), {
+      details:
+        'Under the Free tier plan, you can make eth_getLogs requests with up to a 10 block range. Based on your parameters, this block range should work: [0x420, 0x429].',
+      code: -32005,
+    });
+    expect(isThrottled(range)).toBe(false);
+    // And the rate limit that shares its words is still a rate limit.
+    expect(isThrottled(new Error('429 too many requests'))).toBe(true);
+  });
+
   it('recognises a Cloudflare challenge page and a 429', () => {
     const challenge = Object.assign(new Error('HTTP request failed.'), {
       details: '<!DOCTYPE html><html><head><title>Just a moment...</title>',

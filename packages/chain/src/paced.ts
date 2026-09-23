@@ -31,6 +31,8 @@
  * of being wrong.
  */
 
+import { isTooManyLogs } from './log-scan.js';
+
 export interface PacingOptions {
   /** The least time between the start of one call and the next: the fastest the queue goes. */
   readonly minIntervalMs: number;
@@ -100,6 +102,15 @@ export class PacingStopped extends Error {
  * JSON-RPC code several vendors return for a limit.
  */
 export function isThrottled(error: unknown): boolean {
+  // A range the endpoint will not read in one query is not a rate: the answer
+  // is the same however long the caller waits, and `scanLogs` handles it by
+  // splitting the range. Alchemy's free tier refuses any `eth_getLogs` over
+  // ten blocks and returns that as a limit error, which this read as
+  // throttling — so a scan retried one impossible query until it was killed,
+  // saying "endpoint throttled" the whole time.
+  if (isTooManyLogs(error)) {
+    return false;
+  }
   const text = describe(error).toLowerCase();
   return (
     text.includes('429') ||
