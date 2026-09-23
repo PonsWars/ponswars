@@ -296,8 +296,14 @@ export class RobinhoodMarketIndexer implements MarketSource {
       `market: head ${head.toString()}, trades from ${tradesFrom.toString()}, Pons from ${ponsFrom.toString()}`,
     );
 
-    // Discovery reads all of history: a pool or curve created a year ago still trades.
-    for (const ticker of ACTIVE_TICKERS) {
+    // Discovery reads all of history: a pool or curve created a year ago still
+    // trades. It is the slowest thing this class does — on a throttled endpoint
+    // it is tens of minutes — and until it said so, a start that was working
+    // and a start that was stuck looked the same from outside.
+    for (const [index, ticker] of ACTIVE_TICKERS.entries()) {
+      this.say(
+        `market: finding ${ticker} pools (${String(index + 1)} of ${String(ACTIVE_TICKERS.length)})`,
+      );
       const token = addresses.tickers[ticker].token.toLowerCase();
       const usdg = addresses.usdg.toLowerCase();
       const [currency0, currency1] = token < usdg ? [token, usdg] : [usdg, token];
@@ -311,6 +317,7 @@ export class RobinhoodMarketIndexer implements MarketSource {
       );
       this.apply(logs);
     }
+    this.say('market: finding registered Pons pools');
     this.apply(
       await this.scan(
         { address: addresses.ponsMemeHook, topics: [MARKET_TOPICS.poolRegistered] },
