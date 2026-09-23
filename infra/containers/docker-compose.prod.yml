@@ -89,6 +89,32 @@ services:
     stop_grace_period: 45s
 
   # -----------------------------------------------------------------------
+  # Rewards windows (§16.2, §16.3): opens each one where the last ended and
+  # snapshots it when its 24 hours are up. Without it no window opens and no
+  # War Points ever reach a distribution. Calculating and publishing stay
+  # operator commands, each with a check in front of it
+  # (docs/operations/rewards-distribution.md).
+  # -----------------------------------------------------------------------
+  rewards-worker:
+    build:
+      context: ../..
+      dockerfile: infra/containers/server.Dockerfile
+    image: ponswars-server:${PONSWARS_VERSION:-local}
+    restart: unless-stopped
+    command: ['node', 'dist/rewards-worker.js', '--snapshots', '/var/lib/ponswars/snapshots']
+    # The same file as the server: the minimum claim, the SPY token and the
+    # chain are read under the same names, so the two cannot disagree.
+    env_file:
+      - ../../.env
+    volumes:
+      # A snapshot is taken once (§16.3). The file is the only copy of what was
+      # taken until it is verified, so it outlives the container.
+      - snapshots:/var/lib/ponswars/snapshots
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # -----------------------------------------------------------------------
   # The client (§80). Static files; the API and gateway URLs are compiled in.
   # -----------------------------------------------------------------------
   web:
@@ -110,3 +136,4 @@ services:
 
 volumes:
   postgres_data:
+  snapshots:

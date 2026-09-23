@@ -79,6 +79,12 @@ COPY --from=build --chown=node:node /out /app
 # by default and there is only one of each in the image.
 COPY --chown=node:node database/migrations /app/migrations
 
+# Where the rewards worker writes a snapshot file per window. Made here and
+# owned by the user that writes it: a volume mounted over a path the image does
+# not have is created owned by root, and every snapshot would then be refused
+# at the file, the window reported late until somebody looked.
+RUN mkdir -p /var/lib/ponswars/snapshots && chown node:node /var/lib/ponswars/snapshots
+
 USER node
 
 ENV NODE_ENV=production

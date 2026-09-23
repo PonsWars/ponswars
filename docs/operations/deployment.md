@@ -100,7 +100,14 @@ every 24 hours forever. `rewards-worker.js` in the server image does the
 opening and the snapshot; calculating and publishing stay operator commands
 with a verification in front of each (see
 [Rewards distribution](rewards-distribution.md)). Without the job running,
-nothing opens a window and no rewards accrue to one.
+nothing opens a window and no rewards accrue to one. The compose file runs it
+as `rewards-worker`, from the same `.env`, and keeps its snapshot files in the
+`snapshots` volume. Copy one out to verify it:
+
+```bash
+docker compose -f infra/containers/docker-compose.prod.yml   cp rewards-worker:/var/lib/ponswars/snapshots/snapshot-42.json .
+node tools/verify-distribution.mjs snapshot-42.json
+```
 
 **The last tiebreak step (§12.7).** Only a battle
 level through every market component reaches it, and for that battle the server
@@ -234,8 +241,9 @@ is:
 | `node dist/migrate.js`        | The schema, run as a job before the rest (§49)     |
 | `node dist/rewards-worker.js` | Opens and snapshots rewards windows (§16.2, §16.3) |
 
-`node dist/main.js` alone is a whole deployment, and is what the compose file
-runs. It is the right answer for one host.
+`node dist/main.js` is the whole game, and the compose file runs it beside
+`node dist/rewards-worker.js`, which the rewards need. The two are the right
+answer for one host.
 
 ### Running the realtime tier separately
 
