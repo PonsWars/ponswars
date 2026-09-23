@@ -1,23 +1,28 @@
 #!/usr/bin/env node
 /**
- * Reports how much of each recorded day the market recorder was actually
- * running.
+ * Reports how much of each recorded day the tapes can actually answer for.
  *
- *   node tools/tape-coverage.mjs [--tapes <dir or file>]... [--gap-ms <n>]
+ *   node tools/tape-coverage.mjs [--tapes <dir or file>]... [--clock chain|wall]
  *
  * Read this before `tools/calibrate-market.mjs`, and before believing anything
- * it says. Calibration skips rounds the tapes do not cover, so a half-recorded
- * week does not produce wrong numbers — it produces numbers about half a week,
- * printed with the same confidence as a whole one. The first calibration run
- * here read 70% of battles as void until the tapes were checked and the holes
- * turned out to be a sleeping laptop rather than a thin market.
+ * it says. Calibration refuses to play a round it has no tape for, so a
+ * half-recorded week does not produce wrong numbers — it produces numbers about
+ * half a week, printed with the same confidence as a whole one.
  *
- * A gap is measured between `COVERED` marks, which the recorder writes once per
- * poll pass whether or not anything traded (`tape-recorder.ts`). So a gap is
- * always the recorder missing, never the market being quiet: a quiet market
- * still leaves a mark every few seconds. Anything longer than `--gap-ms`
- * (default two minutes, comfortably above a throttle pause) is counted as time
- * the tape has no evidence about.
+ * ## What counts as a hole
+ *
+ * The same thing `TapeSource.records` counts: a break between the runs the
+ * recorder read without stopping. A run ends where the recorder did, and the
+ * next begins where it started again — and it starts at the chain's head
+ * (`market-indexer.ts` sets `lastBlock = head`), so whatever happened while it
+ * was down was never read by anything.
+ *
+ * A gap between two coverage marks is **not** a hole, which is the mistake this
+ * tool was written wrong to make first. The recorder is throttled hard by the
+ * public endpoint, and a poll after a pause covers everything since the last
+ * one — `poll()` always resumes at `lastBlock + 1` and never skips forward. So
+ * a long stretch between marks is the recorder catching up, and counting it as
+ * missing turned three fully recorded days into a report of 43%.
  *
  * Plain ESM run directly by node. It reads the tapes as text and imports
  * nothing, so it works before `pnpm run build`.
@@ -28,14 +33,14 @@ import { createInterface } from 'node:readline';
 import { argv, exit, stderr, stdout } from 'node:process';
 import { join } from 'node:path';
 
-const USAGE = 'Usage: node tools/tape-coverage.mjs [--tapes <dir or file>]... [--gap-ms <n>]';
+const USAGE = 'Usage: node tools/tape-coverage.mjs [--tapes <dir or file>]... [--clock chain|wall]';
 
 function fail(message) {
   stderr.write(`${message}\n`);
   exit(1);
 }
 
-const options = { tapes: [], gapMs: 120_000 };
+const options = { tapes: [], clock: 'chain' };
 const args = argv.slice(2);
 for (let index = 0; index < args.length; index += 1) {
   const name = args[index];
@@ -49,11 +54,11 @@ for (let index = 0; index < args.length; index += 1) {
   }
   if (name === '--tapes') {
     options.tapes.push(value);
-  } else if (name === '--gap-ms') {
-    options.gapMs = Number(value);
-    if (!Number.isInteger(options.gapMs) || options.gapMs <= 0) {
-      fail(`--gap-ms must be a positive whole number of milliseconds.\n${USAGE}`);
+  } else if (name === '--clock') {
+    if (value !== 'chain' && value !== 'wall') {
+      fail(`--clock is chain or wall.\n${USAGE}`);
     }
+    options.clock = value;
   } else {
     fail(`Unrecognised argument ${name}.\n${USAGE}`);
   }
@@ -93,20 +98,14 @@ function tapeFiles(paths) {
 }
 
 /**
- * One tape's coverage.
+ * One tape's runs, the way `TapeSource` builds them.
  *
  * Streamed rather than read whole: a busy day is tens of megabytes, and only
- * the `COVERED` marks matter. `wallAt` is the recorder's own clock — the
- * question here is when the recorder ran, not what the chain's timestamps say.
+ * the coverage marks and the restarts matter.
  */
-async function coverage(file) {
-  let previous = null;
-  let first = null;
-  let last = null;
-  let lost = 0;
-  let gaps = 0;
-  let worst = 0;
-  let marks = 0;
+async function runsIn(file) {
+  const runs = [];
+  let open = null;
 
   const lines = createInterface({
     input: createReadStream(file, 'utf8'),
@@ -115,7 +114,7 @@ async function coverage(file) {
   for await (const line of lines) {
     // Cheap filter first: most lines are trades, and parsing every one of them
     // costs more than the whole rest of this tool.
-    if (!line.includes('"COVERED"')) {
+    if (!line.includes('"COVERED"') && !line.includes('"START"')) {
       continue;
     }
     let entry;
@@ -124,22 +123,27 @@ async function coverage(file) {
     } catch {
       continue;
     }
-    if (entry.kind !== 'COVERED' || typeof entry.wallAt !== 'number') {
+    if (entry.kind === 'START') {
+      // The recorder stopped here and came back at the chain's head.
+      if (open !== null) {
+        runs.push(open);
+        open = null;
+      }
       continue;
     }
-    marks += 1;
-    first ??= entry.wallAt;
-    last = entry.wallAt;
-    if (previous !== null && entry.wallAt - previous > options.gapMs) {
-      lost += entry.wallAt - previous;
-      gaps += 1;
-      worst = Math.max(worst, entry.wallAt - previous);
+    if (entry.kind !== 'COVERED') {
+      continue;
     }
-    previous = entry.wallAt;
+    const at = options.clock === 'wall' ? entry.wallAt : entry.at;
+    if (typeof at !== 'number') {
+      continue;
+    }
+    open = open === null ? { from: at, to: at } : { from: open.from, to: Math.max(open.to, at) };
   }
-
-  const span = first === null ? 0 : last - first;
-  return { file, marks, span, lost, gaps, worst };
+  if (open !== null) {
+    runs.push(open);
+  }
+  return runs;
 }
 
 const hours = (ms) => (ms / 3_600_000).toFixed(1);
@@ -147,38 +151,44 @@ const minutes = (ms) => (ms / 60_000).toFixed(0);
 
 const files = tapeFiles(options.tapes);
 let totalSpan = 0;
-let totalLost = 0;
+let totalCovered = 0;
 let clean = 0;
 
 stdout.write(
-  `day         recorded   span    lost   gaps   worst\n` +
-    `─────────────────────────────────────────────────\n`,
+  `day         covered    span    lost   breaks  longest\n` +
+    `───────────────────────────────────────────────────\n`,
 );
 for (const file of files) {
-  const day = await coverage(file);
-  totalSpan += day.span;
-  totalLost += day.lost;
-  const recorded = day.span === 0 ? 0 : (100 * (day.span - day.lost)) / day.span;
-  if (recorded >= 95) {
+  const runs = await runsIn(file);
+  const span = runs.length === 0 ? 0 : runs[runs.length - 1].to - runs[0].from;
+  const covered = runs.reduce((sum, run) => sum + (run.to - run.from), 0);
+  let longest = 0;
+  for (let index = 1; index < runs.length; index += 1) {
+    longest = Math.max(longest, runs[index].from - runs[index - 1].to);
+  }
+  totalSpan += span;
+  totalCovered += covered;
+  const share = span === 0 ? 0 : (100 * covered) / span;
+  if (share >= 95) {
     clean += 1;
   }
-  const name = /tape-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(day.file)?.[1] ?? day.file;
+  const name = /tape-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(file)?.[1] ?? file;
   stdout.write(
-    `${name}  ${recorded.toFixed(1).padStart(6)} %  ` +
-      `${hours(day.span).padStart(5)} h  ${hours(day.lost).padStart(5)} h  ` +
-      `${String(day.gaps).padStart(4)}  ${minutes(day.worst).padStart(5)} min\n`,
+    `${name}  ${share.toFixed(1).padStart(6)} %  ${hours(span).padStart(5)} h  ` +
+      `${hours(span - covered).padStart(5)} h  ${String(runs.length - 1).padStart(5)}  ` +
+      `${minutes(longest).padStart(5)} min\n`,
   );
 }
 
-const overall = totalSpan === 0 ? 0 : (100 * (totalSpan - totalLost)) / totalSpan;
+const overall = totalSpan === 0 ? 0 : (100 * totalCovered) / totalSpan;
 stdout.write(
-  `─────────────────────────────────────────────────\n` +
-    `${String(files.length).padStart(2)} day(s)     ${overall.toFixed(1).padStart(6)} %  ` +
-    `${hours(totalSpan).padStart(5)} h  ${hours(totalLost).padStart(5)} h\n\n`,
+  `───────────────────────────────────────────────────\n` +
+    `${String(files.length).padStart(2)} day(s)      ${overall.toFixed(1).padStart(6)} %  ` +
+    `${hours(totalSpan).padStart(5)} h  ${hours(totalSpan - totalCovered).padStart(5)} h\n\n`,
 );
 
 // The bar is a day, not a week: a week of tapes is seven of these, and one
-// broken day in the middle is a hole that calibration will quietly skip past.
+// broken day in the middle is a hole calibration will quietly skip past.
 stdout.write(
   clean === 0
     ? 'No day is 95% recorded. Calibrate for a feel of the shape, not for values.\n'

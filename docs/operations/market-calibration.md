@@ -32,7 +32,7 @@ read twice count once. What happened while it was stopped was never read, so a
 replay plays no round over it — or over any round whose history reaches back
 into it — and says how many it skipped. Keep it running: a recorder on a laptop
 that sleeps records the hours the laptop is awake, and the week of tapes from
-2026-09-15 lost more than half its hours that way.
+2026-09-15 lost 43% of its hours that way.
 
 Which is why the tapes are checked before they are replayed:
 
@@ -40,12 +40,20 @@ Which is why the tapes are checked before they are replayed:
 node tools/tape-coverage.mjs
 ```
 
-It reads the coverage marks alone and prints, per day, how much of it the
-recorder was running. A skipped round costs nothing — calibration refuses to
-play one it has no tape for — but a half-recorded week answers a smaller
-question than the one being asked, in the same shape as a whole one. Below 95%
-a day is worth reading for shape and not for values; a week wants seven days
-above it. The first nine days here averaged 43%.
+It prints, per day, how much of it the tapes can answer for. A skipped round
+costs nothing — calibration refuses to play one it has no tape for — but a
+half-recorded week answers a smaller question than the one being asked, in the
+same shape as a whole one. Below 95% a day is worth reading for shape and not
+for values; a week wants seven days above it. The first nine days here averaged
+66%, and only the last two were whole.
+
+A hole is a **stop**, not a slow patch. The recorder resumes at the chain's head
+when it starts, so what happened while it was down was read by nothing; but
+while it runs it always resumes at the block after the last one it read, so a
+throttled stretch is covered late rather than lost. Judging the tapes by the
+time between coverage marks instead reports a recorder catching up as a
+recorder missing, which is how the first version of this tool called two whole
+days half empty.
 
 How much to record:
 
