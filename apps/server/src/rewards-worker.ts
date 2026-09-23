@@ -1,5 +1,5 @@
 import { assertChain, robinhoodChainRpc, rpcDistributorContract } from '@ponswars/chain';
-import { baseUnits, robinhoodChainNetwork, utcTimestamp } from '@ponswars/shared-types';
+import { baseUnits, utcTimestamp } from '@ponswars/shared-types';
 import { DistributionError, PostgresDistributionStore } from '@ponswars/store-postgres';
 import { join } from 'node:path';
 import { connectPostgres } from '@ponswars/postgres';
@@ -8,6 +8,7 @@ import { alertSink, type AlertSink } from './alert-sink.js';
 import { lateSnapshot, lifecycle, reconcile, type Condition } from './alerts.js';
 import { nextWindowStep } from './rewards-window.js';
 import { writeSnapshot, type SnapshotStore } from './snapshot-file.js';
+import { chainSettings, minimumClaim } from './chain-settings.js';
 
 /**
  * Keeps the rewards windows running on time (§16.2, §16.3).
@@ -59,7 +60,7 @@ let alerting: AlertSink | null = null;
 
 async function main(): Promise<void> {
   const snapshots = snapshotDirectory();
-  const settings = chainSettings();
+  const settings = { ...chainSettings(), minimumClaim: minimumClaim() };
   const webhook = parseAlertWebhook(process.env['ALERT_WEBHOOK'] ?? '');
   if (!webhook.ok) {
     // The parser's reason, never the value: the URL is the secret.
@@ -198,38 +199,6 @@ function snapshotDirectory(): string {
 }
 
 /** The chain this reads the pool from, and the minimum claim it records. */
-function chainSettings(): {
-  readonly url: string;
-  readonly chainId: number;
-  readonly distributor: `0x${string}`;
-  readonly minimumClaim: bigint;
-} {
-  const url = process.env['RPC_URL'] ?? '';
-  const chainId = Number(process.env['CHAIN_ID']);
-  const distributor = process.env['REWARDS_DISTRIBUTOR_ADDRESS'] ?? '';
-  const minimum = process.env['REWARDS_MINIMUM_CLAIM'] ?? '';
-  if (!/^(https?|wss?):\/\//.test(url)) {
-    throw new DistributionError('RPC_URL must be a Robinhood Chain JSON-RPC endpoint.');
-  }
-  if (robinhoodChainNetwork(chainId) === null) {
-    throw new DistributionError('CHAIN_ID must be 4663 (Robinhood Chain) or 46630 (Testnet).');
-  }
-  if (!/^0x[0-9a-fA-F]{40}$/.test(distributor)) {
-    throw new DistributionError('REWARDS_DISTRIBUTOR_ADDRESS must be the distributor address.');
-  }
-  if (!/^(0|[1-9][0-9]*)$/.test(minimum)) {
-    throw new DistributionError(
-      'REWARDS_MINIMUM_CLAIM must be the minimum claim in base units (§16.7). ' +
-        'It is an OPEN decision; this job records it in every snapshot rather than inventing one.',
-    );
-  }
-  return {
-    url,
-    chainId,
-    distributor: distributor.toLowerCase() as `0x${string}`,
-    minimumClaim: BigInt(minimum),
-  };
-}
 
 function say(line: string): void {
   process.stdout.write(`${new Date().toISOString()}  ${line}\n`);

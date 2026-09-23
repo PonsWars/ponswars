@@ -1,11 +1,12 @@
 import { assertChain, robinhoodChainRpc, rpcDistributorContract } from '@ponswars/chain';
-import { baseUnits, robinhoodChainNetwork, utcTimestamp } from '@ponswars/shared-types';
+import { baseUnits, utcTimestamp } from '@ponswars/shared-types';
 import { DistributionError, PostgresDistributionStore } from '@ponswars/store-postgres';
 import { DISTRIBUTION_USAGE, parseDistributionArgs } from './distribution-args.js';
 import { privateKeyToAccount } from 'viem/accounts';
 import { connectPostgres } from '@ponswars/postgres';
 import { publishDistribution } from './publication.js';
 import { writeSnapshot } from './snapshot-file.js';
+import { chainSettings, publisherKey } from './chain-settings.js';
 
 /**
  * Opens, snapshots, calculates and publishes distribution windows (§16, §17).
@@ -81,7 +82,7 @@ async function main(): Promise<void> {
     }
 
     if (command.kind === 'PUBLISH') {
-      const chain = chainSettings();
+      const chain = { ...chainSettings(), publisherKey: publisherKey() };
       const rpc = robinhoodChainRpc(chain.url);
       await assertChain(rpc.chain, chain.chainId);
       const contract = rpcDistributorContract({
@@ -127,42 +128,6 @@ async function main(): Promise<void> {
   } finally {
     await database.close();
   }
-}
-
-/**
- * The chain a publication goes to, read from the environment and refused early.
- *
- * Only Robinhood Chain; an address that is an address; a publisher key that is
- * a key, or absent. The key is never echoed back.
- */
-function chainSettings(): {
-  readonly url: string;
-  readonly chainId: number;
-  readonly distributor: `0x${string}`;
-  readonly publisherKey: `0x${string}` | null;
-} {
-  const url = process.env['RPC_URL'] ?? '';
-  const chainId = Number(process.env['CHAIN_ID']);
-  const distributor = process.env['REWARDS_DISTRIBUTOR_ADDRESS'] ?? '';
-  const key = process.env['DISTRIBUTION_PUBLISHER_KEY'];
-  if (!/^(https?|wss?):\/\//.test(url)) {
-    throw new DistributionError('RPC_URL must be a Robinhood Chain JSON-RPC endpoint.');
-  }
-  if (robinhoodChainNetwork(chainId) === null) {
-    throw new DistributionError('CHAIN_ID must be 4663 (Robinhood Chain) or 46630 (Testnet).');
-  }
-  if (!/^0x[0-9a-fA-F]{40}$/.test(distributor)) {
-    throw new DistributionError('REWARDS_DISTRIBUTOR_ADDRESS must be the distributor address.');
-  }
-  if (key !== undefined && key !== '' && !/^0x[0-9a-fA-F]{64}$/.test(key)) {
-    throw new DistributionError('DISTRIBUTION_PUBLISHER_KEY must be a 32-byte private key.');
-  }
-  return {
-    url,
-    chainId,
-    distributor: distributor.toLowerCase() as `0x${string}`,
-    publisherKey: key === undefined || key === '' ? null : (key.toLowerCase() as `0x${string}`),
-  };
 }
 
 main().catch((error: unknown) => {
