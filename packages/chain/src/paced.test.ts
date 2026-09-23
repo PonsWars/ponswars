@@ -54,6 +54,32 @@ describe('pacer', () => {
     ]);
   });
 
+  it('counts every call it sends, retries included, so a vendor bill can be estimated', async () => {
+    const fake = clock();
+    let sent = 0;
+    const paced = pacer({
+      minIntervalMs: 0,
+      retries: 2,
+      backoffMs: 1,
+      maxBackoffMs: 1,
+      onCall: () => {
+        sent += 1;
+      },
+      ...fake,
+    });
+    let attempts = 0;
+    await paced(() => {
+      attempts += 1;
+      return attempts === 1
+        ? Promise.reject(new Error('429 too many requests'))
+        : Promise.resolve(1);
+    });
+    await paced(() => Promise.resolve(2));
+
+    // Two asked for; three went out, because one was throttled and retried.
+    expect(sent).toBe(3);
+  });
+
   it('passes on an error that is not throttling without retrying', async () => {
     const fake = clock();
     const paced = pacer({ minIntervalMs: 0, retries: 5, backoffMs: 1, maxBackoffMs: 1, ...fake });

@@ -52,6 +52,14 @@ export interface PacingOptions {
    * exactly like one that is stuck.
    */
   readonly onThrottle?: (throttle: Throttle) => void;
+  /**
+   * Told each time a call is sent, retries included.
+   *
+   * What a vendor bills is calls sent, so choosing a plan means counting them
+   * — and counting them anywhere else means counting what was asked for
+   * rather than what went out.
+   */
+  readonly onCall?: () => void;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly now?: () => number;
 }
@@ -152,6 +160,7 @@ export function pacer(options: PacingOptions): <T>(call: () => Promise<T>) => Pr
       await slot();
       let result: T;
       try {
+        options.onCall?.();
         result = await call();
       } catch (error) {
         if (!isThrottled(error)) {

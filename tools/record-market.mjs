@@ -11,6 +11,10 @@
  *
  *   node tools/record-market.mjs [--rpc <url>] [--out <dir>] [--min-interval-ms <n>]
  *
+ * The progress line says how many RPC calls have gone out and at what rate.
+ * A vendor bills calls, so that number is what a plan is chosen against —
+ * and the endpoint a deployment will use is the one to measure on.
+ *
  * Defaults: the public mainnet endpoint, `recordings/market`, 250 ms between
  * calls. One file per UTC day (`tape-YYYY-MM-DD.jsonl`), appended to, so a
  * restart continues the same day's file; the tape marks the restart and a
@@ -148,6 +152,8 @@ function noteThrottle({ pauseMs, intervalMs }) {
 }
 
 let written = 0;
+let calls = 0;
+const startedAt = Date.now();
 while (!stopping.signal.aborted) {
   const indexer = new RobinhoodMarketIndexer({
     rpc: robinhoodMarketRpc(options.rpc, {
@@ -157,6 +163,9 @@ while (!stopping.signal.aborted) {
       maxBackoffMs: 60_000,
       signal: stopping.signal,
       onThrottle: noteThrottle,
+      onCall: () => {
+        calls += 1;
+      },
     }),
     addresses,
     tradeRetentionMs: RETENTION_MS,
@@ -208,7 +217,11 @@ while (!stopping.signal.aborted) {
     if (Date.now() - lastProgress >= PROGRESS_MS) {
       lastProgress = Date.now();
       const lag = (Date.now() - indexer.coversUntil()) / 1_000;
-      say(`${String(written)} entries written; ${lag.toFixed(1)} s behind the chain`);
+      const perMinute = calls / Math.max(1, (Date.now() - startedAt) / 60_000);
+      say(
+        `${String(written)} entries written; ${lag.toFixed(1)} s behind the chain; ` +
+          `${String(calls)} RPC calls, ${perMinute.toFixed(0)}/min (${(perMinute * 60 * 24 * 30.4).toFixed(0)} a month)`,
+      );
     }
     if (caughtUp || failing) {
       await wait(POLL_MS);
@@ -219,5 +232,8 @@ while (!stopping.signal.aborted) {
 if (file !== null) {
   await new Promise((resolve) => file.end(resolve));
 }
-say(`stopped; ${String(written)} entries written`);
+say(
+  `stopped; ${String(written)} entries written; ${String(calls)} RPC calls in ` +
+    `${((Date.now() - startedAt) / 60_000).toFixed(1)} minutes`,
+);
 exit(0);
