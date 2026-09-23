@@ -134,8 +134,23 @@ async function write(entries) {
 
 const addresses = marketAddressesFor(MAINNET);
 say(
-  `recording ${options.rpc} to ${options.out}, ${String(options.minIntervalMs)} ms between calls`,
+  `recording ${endpointName(options.rpc)} to ${options.out}, ` +
+    `${String(options.minIntervalMs)} ms between calls`,
 );
+
+/**
+ * An endpoint as a log may name it: the host, never the path.
+ *
+ * A vendor's URL carries its API key in the path, and a recorder's log is the
+ * thing somebody pastes into an issue when a recording goes wrong.
+ */
+function endpointName(url) {
+  try {
+    return new URL(url).host;
+  } catch {
+    return 'the endpoint';
+  }
+}
 
 /** Throttles since the last line about them: said at most every ten seconds. */
 let throttled = 0;
