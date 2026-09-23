@@ -40,7 +40,13 @@ import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
-SOURCES = os.environ.get("PONSWARS_MODEL_SOURCES", "C:/Users/W/PonsWars_assets/vendor")
+# Beside the repository, like the art masters, or wherever the environment
+# says. Relative rather than absolute: this file is public, and one machine's
+# home directory is nobody else's.
+REPOSITORY = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SOURCES = os.environ.get(
+    "PONSWARS_MODEL_SOURCES", os.path.join(REPOSITORY, "..", "PonsWars_assets", "vendor")
+)
 PACK = os.path.join(SOURCES, "quaternius-ultimate-space-kit")
 OUT = os.path.join(SOURCES, "ponswars-armored")
 

@@ -97,10 +97,10 @@ it ships.
 
 Sources are **not** in the repository, exactly like the art masters:
 
-| Where                                                                         | What                                        |
-| ----------------------------------------------------------------------------- | ------------------------------------------- |
-| `C:/Users/W/PonsWars_assets/vendor/` (override with `PONSWARS_MODEL_SOURCES`) | The packs as downloaded. Large, unchanging. |
-| `apps/web/public/models/`                                                     | What the client serves. Committed.          |
+| Where                                                                                       | What                                        |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `../PonsWars_assets/vendor/` beside the repository (override with `PONSWARS_MODEL_SOURCES`) | The packs as downloaded. Large, unchanging. |
+| `apps/web/public/models/`                                                                   | What the client serves. Committed.          |
 
 `tools/blender/armor-units.py` writes `ponswars-armored/` into the first (see
 above). `node tools/build-models.mjs` turns the first into the second: it drops the

@@ -44,8 +44,16 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Where the downloaded packs live. Outside the repository, like the art masters. */
-const SOURCES = process.env['PONSWARS_MODEL_SOURCES'] ?? 'C:/Users/W/PonsWars_assets/vendor';
+/**
+ * Where the downloaded packs live: a sibling of the repository, like the art
+ * masters (`build-art.mjs`), or wherever `PONSWARS_MODEL_SOURCES` says.
+ *
+ * Beside the repository rather than inside it because they are large and
+ * unchanging, and relative to it rather than absolute because this file is
+ * public and one machine's home directory is nobody else's.
+ */
+const SOURCES =
+  process.env['PONSWARS_MODEL_SOURCES'] ?? join(root, '..', 'PonsWars_assets', 'vendor');
 
 const OUT = join(root, 'apps/web/public/models');
 
