@@ -333,7 +333,7 @@ export function About({ onNavigate }: { readonly onNavigate: (next: Route) => vo
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
                   gap: 'var(--pw-space-3)',
                 }}
               >
@@ -342,7 +342,7 @@ export function About({ onNavigate }: { readonly onNavigate: (next: Route) => vo
                     key={card.type}
                     cardType={card.type}
                     rarity={card.rarity}
-                    width={148}
+                    width={220}
                   />
                 ))}
               </div>
