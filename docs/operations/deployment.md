@@ -217,6 +217,14 @@ docker compose --env-file .env -f infra/containers/docker-compose.prod.yml \
 `--env-file .env` is not optional: Compose looks for `.env` beside the compose
 file otherwise, which is not where it is.
 
+For Robinhood Chain mainnet, start from
+[`infra/deployment/mainnet.env.template`](../../infra/deployment/mainnet.env.template)
+rather than `.env.example`: it carries every value already decided or measured,
+each labelled with where it came from, and leaves in angle brackets only what
+the founder supplies. `scripts/generate-env-example.mjs --check`, part of
+`verify.sh`, fails if it stops naming every parameter or stops matching the
+calibration it says it runs.
+
 `--profile bundled-database` runs PostgreSQL and Redis on the same host; with
 it, `DATABASE_URL` names the `postgres` service and `REDIS_URL` is
 `redis://redis:6379`. Drop it when the databases are managed, which is the

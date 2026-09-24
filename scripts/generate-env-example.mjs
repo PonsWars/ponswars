@@ -4,7 +4,8 @@
  *
  * The file an operator reads and the table the loader enforces come from one
  * source, so they cannot drift. `verify.sh` runs this with `--check`, which
- * fails when a parameter has been added without regenerating the example.
+ * fails when a parameter has been added without regenerating the example — or
+ * without adding it to the hand-written mainnet template, checked below.
  *
  * Values are placeholders and are deliberately non-functional. `.env.example`
  * is the one place a placeholder may exist — `packages/config` itself has no
@@ -111,6 +112,78 @@ for (const group of groups) {
 
 const rendered = `${out.join('\n').trimEnd()}\n`;
 
+/**
+ * The mainnet template is written by hand, because its values are decisions
+ * with reasons beside them rather than placeholders. What can drift is checked
+ * here instead of trusted:
+ *
+ * - it names every parameter the server requires and every variable the
+ *   composition interpolates, once, and nothing else;
+ * - every market bound it labels as measured is the value the replay ran with,
+ *   so the label cannot outlive a change to either file;
+ * - the calibration file it points the server at exists in the directory the
+ *   compose file mounts.
+ */
+const MAINNET_TEMPLATE = 'infra/deployment/mainnet.env.template';
+
+/** Variables the compose file reads that are not the server's (deployment.md). */
+const COMPOSITION = [
+  'POSTGRES_USER',
+  'POSTGRES_PASSWORD',
+  'POSTGRES_DB',
+  'VITE_API_URL',
+  'VITE_WS_URL',
+  'WEB_PORT',
+  'SITE_DOMAIN',
+];
+
+function checkMainnetTemplate(parameterNames) {
+  const problems = [];
+  let text;
+  try {
+    text = readFileSync(join(root, MAINNET_TEMPLATE), 'utf8');
+  } catch {
+    return [`${MAINNET_TEMPLATE} is missing`];
+  }
+  const values = new Map();
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line);
+    if (match === null) continue;
+    if (values.has(match[1])) problems.push(`${match[1]} is set twice`);
+    values.set(match[1], match[2]);
+  }
+
+  const expected = new Set([...parameterNames, ...COMPOSITION]);
+  for (const name of expected) {
+    if (!values.has(name)) problems.push(`${name} is missing`);
+  }
+  for (const name of values.keys()) {
+    if (!expected.has(name)) problems.push(`${name} is not a parameter or a composition variable`);
+  }
+
+  const file = values.get('ENGINE_CALIBRATION_FILE') ?? '';
+  const mounted = '/app/calibration/';
+  if (!file.startsWith(mounted)) {
+    problems.push(`ENGINE_CALIBRATION_FILE must be under ${mounted}, where compose mounts it`);
+  } else {
+    const local = join(root, 'tools', 'calibration', file.slice(mounted.length));
+    let candidate;
+    try {
+      candidate = JSON.parse(readFileSync(local, 'utf8'));
+    } catch {
+      problems.push(
+        `ENGINE_CALIBRATION_FILE names ${file}, but tools/calibration has no such JSON`,
+      );
+    }
+    for (const [name, value] of Object.entries(candidate?.market ?? {})) {
+      if (values.has(name) && values.get(name) !== value) {
+        problems.push(`${name} is ${values.get(name)}, but the replayed candidate ran ${value}`);
+      }
+    }
+  }
+  return problems;
+}
+
 if (process.argv.includes('--check')) {
   let existing = '';
   try {
@@ -124,6 +197,16 @@ if (process.argv.includes('--check')) {
     process.exit(1);
   }
   console.log('.env.example is in sync with packages/config');
+
+  const problems = checkMainnetTemplate(parameters.map((p) => p.name));
+  if (problems.length > 0) {
+    console.error(`${MAINNET_TEMPLATE} disagrees with what it deploys:`);
+    for (const problem of problems) {
+      console.error(`  ${problem}`);
+    }
+    process.exit(1);
+  }
+  console.log(`${MAINNET_TEMPLATE} names every parameter, and runs what was replayed`);
 } else {
   writeFileSync(target, rendered);
   console.log(`wrote ${target} (${String(parameters.length)} parameters)`);
