@@ -224,6 +224,13 @@ production answer: the two URLs then point wherever that was decided, and
 nothing else changes — the migration job and the server wait for the bundled
 containers only when they exist.
 
+The engine calibration is not in the image. The compose file mounts
+`tools/calibration/` from the checkout into the server at `/app/calibration`,
+so `ENGINE_CALIBRATION_FILE` is `/app/calibration/<file>.json` — the same file
+`tools/calibrate-market.mjs` replayed, byte for byte (§59.4). A path outside
+that directory is a file the server cannot see, and it refuses to start
+saying so.
+
 Start order is a dependency, not a delay:
 
 1. `postgres` and `redis` become healthy (or are somebody else's, and already up)
