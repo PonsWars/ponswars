@@ -13,8 +13,9 @@ name: ponswars
 
 services:
   # -----------------------------------------------------------------------
-  # Optional single-host database. `--profile bundled-database` to run it.
-  # A managed instance is the production answer and is not this file's to make.
+  # Optional single-host databases, PostgreSQL and Redis (§21.3).
+  # `--profile bundled-database` runs both. A managed instance is the
+  # production answer for either, and is not this file's to make.
   # -----------------------------------------------------------------------
   postgres:
     profiles: ['bundled-database']
@@ -37,6 +38,25 @@ services:
     # Not published. Nothing outside this network needs to reach the database,
     # and a port published on a host is a port on the internet more often than
     # anyone intends.
+
+  redis:
+    profiles: ['bundled-database']
+    image: redis:7-alpine
+    restart: unless-stopped
+    # The server cannot start without Redis (`REDIS_URL` is required): it holds
+    # the lease that decides which instance drives the rounds, and the bus the
+    # gateway reads them from. appendonly keeps that across a restart. With
+    # this service, `REDIS_URL=redis://redis:6379`.
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Not published, for the database's reason — and this one has no password,
+    # so the compose network is the whole of its protection.
 
   # -----------------------------------------------------------------------
   # Schema, applied once before the server starts (§49).
@@ -78,6 +98,9 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+        required: false
     healthcheck:
       # Readiness rather than liveness: the process answers `/v1/health` before
       # it has a round, and a container reported healthy in that window is one
@@ -190,6 +213,7 @@ networks:
 
 volumes:
   postgres_data:
+  redis_data:
   snapshots:
   caddy_data:
   caddy_config:

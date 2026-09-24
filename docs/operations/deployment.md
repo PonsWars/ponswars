@@ -168,7 +168,6 @@ A holiday missing from it opens rounds that void.
 | Decision                   | Effect until it is made                                                                                                         |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | Robinhood Chain RPC vendor | Required for `onchain`: the public endpoint throttles the indexer with a challenge page, and backfills crawl behind the retries |
-| Redis (§21.3)              | `REDIS_URL` is required and validated but nothing reads it yet                                                                  |
 
 Authentication is no longer on that list. §45.2 is built: a wallet signs an
 EIP-4361 challenge, the signature is verified, and the session that comes back
@@ -218,14 +217,16 @@ docker compose --env-file .env -f infra/containers/docker-compose.prod.yml \
 `--env-file .env` is not optional: Compose looks for `.env` beside the compose
 file otherwise, which is not where it is.
 
-Drop `--profile bundled-database` when the database is managed, which is the
-production answer. `DATABASE_URL` then points wherever it was decided and
-nothing else changes — the migration job depends on the bundled container only
-when it exists.
+`--profile bundled-database` runs PostgreSQL and Redis on the same host; with
+it, `DATABASE_URL` names the `postgres` service and `REDIS_URL` is
+`redis://redis:6379`. Drop it when the databases are managed, which is the
+production answer: the two URLs then point wherever that was decided, and
+nothing else changes — the migration job and the server wait for the bundled
+containers only when they exist.
 
 Start order is a dependency, not a delay:
 
-1. `postgres` becomes healthy (or is somebody else's, and is already up)
+1. `postgres` and `redis` become healthy (or are somebody else's, and already up)
 2. `migrate` applies the schema and exits `0`
 3. `server` and `rewards-worker` start; the server is not considered healthy
    until `/v1/ready` answers
