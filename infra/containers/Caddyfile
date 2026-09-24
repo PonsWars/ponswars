@@ -1,0 +1,34 @@
+# The edge for a one-host deployment: HTTPS on one domain, in front of the
+# client, the API and the realtime gateway. Run by the `edge` profile of
+# docker-compose.prod.yml; see docs/operations/deployment.md, "The edge".
+#
+# One origin for all three, so the page, its API calls and its socket are the
+# same site: no cross-origin requests to allow, one AUTH_ORIGIN, and a sign-in
+# signature bound to the address a player actually sees (§45.2).
+#
+#   https://SITE_DOMAIN/       the client
+#   https://SITE_DOMAIN/v1/…   the REST API
+#   wss://SITE_DOMAIN/ws       the realtime gateway
+#
+# Caddy obtains and renews the certificate itself, which needs ports 80 and 443
+# reachable and SITE_DOMAIN's DNS pointing at this host before the first start.
+# It also sets X-Forwarded-For to the address it saw, replacing whatever a
+# client sent — which is what makes it safe for the API to believe the header
+# from this proxy and nowhere else (API_TRUSTED_PROXIES).
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	handle /v1/* {
+		reverse_proxy server:{$API_PORT}
+	}
+
+	# WebSocket upgrades pass through reverse_proxy as they are.
+	handle /ws {
+		reverse_proxy server:{$GATEWAY_PORT}
+	}
+
+	handle {
+		reverse_proxy web:8080
+	}
+}

@@ -194,9 +194,10 @@ Invalid configuration (19 problem(s)):
   ...
 ```
 
-Six variables are the composition's rather than the server's, and live in the
-same file: `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` for the
-bundled database, and `VITE_API_URL`, `VITE_WS_URL`, `WEB_PORT` for the client.
+Seven variables are the composition's rather than the server's, and live in
+the same file: `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` for the
+bundled database, `VITE_API_URL`, `VITE_WS_URL`, `WEB_PORT` for the client, and
+`SITE_DOMAIN` for the edge.
 The two `VITE_` values are compiled into the bundle and are public the moment it
 ships — which is why they are not in the server's table, where the secrets are.
 
@@ -211,7 +212,7 @@ front end.
 ```bash
 cp .env.example .env      # then fill it in — every value is required
 docker compose --env-file .env -f infra/containers/docker-compose.prod.yml \
-  --profile bundled-database up -d --build
+  --profile bundled-database --profile edge up -d --build
 ```
 
 `--env-file .env` is not optional: Compose looks for `.env` beside the compose
@@ -226,8 +227,39 @@ Start order is a dependency, not a delay:
 
 1. `postgres` becomes healthy (or is somebody else's, and is already up)
 2. `migrate` applies the schema and exits `0`
-3. `server` starts, and is not considered healthy until `/v1/ready` answers
+3. `server` and `rewards-worker` start; the server is not considered healthy
+   until `/v1/ready` answers
 4. `web` serves the built client
+5. `caddy` puts all of it behind HTTPS
+
+### The edge
+
+`--profile edge` runs Caddy in front of everything, on one domain, with a
+certificate it obtains and renews itself ([`Caddyfile`](../../infra/containers/Caddyfile)).
+It is the only service with public ports: the server and the client are
+published on `127.0.0.1` alone, for checks from the host. A port open to the
+world would be a way round the edge and round the rate limit, which learns who
+the client is from the edge's `X-Forwarded-For`.
+
+One domain serves all three, so the page, its API and its socket are one site:
+
+| Setting               | Value                                      |
+| --------------------- | ------------------------------------------ |
+| `SITE_DOMAIN`         | `play.example.com`                         |
+| `VITE_API_URL`        | `https://play.example.com`                 |
+| `VITE_WS_URL`         | `wss://play.example.com/ws`                |
+| `AUTH_ORIGIN`         | `https://play.example.com`                 |
+| `ALLOWED_ORIGINS`     | `https://play.example.com`                 |
+| `API_TRUSTED_PROXIES` | `172.28.0.10` — the edge, and nothing else |
+
+Before the first start, point the domain's DNS at the host and open ports 80
+and 443 in its firewall: the certificate authority checks both, and a domain
+that fails the check too often is refused for a while. `SITE_DOMAIN` is the
+composition's, like the database's, and the edge refuses to start without it.
+
+A deployment with its own edge — a load balancer, a CDN, a tunnel — drops the
+profile, puts that edge on this host or changes the published addresses, and
+lists that edge in `API_TRUSTED_PROXIES` instead.
 
 ## The processes in the server image
 
@@ -389,7 +421,9 @@ caller can then invent an address per request and is never limited at all.
 What the service still cannot bound is everything before it has a handler:
 connection floods, WebSocket upgrades (each holds a socket and its
 subscriptions), and traffic volume as such. Those belong to whatever sits in
-front of it, which is the hosting decision still open (§102).
+front of it. The `edge` profile terminates HTTPS and does not limit any of
+them: against a flood, the answer is still the host's own protection or a CDN
+in front of the edge.
 
 ## Verifying a deployment
 

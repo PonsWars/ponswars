@@ -1,7 +1,7 @@
 # A whole deployment on one host.
 #
 #   cp .env.example .env      # then fill it in; every value is required
-#   docker compose -f infra/containers/docker-compose.prod.yml --profile bundled-database up -d --build
+#   docker compose -f infra/containers/docker-compose.prod.yml #     --profile bundled-database --profile edge up -d --build
 #
 # See docs/operations/deployment.md. This is the reference composition — the
 # order things start in, what each one needs, and what has to be true before the
@@ -68,9 +68,13 @@ services:
     # them at once and refuses rather than guessing (§65.2, §102).
     env_file:
       - ../../.env
+    # Loopback only: reachable from this host for a check, never from the
+    # internet. Players arrive through the edge over the compose network. A port
+    # published to the world would be a way round the edge — and round the rate
+    # limit, whose idea of the client comes from the edge's X-Forwarded-For.
     ports:
-      - '${API_PORT}:${API_PORT}'
-      - '${GATEWAY_PORT}:${GATEWAY_PORT}'
+      - '127.0.0.1:${API_PORT}:${API_PORT}'
+      - '127.0.0.1:${GATEWAY_PORT}:${GATEWAY_PORT}'
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -126,14 +130,66 @@ services:
         VITE_WS_URL: ${VITE_WS_URL:?set VITE_WS_URL in .env}
     image: ponswars-web:${PONSWARS_VERSION:-local}
     restart: unless-stopped
+    # Loopback only, for the same reason as the server's.
     ports:
-      - '${WEB_PORT:-8080}:8080'
+      - '127.0.0.1:${WEB_PORT:-8080}:8080'
     healthcheck:
       test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1']
       interval: 30s
       timeout: 5s
       retries: 3
 
+  # -----------------------------------------------------------------------
+  # The edge (`--profile edge`): HTTPS on one domain in front of the client,
+  # the API and the gateway, with its certificate obtained and renewed by
+  # Caddy. The only service with public ports. See infra/containers/Caddyfile.
+  # -----------------------------------------------------------------------
+  caddy:
+    profiles: ['edge']
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    # Checked here rather than with `${SITE_DOMAIN:?}`: Compose interpolates
+    # every service whether its profile runs or not, and that would refuse a
+    # deployment that has its own edge. An empty domain would otherwise reach
+    # Caddy as a config error that does not say which setting is missing.
+    command:
+      - sh
+      - -c
+      - >-
+        test -n "$$SITE_DOMAIN" || { echo 'SITE_DOMAIN is not set: put the domain players use in .env' >&2; exit 1; };
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-}
+      API_PORT: ${API_PORT}
+      GATEWAY_PORT: ${GATEWAY_PORT}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The certificate and its account key. Lost, and every restart asks the
+      # certificate authority again, which rate-limits a domain that asks often.
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      default:
+        # Fixed, so the API can be told to believe X-Forwarded-For from this
+        # address and no other: API_TRUSTED_PROXIES=172.28.0.10.
+        ipv4_address: 172.28.0.10
+    depends_on:
+      - server
+      - web
+
+# Pinned, so the edge's address above is a fact the configuration can name.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
 volumes:
   postgres_data:
   snapshots:
+  caddy_data:
+  caddy_config:
