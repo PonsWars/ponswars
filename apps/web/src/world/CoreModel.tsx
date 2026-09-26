@@ -1,4 +1,4 @@
-import { useGLTF } from '@react-three/drei';
+import { preloadModel, useModel } from './model-loader.js';
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, type JSX } from 'react';
 import {
@@ -47,7 +47,7 @@ function geometryNamed(scene: Object3D, name: string): BufferGeometry | null {
 }
 
 export function CoreModel(): JSX.Element {
-  const { scene } = useGLTF(CORE_MODEL);
+  const { scene } = useModel(CORE_MODEL);
   const body = useMemo(() => geometryNamed(scene, 'core_body'), [scene]);
   const bands = useMemo(() => geometryNamed(scene, 'core_bands'), [scene]);
   // Past white on purpose, and not tone-mapped: §38.2 has players find the
@@ -179,4 +179,4 @@ export function CoreBeam({ readPulse }: { readonly readPulse: () => number }): J
   );
 }
 
-useGLTF.preload(CORE_MODEL);
+preloadModel(CORE_MODEL);

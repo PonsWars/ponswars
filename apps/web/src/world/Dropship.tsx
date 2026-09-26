@@ -1,4 +1,4 @@
-import { useGLTF } from '@react-three/drei';
+import { useModel } from './model-loader.js';
 import { useMemo, type JSX } from 'react';
 import { Box3, Vector3 } from 'three';
 import { preparedGeometry } from './InstancedField.js';
@@ -29,7 +29,7 @@ export function Dropship({
   readonly accent: string;
 }): JSX.Element | null {
   const url = DROPSHIPS[index % DROPSHIPS.length] ?? DROPSHIPS[0];
-  const { scene } = useGLTF(url);
+  const { scene } = useModel(url);
 
   const geometry = useMemo(
     () =>

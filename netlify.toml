@@ -23,7 +23,9 @@
   status = 200
 
 # The headers web.nginx.conf sets for the real deployment, with nothing to
-# connect to: the showcase talks to no API and no socket.
+# connect to: the showcase talks to no API and no socket. `blob:` is the
+# textures inside each .glb, which three fetches as blob URLs (see the note in
+# web.nginx.conf).
 [[headers]]
   for = "/*"
   [headers.values]
@@ -31,7 +33,7 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     X-Frame-Options = "DENY"
     Cross-Origin-Opener-Policy = "same-origin"
-    Content-Security-Policy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:; connect-src 'self'"
+    Content-Security-Policy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:; connect-src 'self' blob:"
 
 # Hashed filenames: a changed file is a different URL.
 [[headers]]

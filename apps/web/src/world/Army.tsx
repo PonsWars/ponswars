@@ -1,4 +1,4 @@
-import { useGLTF } from '@react-three/drei';
+import { preloadModel, useModel } from './model-loader.js';
 import { useFrame } from '@react-three/fiber';
 import { useContext, useEffect, useMemo, useRef, type JSX, type ReactNode } from 'react';
 import {
@@ -404,7 +404,7 @@ function Unit({
   /** For something that flies: how high above the deck, and how much it bobs. */
   readonly hover?: { readonly lift: number; readonly sway: number };
 }): JSX.Element {
-  const gltf = useGLTF(url);
+  const gltf = useModel(url);
   const group = useRef<Group | null>(null);
   const motion = useContext(FormationContext);
 
@@ -607,6 +607,6 @@ function Unit({
 // one that arrives with it.
 for (const urls of Object.values(MODELS)) {
   for (const url of urls) {
-    useGLTF.preload(url);
+    preloadModel(url);
   }
 }

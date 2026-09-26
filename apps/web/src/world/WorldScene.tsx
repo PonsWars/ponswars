@@ -12,7 +12,7 @@ import {
   type DistrictShape,
   type ReshuffleFrame,
 } from '@ponswars/world-runtime';
-import { useGLTF } from '@react-three/drei';
+import { preloadModel, useModel } from './model-loader.js';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import {
@@ -1197,7 +1197,7 @@ function pieceFor(block: Block): Piece {
  * moving every placement.
  */
 function usePieceGeometry(piece: Piece): BufferGeometry | null {
-  const { scene } = useGLTF(PIECE_MODEL[piece]);
+  const { scene } = useModel(PIECE_MODEL[piece]);
 
   return useMemo(
     () =>
@@ -1747,8 +1747,8 @@ export function WorldScene(): JSX.Element {
 // district that appears three seconds after the island it stands on is worse
 // than one that arrives with it.
 for (const piece of PIECES) {
-  useGLTF.preload(PIECE_MODEL[piece]);
+  preloadModel(PIECE_MODEL[piece]);
 }
 for (const url of DROPSHIPS) {
-  useGLTF.preload(url);
+  preloadModel(url);
 }

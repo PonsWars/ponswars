@@ -1,4 +1,4 @@
-import { useGLTF } from '@react-three/drei';
+import { preloadModel, useModel } from './model-loader.js';
 import { useMemo, type JSX } from 'react';
 import { Box3, Vector3 } from 'three';
 import type { DetailLevel } from '@ponswars/world-runtime';
@@ -154,7 +154,7 @@ export function PropField({
   readonly prop: Prop;
   readonly placements: readonly Placement[];
 }): JSX.Element | null {
-  const { scene } = useGLTF(`/models/props/${prop}.glb`);
+  const { scene } = useModel(`/models/props/${prop}.glb`);
 
   /**
    * The prop's geometry, scaled to its stated height and stood on the deck.
@@ -209,5 +209,5 @@ function pseudo(value: number): number {
 }
 
 for (const prop of PROPS) {
-  useGLTF.preload(`/models/props/${prop}.glb`);
+  preloadModel(`/models/props/${prop}.glb`);
 }
