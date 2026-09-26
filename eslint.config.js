@@ -7,6 +7,7 @@ export default tseslint.config(
   {
     ignores: [
       '**/dist/**',
+      '**/dist-showcase/**',
       '**/coverage/**',
       '**/node_modules/**',
       '01_Masterplan/**',

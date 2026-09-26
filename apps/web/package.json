@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc --build tsconfig.build.json && vite build",
     "preview": "vite preview",
-    "showcase": "vite build --mode showcase --outDir dist/showcase && vite preview --outDir dist/showcase --port 4180 --strictPort",
+    "showcase": "vite build --mode showcase --outDir dist-showcase && vite preview --outDir dist-showcase --port 4180 --strictPort",
     "clean": "tsc --build --clean"
   },
   "dependencies": {

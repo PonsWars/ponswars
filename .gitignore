@@ -53,8 +53,11 @@ _archive/
 # Local scratch used while deriving golden values
 .scratch/
 
-# Vite build output
+# Vite build output, and the showcase build (netlify.toml), kept apart so a
+# normal build does not empty it
 apps/web/dist/
+apps/web/dist-showcase/
+.netlify/
 
 # The private planning bundle. Kept on disk, never published.
 #

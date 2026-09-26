@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-showcase
 coverage
 pnpm-lock.yaml
 03_Visual_Pack
