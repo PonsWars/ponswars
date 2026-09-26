@@ -16,7 +16,13 @@ describe('parseCandidate', () => {
   it('reads the tool’s starting candidate, market values through the server’s own parsers', () => {
     const candidate = parseCandidate(initialCandidateJson());
     expect(candidate.market.MARKET_OUTLIER_BPS).toBe(300);
-    expect(candidate.market.MARKET_HOLIDAYS).toEqual(['2026-11-26', '2026-12-25']);
+    // Parsed into dates, one per entry in the file's comma list, rather than
+    // pinned: the list grows each year the exchange publishes another.
+    const listed = String(
+      (initialCandidateJson()['market'] as Record<string, unknown>)['MARKET_HOLIDAYS'],
+    );
+    expect(candidate.market.MARKET_HOLIDAYS).toEqual(listed.split(','));
+    expect(candidate.market.MARKET_HOLIDAYS).toContain('2027-01-01');
     expect(candidate.market.MARKET_MIN_TRADE_USD).toBe('5');
     expect(candidate.engine.victory.narrowMargin).toBe(4_000_000n);
     expect(candidate.confidence.momentumStability).toEqual({ stable: 26, mixed: 32 });
