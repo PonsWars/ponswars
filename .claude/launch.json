@@ -37,6 +37,12 @@
         "--strictPort"
       ],
       "port": 5175
+    },
+    {
+      "name": "web-showcase-built",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@ponswars/web", "showcase"],
+      "port": 4180
     }
   ]
 }
